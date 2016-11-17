@@ -335,7 +335,7 @@ contains
 
         if (this%stargeneral%arms(i,1)==0) then
           ! sum(this%stargeneral%arms(i,1:dim))==0 just checks whether we have a -1 in the arm vector or not
-          if(sum(this%stargeneral%arms(i,1:dim))==0 )then
+          if(this%stargeneral%arms(i,2)*this%stargeneral%arms(i,3) < 0 )then
             do j1 = 1, 2*order
               do j2 = 1, 2*order-j1
                 n = n + 1
@@ -354,7 +354,7 @@ contains
 
         if (this%stargeneral%arms(i,2)==0) then
           ! sum(this%stargeneral%arms(i,1:dim))==0 just checks whether we have a -1 in the arm vector or not
-          if(sum(this%stargeneral%arms(i,1:dim))==0 )then
+          if(this%stargeneral%arms(i,3)*this%stargeneral%arms(i,1) < 0 )then
             do j1 = 1, 2*order
               do j2 = 1, 2*order-j1
                 n = n + 1
@@ -373,7 +373,7 @@ contains
 
         if (this%stargeneral%arms(i,3)==0) then
           ! sum(this%stargeneral%arms(i,1:dim))==0 just checks whether we have a -1 in the arm vector or not
-          if(sum(this%stargeneral%arms(i,1:dim))==0 )then
+          if(this%stargeneral%arms(i,1)*this%stargeneral%arms(i,2) < 0 )then
             do j1 = 1, 2*order
               do j2 = 1, 2*order-j1
                 n = n + 1
