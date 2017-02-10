@@ -24,11 +24,31 @@ module lattice_dynamics_oct_m
   private
 
 
+
+  type :: atom_red_t
+    !private
+    character(len=LABEL_LEN)  :: label = ""
+    type(species_t), pointer  :: species  =>null() !< pointer to species
+    FLOAT, dimension(MAX_DIM) :: s     = M_ZERO !< position of atom in reduced coordinates
+    FLOAT, dimension(MAX_DIM) :: vs     = M_ZERO !< velocity of atom in reduced coordinates
+    FLOAT, dimension(MAX_DIM) :: fs     = M_ZERO !< force on atom in reduced coordinates
+    logical                   :: move  = .true. !< should I move this atom in the optimization mode
+  end type atom_red_t
+
+
   type lattice_dynamics_t
     private
     logical          :: move_lattice
+    FLOAT :: rlattice(MAX_DIM,MAX_DIM)
+    FLOAT :: rlattice_new(MAX_DIM,MAX_DIM)
+    FLOAT :: rlattice_old(MAX_DIM,MAX_DIM)
+    type(atom_red_t) :: atom_red
+    type(atom_red_t) :: atom_red_new
+    type(atom_red_t) :: atom_red_old
 
-  end type ion_dynamics_t
+  end type lattice_dynamics_t
+
+
 
 contains
 
@@ -39,13 +59,12 @@ contains
     PUSH_SUB(lattice_dynamics_init)
 
 
-    !%Variable MoveIons
+    !%Variable MoveLattice
     !%Type logical
     !%Section Time-Dependent::Propagation
     !%Description
-    !% This variable controls whether atoms are moved during a time
-    !% propagation run. The default is yes when the ion velocity is
-    !% set explicitly or implicitly, otherwise is no.
+    !% This variable controls whether lattice is moved during a time
+    !% propagation run. The default is no.
     !%End
     call parse_variable('MoveLattice', .false., this%move_lattice)
     call messages_print_var_value(stdout, 'MoveLattice', this%move_lattice)

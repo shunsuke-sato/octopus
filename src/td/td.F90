@@ -122,6 +122,7 @@ contains
     PUSH_SUB(td_init)
 
     call ion_dynamics_init(td%ions, sys%geo)
+    call lattice_dynamics_init(td%lattice, sys%geo)
 
     td%iter = 0
 
