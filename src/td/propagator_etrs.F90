@@ -342,82 +342,12 @@ contains
 
     PUSH_SUB(td_aetrs)
 
-    if(tr%method == PROP_CAETRS) then
-      SAFE_ALLOCATE(vold(1:gr%mesh%np, 1:st%d%nspin))
-      if(hm%family_is_mgga_with_exc) then 
-        if(hm%cmplxscl%space) then
-          SAFE_ALLOCATE(Imvold(1:gr%mesh%np, 1:st%d%nspin))
-          call potential_interpolation_get(tr%vksold, gr%mesh%np, st%d%nspin, 2, &
-                  vold, imvold, vtauold, imvtauold)
-          call lalg_copy(gr%mesh%np, st%d%nspin, Imvold, hm%Imvhxc)
-          call lalg_copy(gr%mesh%np, st%d%nspin, Imvtauold, hm%Imvtau)
-        else
-          call potential_interpolation_get(tr%vksold, gr%mesh%np, st%d%nspin, 2, vold, vtau = vtauold)
-        end if
-        call lalg_copy(gr%mesh%np, st%d%nspin, vold, hm%vhxc)
-        call lalg_copy(gr%mesh%np, st%d%nspin, vtauold, hm%vtau)
-      else
-        if(hm%cmplxscl%space) then
-          SAFE_ALLOCATE(Imvold(1:gr%mesh%np, 1:st%d%nspin))
-          call potential_interpolation_get(tr%vksold, gr%mesh%np, st%d%nspin, 2, vold, imvold)
-          call lalg_copy(gr%mesh%np, st%d%nspin, Imvold, hm%Imvhxc)
-        else
-          call potential_interpolation_get(tr%vksold, gr%mesh%np, st%d%nspin, 2, vold)
-        end if
-        call lalg_copy(gr%mesh%np, st%d%nspin, vold, hm%vhxc)
-      endif
-
-      call hamiltonian_update(hm, gr%mesh, time = time - dt)
-      call v_ks_calc_start(ks, hm, st, geo, time = time - dt, calc_energy = .false., &
-             calc_current = .false.)
-    end if
-
     ! propagate half of the time step with H(time - dt)
     do ik = st%d%kpt%start, st%d%kpt%end
       do ib = st%group%block_start, st%group%block_end
         call exponential_apply_batch(tr%te, gr%der, hm, st%group%psib(ib, ik), ik, CNST(0.5)*dt, time - dt)
       end do
     end do
-
-    if(tr%method == PROP_CAETRS) then
-      call v_ks_calc_finish(ks, hm)
-
-      if(hm%family_is_mgga_with_exc) then 
-        !TODO: This does not support complex scaling for the apparently
-        call potential_interpolation_set(tr%vksold, gr%mesh%np, st%d%nspin, 1, hm%vhxc, vtau = hm%vtau)
-        call interpolate( (/time - dt, time - M_TWO*dt, time - M_THREE*dt/), &
-           tr%vksold%v_old(:, :, 1:3), time, tr%vksold%v_old(:, :, 0))
-        call interpolate( (/time - dt, time - M_TWO*dt, time - M_THREE*dt/), &
-           tr%vksold%vtau_old(:, :, 1:3), time, tr%vksold%vtau_old(:, :, 0))
-        forall(ispin = 1:st%d%nspin, ip = 1:gr%mesh%np)
-          vold(ip, ispin) =  CNST(0.5)*dt*(hm%vhxc(ip, ispin) - vold(ip, ispin))
-          vtauold(ip, ispin) =  CNST(0.5)*dt*(hm%vtau(ip, ispin) - vtauold(ip, ispin))
-        end forall      
-      else
-        !TODO: This does not support complex scaling for the apparently
-        call potential_interpolation_set(tr%vksold, gr%mesh%np, st%d%nspin, 1, hm%vhxc)
-        call interpolate( (/time - dt, time - M_TWO*dt, time - M_THREE*dt/), &
-           tr%vksold%v_old(:, :, 1:3), time, tr%vksold%v_old(:, :, 0))
-
-        forall(ispin = 1:st%d%nspin, ip = 1:gr%mesh%np)
-          vold(ip, ispin) =  CNST(0.5)*dt*(hm%vhxc(ip, ispin) - vold(ip, ispin))
-        end forall
-      end if
-
-      ! copy vold to a cl buffer
-      if(accel_is_enabled() .and. hamiltonian_apply_packed(hm, gr%mesh)) then
-        if(hm%family_is_mgga_with_exc) then
-          call messages_not_implemented('CAETRS propagator with accel and MGGA with energy functionals')
-        end if
-        pnp = accel_padded_size(gr%mesh%np)
-        call accel_create_buffer(phase_buff, ACCEL_MEM_READ_ONLY, TYPE_FLOAT, pnp*st%d%nspin)
-        ASSERT(ubound(vold, dim = 1) == gr%mesh%np)
-        do ispin = 1, st%d%nspin
-          call accel_write_buffer(phase_buff, gr%mesh%np, vold(:, ispin), offset = (ispin - 1)*pnp)
-        end do
-      end if
-
-    end if
 
     !TODO: This does not support complex scaling for the apparently
     if(hm%family_is_mgga_with_exc) then
@@ -447,39 +377,6 @@ contains
       do ib = st%group%block_start, st%group%block_end
         if(hamiltonian_apply_packed(hm, gr%mesh)) call batch_pack(st%group%psib(ib, ik))
 
-        if(tr%method == PROP_CAETRS) then
-          call profiling_in(phase_prof, "CAETRS_PHASE")
-          select case(batch_status(st%group%psib(ib, ik)))
-          case(BATCH_NOT_PACKED)
-            do ip = 1, gr%mesh%np
-              vv = vold(ip, ispin)
-              phase = TOCMPLX(cos(vv), -sin(vv))
-              forall(ist = 1:st%group%psib(ib, ik)%nst_linear)
-                st%group%psib(ib, ik)%states_linear(ist)%zpsi(ip) = st%group%psib(ib, ik)%states_linear(ist)%zpsi(ip)*phase
-              end forall
-            end do
-          case(BATCH_PACKED)
-            do ip = 1, gr%mesh%np
-              vv = vold(ip, ispin)
-              phase = TOCMPLX(cos(vv), -sin(vv))
-              forall(ist = 1:st%group%psib(ib, ik)%nst_linear)
-                st%group%psib(ib, ik)%pack%zpsi(ist, ip) = st%group%psib(ib, ik)%pack%zpsi(ist, ip)*phase
-              end forall
-            end do
-          case(BATCH_CL_PACKED)
-            call accel_set_kernel_arg(kernel_phase, 0, pnp*(ispin - 1))
-            call accel_set_kernel_arg(kernel_phase, 1, phase_buff)
-            call accel_set_kernel_arg(kernel_phase, 2, st%group%psib(ib, ik)%pack%buffer)
-            call accel_set_kernel_arg(kernel_phase, 3, log2(st%group%psib(ib, ik)%pack%size(1)))
-
-            iprange = accel_max_workgroup_size()/st%group%psib(ib, ik)%pack%size(1)
-
-            call accel_kernel_run(kernel_phase, (/st%group%psib(ib, ik)%pack%size(1), pnp/), &
-              (/st%group%psib(ib, ik)%pack%size(1), iprange/))
-          end select
-          call profiling_out(phase_prof)
-        end if
-
         call exponential_apply_batch(tr%te, gr%der, hm, st%group%psib(ib, ik), ik, CNST(0.5)*dt, time)
         call density_calc_accumulate(dens_calc, ik, st%group%psib(ib, ik))
 
@@ -487,9 +384,6 @@ contains
       end do
     end do
 
-    if(tr%method == PROP_CAETRS .and. accel_is_enabled() .and. hamiltonian_apply_packed(hm, gr%mesh)) then
-      call accel_release_buffer(phase_buff)
-    end if
 
     call density_calc_end(dens_calc)
 
