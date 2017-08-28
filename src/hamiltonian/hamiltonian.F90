@@ -202,8 +202,8 @@ module hamiltonian_oct_m
   end type hamiltonian_t
 
 ! working space for optimized Hamiltonian for solids
-  type(cube_t) :: psib_cube
-  type(cube_function_t) :: psib_cf
+  type(cube_t)         ,target  :: psib_cube
+  type(cube_function_t),target  :: psib_cf
 
   integer, public, parameter :: &
     LENGTH     = 1,             &
@@ -1514,6 +1514,7 @@ contains
       call zcube_function_rs2fs(psib_cube, psib_cf)
 
       call zcube_function_fs2rs(psib_cube, psib_cf)
+      call apply_kinetic_energy_in_fourier_space
 
       call zcube_to_mesh(psib_cube, &
                          psib_cf,   &
@@ -1524,6 +1525,42 @@ contains
     end do
 
     POP_SUB(kinetic_energy_fft_init)
+
+    contains
+
+      subroutine apply_kinetic_energy_in_fourier_space
+        type(cube_t),          pointer             :: cube
+        type(cube_function_t), pointer             :: cf
+        integer :: ii, jj, kk
+        FLOAT   :: kpoint(1:MAX_DIM), kac(1:MAX_DIM)
+        FLOAT   :: fact, kac2
+
+
+        cube => psib_cube
+        cf => psib_cf
+
+        kpoint(1:der%mesh%sb%dim) = &
+          kpoints_get_point(der%mesh%sb%kpoints, states_dim_get_kpoint_index(hm%d, ik))
+        kac = kpoint ! + vector potential 
+        kac2 = sum(kac(1:3)**2)
+
+        do kk = 1, cube%fs_n(3)
+          do jj = 1, cube%fs_n(2)
+            do ii = 1, cube%fs_n(1)
+              fact =    M_HALF* ( hm%G2(ii,jj,kk) + kac2**2) &
+                      - hm%Gvec(ii,jj,kk,1)*kac(1) &
+                      - hm%Gvec(ii,jj,kk,2)*kac(2) &
+                      - hm%Gvec(ii,jj,kk,3)*kac(3) 
+
+              
+              cf%fs(ii, jj, kk) = cf%fs(ii, jj, kk)*fact
+            end do
+          end do
+        end do
+
+
+      end subroutine apply_kinetic_energy_in_fourier_space
+
   end subroutine kinetic_energy_fft
   !-----------------------------------------------------------------
 
