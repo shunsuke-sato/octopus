@@ -75,6 +75,7 @@ module hamiltonian_oct_m
   use cube_oct_m
   use cube_function_oct_m
   use fft_oct_m
+  use fourier_space_oct_m
 
   implicit none
 
@@ -1432,6 +1433,7 @@ contains
       need_partition=.not.gr%der%mesh%parallel_in_domains)
     call cube_function_null(psib_cf)
     call zcube_function_alloc_rs(psib_cube, psib_cf)
+    call cube_function_alloc_fs(psib_cube, psib_cf)
     
     call kinetic_energy_fft_init(this, gr%der%mesh, psib_cube)
     
@@ -1489,20 +1491,35 @@ contains
     POP_SUB(kinetic_energy_fft_init)
   end subroutine kinetic_energy_fft_init
   !-----------------------------------------------------------------
-  subroutine kinetic_energy_fft(hm, psib, hpsib, ik)
+  subroutine kinetic_energy_fft(hm, der, psib, hpsib, ik)
     implicit none
-    type(hamiltonian_t),   intent(in) :: hm
+    type(hamiltonian_t),   intent(in)    :: hm
+    type(derivatives_t),   intent(in)    :: der
     type(batch_t),         intent(in)    :: psib
     type(batch_t),         intent(out)   :: hpsib
     integer,               intent(in)    :: ik
-    integer :: ii, ist
+    integer :: ist
 
     PUSH_SUB(kinetic_energy_fft_init)
 
-    do ii = 1, psib%nst_linear
-      ist = batch_linear_to_ist(psib, ii)
+    do ist = 1, psib%nst
 
+! Domain parallelization is not available yet.
+      call zmesh_to_cube(der%mesh,                     &
+                         psib%states(ist)%zpsi(:, 1), &
+                         psib_cube,                    &
+                         psib_cf,                      &
+                         local = .true.)
 
+      call zcube_function_rs2fs(psib_cube, psib_cf)
+
+      call zcube_function_fs2rs(psib_cube, psib_cf)
+
+      call zcube_to_mesh(psib_cube, &
+                         psib_cf,   &
+                         der%mesh,      &
+                         hpsib%states(ist)%zpsi(:, 1),  &
+                         local=.true.)
 
     end do
 
