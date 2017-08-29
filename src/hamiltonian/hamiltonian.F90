@@ -1501,8 +1501,8 @@ contains
     implicit none
     type(hamiltonian_t),   intent(in)    :: hm
     type(derivatives_t),   intent(in)    :: der
-    type(batch_t),         intent(in)    :: psib
-    type(batch_t),         intent(out)   :: hpsib
+    type(batch_t), target, intent(inout) :: psib
+    type(batch_t), target, intent(inout) :: hpsib
     integer,               intent(in)    :: ik
     integer :: ist
 
