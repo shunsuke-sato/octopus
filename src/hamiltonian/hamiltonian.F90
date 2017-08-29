@@ -204,6 +204,8 @@ module hamiltonian_oct_m
 ! working space for optimized Hamiltonian for solids
   type(cube_t)         ,target  :: psib_cube
   type(cube_function_t),target  :: psib_cf
+  logical,parameter :: fft_lap_switch = .false. ! temporal swith should be removed later.
+
 
   integer, public, parameter :: &
     LENGTH     = 1,             &
@@ -1329,16 +1331,20 @@ contains
   end if
 
   if(iand(TERM_KINETIC, terms_) /= 0) then
-    ASSERT(associated(hm%hm_base%kinetic))
-    call profiling_in(prof_kinetic_start, "KINETIC_START")
-    call zderivatives_batch_start(hm%hm_base%kinetic, der, epsib, hpsib, handle, set_bc = .false., factor = -M_HALF/hm%mass)
-    call profiling_out(prof_kinetic_start)
+    if(fft_lap_switch)then
+      call kinetic_energy_fft(hm, der, psib, hpsib, ik)
+    else
+      ASSERT(associated(hm%hm_base%kinetic))
+      call profiling_in(prof_kinetic_start, "KINETIC_START")
+      call zderivatives_batch_start(hm%hm_base%kinetic, der, epsib, hpsib, handle, set_bc = .false., factor = -M_HALF/hm%mass)
+      call profiling_out(prof_kinetic_start)
 
-    call profiling_in(prof_kinetic_finish, "KINETIC_FINISH")
-    call zderivatives_batch_finish(handle)
-    call profiling_out(prof_kinetic_finish)
+      call profiling_in(prof_kinetic_finish, "KINETIC_FINISH")
+      call zderivatives_batch_finish(handle)
+      call profiling_out(prof_kinetic_finish)
 
-    if(hm%cmplxscl%space) call batch_scal(der%mesh%np, exp(-M_TWO*M_zI*hm%cmplxscl%theta), hpsib)
+      if(hm%cmplxscl%space) call batch_scal(der%mesh%np, exp(-M_TWO*M_zI*hm%cmplxscl%theta), hpsib)
+    end if
   else
     call batch_set_zero(hpsib)
   end if
