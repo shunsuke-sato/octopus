@@ -204,7 +204,7 @@ module hamiltonian_oct_m
 ! working space for optimized Hamiltonian for solids
   type(cube_t)         ,target  :: psib_cube
   type(cube_function_t),target  :: psib_cf
-  logical,parameter :: fft_lap_switch = .false. ! temporal swith should be removed later.
+  logical,parameter :: fft_lap_switch = .true. ! temporal swith should be removed later.
 
 
   integer, public, parameter :: &
