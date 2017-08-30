@@ -1333,6 +1333,7 @@ contains
   if(iand(TERM_KINETIC, terms_) /= 0) then
     if(fft_lap_switch)then
       call kinetic_energy_fft(hm, der, psib, hpsib, ik)
+      call zhamiltonian_base_phase(hm%hm_base, der, der%mesh%np, ik, .false., hpsib)
     else
       ASSERT(associated(hm%hm_base%kinetic))
       call profiling_in(prof_kinetic_start, "KINETIC_START")
