@@ -205,7 +205,7 @@ module hamiltonian_oct_m
   type(cube_t)         ,target  :: psib_cube
   type(cube_function_t),target  :: psib_cf
   logical,parameter :: fft_lap_switch = .true. ! temporal swith should be removed later.
-
+  CMPLX, allocatable :: psi(:,:), hpsi(:,:)
 
   integer, public, parameter :: &
     LENGTH     = 1,             &
@@ -1443,6 +1443,10 @@ contains
     call cube_function_alloc_fs(psib_cube, psib_cf)
     
     call kinetic_energy_fft_init(this, gr%der%mesh, psib_cube)
+    SAFE_ALLOCATE(psi(1:gr%der%mesh%np, 1:this%d%dim))
+    SAFE_ALLOCATE(hpsi(1:gr%der%mesh%np, 1:this%d%dim))
+
+
     
   end subroutine init_ham_opt_solids
   
@@ -1505,18 +1509,20 @@ contains
     type(batch_t), target, intent(inout) :: psib
     type(batch_t), target, intent(inout) :: hpsib
     integer,               intent(in)    :: ik
-    integer :: ist
+    integer :: ist, ibatch
 
     PUSH_SUB(kinetic_energy_fft_init)
 
-    do ist = 1, psib%nst
+
+    do ibatch = 1, psib%nst
+      ist = psib%states(ibatch)%ist
+      call batch_get_state(psib, ibatch, der%mesh%np, psi)
 
 ! Domain parallelization is not available yet.
       call zmesh_to_cube(der%mesh,                     &
-                         psib%states(ist)%zpsi(:, 1), &
+                         psi(:,1), &
                          psib_cube,                    &
-                         psib_cf,                      &
-                         local = .true.)
+                         psib_cf)
 
       call zcube_function_rs2fs(psib_cube, psib_cf)
 
@@ -1526,8 +1532,10 @@ contains
       call zcube_to_mesh(psib_cube, &
                          psib_cf,   &
                          der%mesh,      &
-                         hpsib%states(ist)%zpsi(:, 1),  &
-                         local=.true.)
+                         hpsi(:,1))
+
+      call batch_set_state(hpsib, ibatch, der%mesh%np, hpsi)
+
 
     end do
 
@@ -1539,6 +1547,7 @@ contains
         type(cube_t),          pointer             :: cube
         type(cube_function_t), pointer             :: cf
         integer :: ii, jj, kk
+
         FLOAT   :: kpoint(1:MAX_DIM), kac(1:MAX_DIM)
         FLOAT   :: fact, kac2
 
