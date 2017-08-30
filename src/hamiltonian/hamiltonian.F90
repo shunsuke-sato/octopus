@@ -1525,9 +1525,8 @@ contains
                          psib_cf)
 
       call zcube_function_rs2fs(psib_cube, psib_cf)
-
-      call zcube_function_fs2rs(psib_cube, psib_cf)
       call apply_kinetic_energy_in_fourier_space
+      call zcube_function_fs2rs(psib_cube, psib_cf)
 
       call zcube_to_mesh(psib_cube, &
                          psib_cf,   &
