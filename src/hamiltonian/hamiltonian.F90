@@ -1557,7 +1557,7 @@ contains
 
         kac = - kpoint
         if(allocated(hm%hm_base%uniform_vector_potential))&
-          kac(1:3) = kac(1:3) + hm%hm_base%uniform_vector_potential(1:3)
+          kac(1:3) = kac(1:3) - hm%hm_base%uniform_vector_potential(1:3)
 
         kac2 = sum(kac(1:3)**2)
 
