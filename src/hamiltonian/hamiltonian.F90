@@ -1554,7 +1554,11 @@ contains
 
         kpoint(1:der%mesh%sb%dim) = &
           kpoints_get_point(der%mesh%sb%kpoints, states_dim_get_kpoint_index(hm%d, ik))
-        kac = - kpoint ! + vector potential 
+
+        kac = - kpoint
+        if(allocated(hm%hm_base%uniform_vector_potential))&
+          kac(1:3) = kac(1:3) + hm%hm_base%uniform_vector_potential(1:3)
+
         kac2 = sum(kac(1:3)**2)
 
         do kk = 1, cube%fs_n(3)
