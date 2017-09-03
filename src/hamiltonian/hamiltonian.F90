@@ -1554,16 +1554,16 @@ contains
 
         kpoint(1:der%mesh%sb%dim) = &
           kpoints_get_point(der%mesh%sb%kpoints, states_dim_get_kpoint_index(hm%d, ik))
-        kac = kpoint ! + vector potential 
+        kac = - kpoint ! + vector potential 
         kac2 = sum(kac(1:3)**2)
 
         do kk = 1, cube%fs_n(3)
           do jj = 1, cube%fs_n(2)
             do ii = 1, cube%fs_n(1)
               fact =    M_HALF* ( hm%G2(ii,jj,kk) + kac2) &
-                      - hm%Gvec(ii,jj,kk,1)*kac(1) &
-                      - hm%Gvec(ii,jj,kk,2)*kac(2) &
-                      - hm%Gvec(ii,jj,kk,3)*kac(3) 
+                      + hm%Gvec(ii,jj,kk,1)*kac(1) &
+                      + hm%Gvec(ii,jj,kk,2)*kac(2) &
+                      + hm%Gvec(ii,jj,kk,3)*kac(3) 
 
               
               cf%fs(ii, jj, kk) = cf%fs(ii, jj, kk)*fact
