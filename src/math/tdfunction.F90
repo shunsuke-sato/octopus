@@ -100,7 +100,7 @@ module tdfunction_oct_m
     integer :: nfreqs      = 0
 
     type(spline_t)         :: amplitude
-    character(len=200)     :: expression
+    character(len=999)     :: expression
     FLOAT, pointer :: val(:)    => NULL()
     FLOAT, pointer :: valww(:)  => NULL()
     type(fft_t) :: fft_handler
