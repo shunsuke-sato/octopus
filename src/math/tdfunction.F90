@@ -126,7 +126,7 @@ contains
 
     type(block_t) :: blk
     integer :: nrows, i, function_type
-    character(len=100) :: row_name, filename, function_expression
+    character(len=999) :: row_name, filename, function_expression
     FLOAT :: a0, tau0, t0, tau1
 
     PUSH_SUB(tdf_read)
