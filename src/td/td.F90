@@ -723,25 +723,33 @@ contains
         call v_ks_calc(sys%ks, hm, st, sys%geo, calc_eigenval=.true., time = td%iter*td%dt)
       end if
 
-      !%Variable TDFreezeHXC
-      !%Type logical
-      !%Default no
-      !%Section Time-Dependent
-      !%Description
-      !% The electrons are evolved as independent particles feeling the Hartree and 
-      !% exchange-correlation potentials from the ground-state electronic configuration.
-      !%End
+
+     !%Variable TDFreezeHXC                                                                                                                                
+      !%Type logical                                                                                                                                        
+      !%Default no                                                                                                                                          
+      !%Section Time-Dependent                                                                                                                              
+      !%Description                                                                                                                                         
+      !% The electrons are evolved as independent particles feeling the Hartree and                                                                         
+      !% exchange-correlation potentials from the ground-state electronic configuration.                                                                    
+      !%End                                                                                                                                                 
       call parse_variable('TDFreezeHXC', .false., freeze_hxc)
-      if(freeze_hxc) then 
+      if(freeze_hxc) then
         write(message(1),'(a)') 'Info: Freezing Hartree and exchange-correlation potentials.'
         call messages_info(1)
+
+        call restart_init(restart, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=gr%mesh, exact=.true.)
+        call states_load_rho(restart, st, gr, ierr)
+        call restart_end(restart)
+        call v_ks_calc(sys%ks, hm, st, sys%geo, calc_eigenval=.true., time = td%iter*td%dt)
+
         call v_ks_freeze_hxc(sys%ks)
 
-        !In this case we should reload GS wavefunctions 
+        !In this case we should reload GS wavefunctions                                                                                                     
         if(.not.fromScratch) then
           call messages_not_implemented("TDFreezeOccupations with FromScratch=no")
         end if
       end if
+
 
       x = minval(st%eigenval(st%st_start, :))
 #ifdef HAVE_MPI
