@@ -55,12 +55,13 @@ program octopus
   real(8) :: ss
 
 
-  call global_init()
-  call messages_init()
+!  call global_init()
+!  call messages_init()
 
 
 !  dir_name="/scratch/ssato/shift_current/BaTiO3/nonlinear_response/ps_b_NK8NL32_p1d10_w4.0ev_dt_0.03_p/"
-  read(*,*)dir_name
+!  read(*,*)dir_name
+  dir_name = "./"
 
   call read_mesh
   call read_state_info
@@ -136,8 +137,8 @@ program octopus
 !  write(*,*)wfn(5,1)
 !  write(*,*)wfn(6,1)
 
-  call messages_end()
-  call global_end()
+!  call messages_end()
+!  call global_end()
 
 contains
 !===================================================================================================
