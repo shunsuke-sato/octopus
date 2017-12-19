@@ -44,6 +44,7 @@ program octopus
 
   integer :: np,np_part,nst,nkp,nst_gs
   real(8) :: aLx,aLy,aLz,Omega
+  real(8)  :: rlattice(3,3)
   character(999) :: dir_name,filename
   real(8),allocatable :: occ(:,:),occ_gs(:,:),kvec(:,:),kweight(:)
   complex(8),allocatable :: wfn(:,:),wfn_gs(:,:),read_ff(:)
@@ -94,7 +95,7 @@ program octopus
      do ist_gs=1,nst_gs
         ss = 0d0
         do ist=1,nst
-           ss = ss + abs( sum( conjg(wfn_gs(:,ist_gs))*wfn(:,ist) )/np*Omega )**2
+           ss = ss + occ(ist,ik)*abs( sum( conjg(wfn_gs(:,ist_gs))*wfn(:,ist) )/np*Omega )**2
         end do
         occ_ex(ist_gs,ik) = ss
      end do
@@ -118,12 +119,12 @@ program octopus
   close(20)
 
 
-  open(20,file="num_ex_at_k.dat")
-  do ik = 1,nkp,2
-        write(20,"(I7,2x,999e26.16e3)")ik ,num_ex_elec_each_k(ik),num_ex_elec_each_k(ik+1) &
-             ,min(num_ex_elec_each_k(ik)/num_ex_elec_each_k(ik+1),num_ex_elec_each_k(ik+1)/num_ex_elec_each_k(ik))
-  end do
-  close(20)
+!  open(20,file="num_ex_at_k.dat")
+!  do ik = 1,nkp,2
+!        write(20,"(I7,2x,999e26.16e3)")ik ,num_ex_elec_each_k(ik),num_ex_elec_each_k(ik+1) &
+!             ,min(num_ex_elec_each_k(ik)/num_ex_elec_each_k(ik+1),num_ex_elec_each_k(ik+1)/num_ex_elec_each_k(ik))
+!  end do
+!  close(20)
 !  open(20,file="/scratch/ssato/shift_current/BaTiO3/nonlinear_response/ps_b_NK8NL32_p1d10_w4.0ev_dt_0.03_p/restart/td/0000000001.obf",form="unformatted")
 !  read(20)wfn(1:np+1,1)
 !  close(20)
@@ -143,6 +144,7 @@ contains
   subroutine read_mesh
     implicit none
     character(999) :: file_name,ctmp
+    real(8) :: rvec(3)
 
     file_name=trim(dir_name)//"restart/td/mesh"
     open(20,file=file_name)
@@ -154,8 +156,23 @@ contains
     read(20,*); read(20,*); read(20,*); read(20,*)
     read(20,*)ctmp, aLx, aLy,aLz
     aLx = 2d0*aLx; aLy = 2d0*aLy; aLz = 2d0*aLz
+    read(20,*)
+    read(20,*)
+    read(20,*)ctmp, rlattice(1,1),rlattice(2,1),rlattice(3,1)
+    read(20,*)ctmp, rlattice(1,2),rlattice(2,2),rlattice(3,2)
+    read(20,*)ctmp, rlattice(1,3),rlattice(2,3),rlattice(3,3)
+
     close(20)
-    Omega = aLx*aLy*aLz
+
+    rlattice(:,1) = rlattice(:,1)*aLx
+    rlattice(:,2) = rlattice(:,2)*aLy
+    rlattice(:,3) = rlattice(:,3)*aLz
+
+    rvec(1) = rlattice(2,1)*rlattice(3,2) - rlattice(3,1)*rlattice(2,2)
+    rvec(2) = rlattice(3,1)*rlattice(1,2) - rlattice(1,1)*rlattice(3,2)
+    rvec(3) = rlattice(1,1)*rlattice(2,2) - rlattice(2,1)*rlattice(1,2)
+
+    Omega = abs(sum(rvec(:)*rlattice(:,3)))
 
     write(*,"(A,2x,I7)")"# np=",np
     write(*,"(A,2x,I7)")"# np_part=",np_part
