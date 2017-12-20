@@ -1,6 +1,7 @@
 program main
   implicit none
 
+  real(8),parameter :: pi = 4d0*atan(1d0)
   real(8),parameter :: ev=27.21138505d0
 
   character(len=256) :: config_str
@@ -20,7 +21,7 @@ program main
   real(8) :: ss
   integer :: ik_t, ist_t
   
-  real(8),parameter  :: beta = 1d0/(0.1d0/ev)
+  real(8),parameter  :: beta = 1d0/(0.01d0/ev)
   real(8) :: eps_Fermi
   character(999) :: ctmp
 
@@ -63,12 +64,16 @@ program main
   open(20,file='nex_eps_dist.out')
   do ik = 1,nkp
      do ist = 1,nst_gs
-        write(20,"(I7,2x,I7,2e26.16e3)")ik,ist,occ_ex(ist,ik),eps_ex(ist,ik)
+        write(20,"(I7,2x,I7,999e26.16e3)")ik,ist,eps_ex(ist,ik)&
+             ,occ_ex(ist,ik),occ_zero(ist,ik),kweight(ik)
      end do
   end do
   close(20)
 
   call Fermi_Dirac_distribution
+
+
+  call write_DOS
 
 contains
   subroutine read_mesh
@@ -223,6 +228,7 @@ contains
     write(*,*)"mu_max - mu_min (ev)",(mu_max-mu_min)*ev
     write(*,*)"elec_num",elec_num,tot_elec_num
 
+    eps_Fermi = mu
 
     ph_num = 0d0
     do ik = 1,nkp
@@ -233,6 +239,66 @@ contains
     write(*,*)"ph_num",ph_num
 
   end subroutine Fermi_Dirac_distribution
+
+  subroutine write_dos
+    implicit none
+    integer,parameter :: Nw = 4096
+    real(8),parameter :: gamma = 0.1d0/ev
+    real(8) :: eps_max, eps_min
+    real(8) :: ww_max, ww_min, dw, ww
+    real(8) :: dos_zero(0:Nw),dos_ex(0:Nw)
+    real(8) :: dos_zero_s(0:Nw),dos_ex_s(0:Nw)
+    integer :: ik, ist, iw, iw2
+    real(8) :: ff
+
+    eps_max = maxval(eps_ex)
+    eps_min = minval(eps_ex)
+
+    ww_min = eps_min - 0.5d0*(eps_max-eps_min)
+    ww_max = eps_max + 0.5d0*(eps_max-eps_min)
+    dw = (ww_max - ww_min)/Nw
+
+    dos_zero = 0d0
+    do ik = 1,nkp
+       do ist = 1,nst_gs
+          iw = aint( (eps_ex(ist,ik)-ww_min)/dw )
+          dos_zero(iw) = dos_zero(iw) + occ_zero(ist,ik)*kweight(ik)
+          dos_ex(iw)   = dos_ex(iw)   + occ_ex(ist,ik)  *kweight(ik)
+
+       end do
+    end do
+
+    dos_zero = dos_zero/dw
+    dos_ex   = dos_ex/dw
+
+    dos_zero_s = 0d0
+    dos_ex_s   = 0d0
+
+    do iw = 0,Nw
+
+       do iw2 =0,Nw
+          ww = (iw-iw2)*dw
+          ff = (gamma/pi)/(ww**2+gamma**2)*dw
+          dos_zero_s(iw2) = dos_zero_s(iw2) + dos_zero(iw)*ff 
+          dos_ex_s(iw2)   = dos_ex_s(iw2)   + dos_ex(iw)*ff 
+
+       end do
+
+    end do
+
+    write(*,*)"dos-raw integral",sum(dos_zero)*dw,sum(dos_ex)*dw
+    write(*,*)"dos-sme integral",sum(dos_zero_s)*dw,sum(dos_ex_s)*dw
+    
+    open(20,file='nex_w_dist.out')
+    do iw = 0,Nw
+       ww = ww_min + dw*iw - eps_Fermi
+       write(20,"(999e26.16e3)")ww,dos_ex_s(iw),dos_ex_s(iw)-dos_zero_s(iw)
+
+    end do
+    close(20)
+
+
+  end subroutine write_dos
 
 
 end program main
