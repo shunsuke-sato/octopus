@@ -124,11 +124,15 @@ contains
     read(20,*)ctmp,nst
     read(20,*)
     read(20,*)ctmp,nkp
+
+    close(20)
     
     file_name=trim(dir_name)//"restart/gs/states"
     open(20,file=file_name)
     read(20,*)ctmp,nst_gs
     write(*,"(A,2x,3I5)")"# nst, nst_gs, nkp=",nst,nst_gs, nkp
+
+    close(20)
     
   end subroutine read_state_info
 !===================================================================================================
@@ -149,6 +153,8 @@ contains
        end do
     end do
 
+    close(20)
+
 !    do ik=1,nkp
 !       do ist=1,nst
 !          write(*,"(2I5,2x,999e16.6e3)")ik,ist,occ(ist,ik),kvec(:,ik),kweight(ik)
@@ -165,6 +171,8 @@ contains
                ,kvec(1,ik),ctmp(4),kvec(2,ik),ctmp(5),kvec(3,ik),ctmp(6),kweight(ik)
        end do
     end do
+
+    close(20)
 
 !    do ik=1,nkp
 !       do ist=1,nst
