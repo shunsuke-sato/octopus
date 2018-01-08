@@ -740,7 +740,7 @@ contains
       !% The ground state KS potential and the induced local field are decomposed.
       !%End
       call parse_variable('TDDecompHXC', .false., decomp_hxc)
-      if(decomp) then 
+      if(decomp_hxc) then 
         write(message(1),'(a)') 'Info: Decomposting the induced and the ground state KS potentials.'
         hm%vhxc_ini = hm%vhxc
 
