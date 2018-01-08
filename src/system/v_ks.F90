@@ -78,6 +78,7 @@ module v_ks_oct_m
     v_ks_calc_start,    &
     v_ks_calc_finish,   &
     v_ks_freeze_hxc,    &
+    v_ks_decomp_hxc,    &
     v_ks_calculate_current 
 
   integer, parameter, public :: &
@@ -120,6 +121,7 @@ module v_ks_oct_m
     integer :: theory_level
 
     logical :: frozen_hxc !< For RPA and SAE calculations.
+    logical :: decomp_hxc !< For GS and indcued KS decomposition
 
     integer                  :: xc_family  !< the XC stuff
     integer                  :: xc_flags   !< the XC flags
@@ -1226,6 +1228,10 @@ contains
         if (hm%cmplxscl%space) forall(ispin = 3:4, ip = 1:ks%gr%mesh%np) hm%Imvhxc(ip, ispin) = hm%Imvxc(ip, ispin)
       end if
 
+      if(ks%decomp_hxc)then
+        forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, :) = hm%vhxc_gs(ip, :) + hm%vhxc(ip, :) - hm%vhxc_ini(ip, :)
+      end if
+
       ! Note: this includes hybrids calculated with the Fock operator instead of OEP 
       if(ks%theory_level == HARTREE .or. ks%theory_level == HARTREE_FOCK .or. ks%theory_level == RDMFT) then
 
@@ -1390,6 +1396,16 @@ contains
     
     POP_SUB(v_ks_freeze_hxc)
   end subroutine v_ks_freeze_hxc
+  ! ---------------------------------------------------------
+  subroutine v_ks_decomp_hxc(ks)
+    type(v_ks_t), intent(inout) :: ks
+
+    PUSH_SUB(v_ks_decomp_hxc)
+
+    ks%decomp_hxc = .true.
+    
+    POP_SUB(v_ks_freeze_hxc)
+  end subroutine v_ks_decomp_hxc
   ! ---------------------------------------------------------
 
   subroutine v_ks_calculate_current(this, calc_cur)

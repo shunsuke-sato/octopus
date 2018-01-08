@@ -132,6 +132,8 @@ module hamiltonian_oct_m
     FLOAT, pointer :: Imvxc(:,:)    !< XC potential
     FLOAT, pointer :: Imvhxc(:,:)   !< XC potential + Hartree potential + Berry potential
     FLOAT, pointer :: Imvtau(:,:)   !< Derivative of e_XC w.r.t. tau
+    FLOAT, pointer :: vhxc_gs(:,:)  !< HXC potential in GS
+    FLOAT, pointer :: vhxc_ini(:,:)  !< HXC at t=0
 
     type(geometry_t), pointer :: geo
     FLOAT :: exx_coef !< how much of EXX to mix
@@ -291,7 +293,11 @@ contains
     ! In the case of spinors, vxc_11 = hm%vxc(:, 1), vxc_22 = hm%vxc(:, 2), Re(vxc_12) = hm%vxc(:. 3);
     ! Im(vxc_12) = hm%vxc(:, 4)
     SAFE_ALLOCATE(hm%vhxc(1:gr%mesh%np, 1:hm%d%nspin))
+    SAFE_ALLOCATE(hm%vhxc_gs(1:gr%mesh%np, 1:hm%d%nspin))
+    SAFE_ALLOCATE(hm%vhxc_ini(1:gr%mesh%np, 1:hm%d%nspin))
     hm%vhxc(1:gr%mesh%np, 1:hm%d%nspin) = M_ZERO
+    hm%vhxc_gs(1:gr%mesh%np, 1:hm%d%nspin) = M_ZERO
+    hm%vhxc_ini(1:gr%mesh%np, 1:hm%d%nspin) = M_ZERO
 
     nullify(hm%vhartree, hm%vxc, hm%vtau, hm%axc)
     if(hm%theory_level /= INDEPENDENT_PARTICLES) then
@@ -540,6 +546,8 @@ contains
     SAFE_DEALLOCATE_P(hm%hm_base%phase)
     SAFE_DEALLOCATE_P(hm%vhartree)
     SAFE_DEALLOCATE_P(hm%vhxc)
+    SAFE_DEALLOCATE_P(hm%vhxc_gs)
+    SAFE_DEALLOCATE_P(hm%vhxc_ini)
     SAFE_DEALLOCATE_P(hm%vxc)
     SAFE_DEALLOCATE_P(hm%axc)
     SAFE_DEALLOCATE_P(hm%vberry)

@@ -613,6 +613,7 @@ contains
       integer :: ierr, freeze_orbitals
       FLOAT :: x
       logical :: freeze_hxc
+      logical :: decomp_hxc
       type(restart_t) :: restart
 
       PUSH_SUB(td_run.init_wfs)
@@ -730,6 +731,43 @@ contains
           call messages_not_implemented("TDFreezeOccupations with FromScratch=no")
         end if
       end if
+
+      !%Variable TDDecompHXC
+      !%Type logical
+      !%Default no
+      !%Section Time-Dependent
+      !%Description
+      !% The ground state KS potential and the induced local field are decomposed.
+      !%End
+      call parse_variable('TDDecompHXC', .false., decomp_hxc)
+      if(decomp) then 
+        write(message(1),'(a)') 'Info: Decomposting the induced and the ground state KS potentials.'
+        hm%vhxc_ini = hm%vhxc
+
+        call messages_info(1)
+        call restart_init(restart, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=gr%mesh, exact=.true.)
+        call states_load_rho(restart, st, gr, ierr)
+        call restart_end(restart)
+        call v_ks_calc(sys%ks, hm, st, sys%geo, calc_eigenval=.true., time = td%iter*td%dt)
+        hm%vhxc_gs = hm%vhxc
+
+        call v_ks_decomp_hxc(sys%ks)
+
+        if(.not. cmplxscl) then
+          call density_calc(st, gr, st%rho)
+        else
+          call density_calc(st, gr, st%zrho%Re, st%zrho%Im)
+        end if
+        call v_ks_calc(sys%ks, hm, st, sys%geo, calc_eigenval=.true., time = td%iter*td%dt)
+
+
+        !In this case we should reload GS wavefunctions 
+        if(.not.fromScratch) then
+          call messages_not_implemented("TDDecompHXC with FromScratch=no")
+        end if
+      end if
+
+
 
       x = minval(st%eigenval(st%st_start, :))
 #ifdef HAVE_MPI
