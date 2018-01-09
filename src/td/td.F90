@@ -732,6 +732,15 @@ contains
         end if
       end if
 
+    !%Variable TDDecompHXCfactor
+    !%Type float
+    !%Default 1.0
+    !%Section Time-Dependent
+    !%Description
+    !% Enhancement factor for the induced KS potential.
+    !%End
+    call parse_variable('TDDecompHXCfactor', CNST(1.0), sys%ks%decomp_hxc_fact)
+
       !%Variable TDDecompHXC
       !%Type logical
       !%Default no

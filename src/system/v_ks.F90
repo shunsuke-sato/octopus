@@ -122,6 +122,7 @@ module v_ks_oct_m
 
     logical :: frozen_hxc !< For RPA and SAE calculations.
     logical :: decomp_hxc !< For GS and indcued KS decomposition
+    FLOAT,  :: decomp_hxc_fact !< Enhancement factor for the induced KS potential.
 
     integer                  :: xc_family  !< the XC stuff
     integer                  :: xc_flags   !< the XC flags
@@ -1229,7 +1230,8 @@ contains
       end if
 
       if(ks%decomp_hxc)then
-        forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, :) = hm%vhxc_gs(ip, :) + hm%vhxc(ip, :) - hm%vhxc_ini(ip, :)
+        forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, :) = hm%vhxc_gs(ip, :) &
+          + ks%decomp_hxc_fact*(hm%vhxc(ip, :) - hm%vhxc_ini(ip, :))
       end if
 
       ! Note: this includes hybrids calculated with the Fock operator instead of OEP 
