@@ -122,7 +122,7 @@ module v_ks_oct_m
 
     logical :: frozen_hxc !< For RPA and SAE calculations.
     logical :: decomp_hxc !< For GS and indcued KS decomposition
-    FLOAT,  :: decomp_hxc_fact !< Enhancement factor for the induced KS potential.
+    FLOAT   :: decomp_hxc_fact !< Enhancement factor for the induced KS potential.
 
     integer                  :: xc_family  !< the XC stuff
     integer                  :: xc_flags   !< the XC flags
