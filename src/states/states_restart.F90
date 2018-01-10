@@ -560,7 +560,7 @@ contains
       end if
 
       call restart_read(restart, occ_file, lines, 1, err)
-      if(st%restart_read_occ_gs) call restart_read(restart, occ_file_gs, lines_gs, 1, err)
+      if(st%restart_read_occ_gs) call restart_read(restart, occ_gs_file, lines_gs, 1, err)
       if (.not. present(lr)) then ! do not read eigenvalues or occupations when reading linear response
         ! # occupations | eigenvalue[a.u.] | Im(eigenvalue) [a.u.] | k-points | k-weights | filename | ik | ist | idim
 
