@@ -613,7 +613,7 @@ contains
 
     call restart_close(restart, wfns_file)
     call restart_close(restart, occ_file)
-    call restart_close(restart, occ_gs_file)
+    if(st%restart_read_occ_gs) call restart_close(restart, occ_gs_file)
     if(.not. st%restart_read_occ_gs)st%occ_gs = st%occ
 
     if (st%restart_fixed_occ) then
