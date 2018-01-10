@@ -205,7 +205,7 @@ contains
                 call batch_get_state(commpsib(idir), ii, der%mesh%np, hrpsi(:, idim))
               end do
               
-              ww = st%d%kweights(ik)*st%occ(ist, ik) 
+              ww = st%d%kweights(ik)*st%occ_gs(ist, ik) 
               if(st%d%ispin /= SPINORS) then
                 !$omp parallel do
                 do ip = 1, der%mesh%np
@@ -273,7 +273,7 @@ contains
                 call batch_get_state(rhpsib, ii, der%mesh%np, rhpsi(:, idim))
               end do
 
-              ww = st%d%kweights(ik)*st%occ(ist, ik)              
+              ww = st%d%kweights(ik)*st%occ_gs(ist, ik)              
 
               if(st%d%ispin /= SPINORS) then
                 !$omp parallel do
@@ -355,7 +355,7 @@ contains
 
           end if
 
-          ww = st%d%kweights(ik)*st%occ(ist, ik)
+          ww = st%d%kweights(ik)*st%occ_gs(ist, ik)
 
           if(st%d%ispin /= SPINORS) then
             do idir = 1, der%mesh%sb%dim
