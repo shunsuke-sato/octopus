@@ -357,15 +357,15 @@ contains
     character(len=*), optional, intent(in)    :: label
     logical,          optional, intent(in)    :: verbose
 
-    integer              :: states_file, wfns_file, occ_file, err, ik, ist, idir, idim
+    integer              :: states_file, wfns_file, occ_file, err, ik, ist, idir, idim, occ_gs_file
     integer              :: idone, iread, ntodo, iread_tmp
     character(len=12)    :: filename
     character(len=1)     :: char
     logical, allocatable :: filled(:, :, :)
-    character(len=256)   :: lines(3), label_
+    character(len=256)   :: lines(3), lines_gs(3), label_
     character(len=50)    :: str
 
-    FLOAT                :: my_occ, imev, my_kweight
+    FLOAT                :: my_occ, imev, my_kweight, my_occ_gs
     logical              :: read_occ, lr_allocated, verbose_
     logical              :: integral_occs, cmplxscl, read_left_
     FLOAT, allocatable   :: dpsi(:)
@@ -485,6 +485,7 @@ contains
     ! open files to read
     wfns_file  = restart_open(restart, 'wfns')
     occ_file = restart_open(restart, 'occs')
+    if(st%restart_read_occ_gs) occ_gs_file = restart_open(restart, 'occs_gs')
     call restart_read(restart, wfns_file, lines, 2, err)
     if (err /= 0) then
       ierr = ierr - 2**5
@@ -503,6 +504,7 @@ contains
 
     ! Skip two lines.
     call restart_read(restart, occ_file, lines, 2, err)
+    if(st%restart_read_occ_gs) call restart_read(restart, occ_gs_file, lines, 2, err)
     if (err /= 0) ierr = ierr - 2**7
 
     ! If any error occured up to this point then it is not worth continuing,
@@ -510,6 +512,7 @@ contains
     if (ierr /= 0) then
       call restart_close(restart, wfns_file)
       call restart_close(restart, occ_file)
+      if(st%restart_read_occ_gs) call restart_close(restart, occ_gs_file)
       call profiling_out(prof_read)
       POP_SUB(states_load)
       return
@@ -545,6 +548,7 @@ contains
 
       if (err /= 0 .or. index_is_wrong()) then
         call restart_read(restart, occ_file, lines, 1, err)
+        if(st%restart_read_occ_gs) call restart_read(restart, occ_gs_file, lines, 1, err)
         cycle
       end if
 
@@ -556,10 +560,14 @@ contains
       end if
 
       call restart_read(restart, occ_file, lines, 1, err)
+      if(st%restart_read_occ_gs) call restart_read(restart, occ_file_gs, lines_gs, 1, err)
       if (.not. present(lr)) then ! do not read eigenvalues or occupations when reading linear response
         ! # occupations | eigenvalue[a.u.] | Im(eigenvalue) [a.u.] | k-points | k-weights | filename | ik | ist | idim
 
         if (err == 0) then
+          if(st%restart_read_occ_gs) &
+            read(lines_gs(1), *) my_occ_gs, char, st%eigenval(ist, ik), char, imev, char, &
+               (read_kpoint(idir), char, idir = 1, gr%sb%dim), my_kweight
           read(lines(1), *) my_occ, char, st%eigenval(ist, ik), char, imev, char, &
                (read_kpoint(idir), char, idir = 1, gr%sb%dim), my_kweight
           ! we do not want to read the k-weights, we have already set them appropriately
@@ -587,6 +595,7 @@ contains
 
         if (read_occ) then
           st%occ(ist, ik) = my_occ
+          if(st%restart_read_occ_gs) st%occ_gs(ist, ik) = my_occ_gs
           integral_occs = integral_occs .and. &
                abs((st%occ(ist, ik) - st%smear%el_per_state) * st%occ(ist, ik))  <=  M_EPSILON
         end if
@@ -604,6 +613,8 @@ contains
 
     call restart_close(restart, wfns_file)
     call restart_close(restart, occ_file)
+    call restart_close(restart, occ_gs_file)
+    if(.not. st%restart_read_occ_gs)st%occ_gs = st%occ
 
     if (st%restart_fixed_occ) then
       ! reset to overwrite whatever smearing may have been set earlier

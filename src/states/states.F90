@@ -177,7 +177,10 @@ module states_oct_m
     logical        :: fixed_occ     !< should the occupation numbers be fixed?
     logical        :: restart_fixed_occ !< should the occupation numbers be fixed by restart?
     logical        :: restart_reorder_occs !< used for restart with altered occupation numbers
+    logical        :: restart_read_occ_gs !< reqd the ground state occupation from occ_gs file
+
     FLOAT, pointer :: occ(:,:)      !< the occupation numbers
+    FLOAT, pointer :: occ_gs(:,:)      !< the occupation numbers
     logical        :: fixed_spins   !< In spinors mode, the spin direction is set
                                     !< for the initial (random) orbitals.
     FLOAT, pointer :: spin(:, :, :)
@@ -266,7 +269,7 @@ contains
     nullify(st%rho, st%current)
     nullify(st%rho_core, st%frozen_rho)
     nullify(st%subsys_st)
-    nullify(st%eigenval, st%occ, st%spin)
+    nullify(st%eigenval, st%occ, st%occ_gs, st%spin)
 
     st%parallel_in_states = .false.
 #ifdef HAVE_SCALAPACK
@@ -531,7 +534,9 @@ contains
 
     ! we now allocate some arrays
     SAFE_ALLOCATE(st%occ     (1:st%nst, 1:st%d%nik))
+    SAFE_ALLOCATE(st%occ_gs     (1:st%nst, 1:st%d%nik))
     st%occ      = M_ZERO
+    st%occ_gs      = M_ZERO
     ! allocate space for formula strings that define user-defined states
     SAFE_ALLOCATE(st%user_def_states(1:st%d%dim, 1:st%nst, 1:st%d%nik))
     if(st%d%ispin == SPINORS) then
@@ -681,6 +686,15 @@ contains
     FLOAT :: charge_in_block
 
     PUSH_SUB(states_read_initial_occs)
+
+    !%Variable RestartReadOccupationsGS
+    !%Type logical
+    !%Default no
+    !%Section States
+    !%Description
+    !% Read the ground state occupation from occs_gs file.
+    !%End
+    call parse_variable('RestartReadOccupationsGS', .false., st%restart_read_occ_gs)
 
     !%Variable RestartFixedOccupations
     !%Type logical
@@ -923,6 +937,8 @@ contains
       call messages_write('or smearing.')
       call messages_fatal()
     end if
+
+    st%occ_gs = st%occ
     
     POP_SUB(states_read_initial_occs)
   end subroutine states_read_initial_occs
