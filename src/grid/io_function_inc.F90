@@ -1141,7 +1141,7 @@ contains
     FLOAT   :: offset(MAX_DIM)
     type(cube_t) :: cube
     type(cube_function_t) :: cf
-    character(len=8) :: fmt
+    character(len=16) :: fmt
 
     PUSH_SUB(X(io_function_output_global).out_cube)
 
