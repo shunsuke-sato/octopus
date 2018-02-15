@@ -1188,7 +1188,7 @@ contains
         do iz = 1, cube%rs_n_global(3), 6
 
           if(iz + 6 - 1 <= cube%rs_n_global(3)) then
-            write(iunit,'(6e14.6)') units_from_atomic(unit, R_REAL(cf%X(RS)(ix, iy, iz:iz + 6 - 1)))
+            write(iunit,'(6e26.16)') units_from_atomic(unit, R_REAL(cf%X(RS)(ix, iy, iz:iz + 6 - 1)))
           else
             write(fmt, '(a,i1,a)') '(', cube%rs_n_global(3) - iz + 1, 'e26.16)'
             write(iunit, trim(fmt)) units_from_atomic(unit, R_REAL(cf%X(RS)(ix, iy, iz:cube%rs_n_global(3))))
