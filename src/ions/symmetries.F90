@@ -60,6 +60,7 @@ module symmetries_oct_m
     character(len=30)        :: group_elements
     character(len=11)        :: symbol
     character(len=7)         :: schoenflies
+    logical                  :: if_all_species_spherical
   end type symmetries_t
 
   real(8), parameter, public :: SYMPREC = CNST(1e-5)
@@ -134,6 +135,17 @@ contains
         species_type(geo%atom(iatom)%species) == SPECIES_FROZEN
       if(this%any_non_spherical)exit
     end do
+
+    !%Variable AllSpeciesSpherical
+    !%Type logical
+    !%Default yes
+    !%Section Execution::Symmetries
+    !%Description
+    !% Explicitly declare all species have spherical symmetry
+    !%End
+    call parse_variable('AllSpeciesSpherical', .false., this%if_all_species_spherical)
+    if(this%if_all_species_spherical)this%any_non_spherical = .false.
+
 
     dim4syms = min(3,dim)
 
