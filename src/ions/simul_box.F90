@@ -129,6 +129,8 @@ module simul_box_oct_m
     type(c_ptr)         :: image
     character(len=200)  :: filename
 
+    logical :: if_skip_box_check
+
   end type simul_box_t
 
   character(len=22), parameter :: dump_tag = '*** simul_box_dump ***'
@@ -155,7 +157,16 @@ contains
     call simul_box_build_lattice(sb)       ! Build lattice vectors.
     call simul_box_atoms_in_box(sb, geo, .true.)   ! Put all the atoms inside the box.
 
-    call simul_box_check_atoms_are_too_close(geo, sb)
+    call parse_variable('SkipSimulBoxCheck', .false., sb%if_skip_box_check)
+    !%Variable SkipSimulBoxCheck
+    !%Type logical
+    !%Default no
+    !%Section Mesh
+    !%Description
+    !% If it is set to yes, Octopus skips to check if atoms are too close.
+    !%End
+    
+    if(.not.sb%if_skip_box_check) call simul_box_check_atoms_are_too_close(geo, sb)
 
     call symmetries_init(sb%symm, geo, sb%dim, sb%periodic_dim, sb%rlattice, sb%klattice)
 
