@@ -562,14 +562,14 @@ contains
       end if
       call periodic_copy_end(pp)
 
-      if (cmplxscl) then 
-        rr = M_ONE ! XXXXX normalization
-        rho(1:mesh%np) = rr * rho(1:mesh%np)
-        Imrho(1:mesh%np) = rr * Imrho(1:mesh%np)
-      else
-        rr = species_zval(species) / abs(dmf_integrate(mesh, rho(:)))
-        rho(1:mesh%np) = rr * rho(1:mesh%np)
-      end if
+!      if (cmplxscl) then 
+!        rr = M_ONE ! XXXXX normalization
+!        rho(1:mesh%np) = rr * rho(1:mesh%np)
+!        Imrho(1:mesh%np) = rr * Imrho(1:mesh%np)
+!      else
+!        rr = species_zval(species) / abs(dmf_integrate(mesh, rho(:)))
+!        rho(1:mesh%np) = rr * rho(1:mesh%np)
+!      end if
 
     end select
 
