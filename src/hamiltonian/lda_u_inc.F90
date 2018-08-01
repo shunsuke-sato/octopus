@@ -297,9 +297,7 @@ subroutine X(lda_u_update_potential)(this, st)
         if(ispin <= this%spin_channels) &
           this%X(V)(im,im,ispin,ios) = this%X(V)(im,im,ispin,ios) + CNST(0.5)*this%orbsets(ios)%Ueff
 
-        if(this%orbsets(ios)%alpha > CNST(1.0e-6)) then
-          this%X(V)(im,im,ispin,ios) = this%X(V)(im,im,ispin,ios) + this%orbsets(ios)%alpha
-        end if
+        this%X(V)(im,im,ispin,ios) = this%X(V)(im,im,ispin,ios) + this%orbsets(ios)%alpha
       end do
     end do
   end do
