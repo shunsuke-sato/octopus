@@ -467,7 +467,7 @@ contains
 ! Ionic contribution to the polarization
         do iatom = 1, geo%natoms
           if(.not. geo%atom(iatom)%move) cycle
-          this%force(idir) = this%force(idir) + &
+          this%force(idir) = this%force(idir) - &
             CNST(4.0)*M_PI*P_c/gr%sb%rcell_volume*geo%atom(iatom)%v(idir)*species_zval(geo%atom(iatom)%species)
         end do
         
