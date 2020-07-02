@@ -812,6 +812,11 @@ contains
       if(freeze_hxc) then 
         write(message(1),'(a)') 'Info: Freezing Hartree and exchange-correlation potentials.'
         call messages_info(1)
+
+        call restart_init(restart, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=gr%mesh, exact=.true.)
+        call states_elec_load_rho(restart, st, gr, ierr)
+        call restart_end(restart)
+        call v_ks_calc(sys%ks, hm, st, sys%geo, calc_eigenval=.true., time = td%iter*td%dt)
         call v_ks_freeze_hxc(sys%ks)
 
         !In this case we should reload GS wavefunctions 
