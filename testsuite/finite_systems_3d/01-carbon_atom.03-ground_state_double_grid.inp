@@ -24,25 +24,31 @@ UnitsOutput = ev_angstrom
 "C" | 0 | 0 | 0
 %
 
+%Species
+"C" | species_pseudo   | lmax | 1 | lloc | 1
+%
+
 spacing = 0.19*angstrom
 radius = 5.0*angstrom
 
-ForceComplex = yes
-LCAOComplexYlms = yes
 SpinComponents = polarized
 
 ExtraStates = 2
 %Occupations
- 2/3 | 2/3 | 2/3
- 0 | 0 | 0
+1 | 2/3 | 2/3 | 2/3
+1 | 0 | 0 | 0
 %
 
 XCFunctional = lda_x + lda_c_pz
 
-ConvRelDens = 4e-6
+EigenSolverTolerance = 1e-5
 
 PoissonSolver = fft
 PoissonFFTKernel = multipole_correction
+
+ExperimentalFeatures = yes
+ConvRelDens = 4e-6
+DoubleGrid=yes
 
 FilterPotentials = filter_none
 

@@ -30,5 +30,3 @@ XCFunctional = hyb_gga_xc_mvorb_hse06
 RestartWrite = no
 
 FilterPotentials = filter_none
-
-StatesPack = yes

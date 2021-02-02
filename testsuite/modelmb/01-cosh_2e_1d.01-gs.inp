@@ -52,5 +52,3 @@ k=1.0
  mmb_wfs | plane_z + axis_x
  density | plane_z + axis_x
 %
-
-StatesPack = yes

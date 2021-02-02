@@ -21,4 +21,5 @@ XCFunctional = slater_x
 
 FilterPotentials = filter_none
 
-StatesPack = yes
+# Parallelization in spin/k-points is currently not available for OEP
+ParKpoints = no

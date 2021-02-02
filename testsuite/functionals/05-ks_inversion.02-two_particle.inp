@@ -35,4 +35,3 @@ InvertKSTargetDensity = "static/density.y=0,z=0"
 % 
 
 FilterPotentials = filter_none
-StatesPack = yes
