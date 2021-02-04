@@ -66,5 +66,3 @@ AOTruncation = ao_box
 %
 
 DFTUPoissonSolver = dft_u_poisson_direct
-
-StatesPack = yes

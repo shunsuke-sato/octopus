@@ -36,7 +36,3 @@ ExtraStates= 1
  wfs     | axis_x
  density | axis_x
 %
-
-
-
-StatesPack = yes

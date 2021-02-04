@@ -35,6 +35,5 @@ UseAllAtomicOrbitals = yes
   occ_matrices
   effectiveU
 %
-StatesPack = yes
 
 LCAOStart = lcao_full
