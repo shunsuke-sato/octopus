@@ -1165,7 +1165,6 @@ contains
     type(multicomm_t),    intent(in)    :: mc
 
     integer :: default
-    logical :: defaultl
 
     PUSH_SUB(states_elec_exec_init)
 
@@ -1188,8 +1187,7 @@ contains
     !% The default is yes.
     !%End
 
-    defaultl = .true.
-    call parse_variable(namespace, 'StatesPack', defaultl, st%d%pack_states)
+    call parse_variable(namespace, 'StatesPack', .true., st%d%pack_states)
 
     call messages_print_var_value(stdout, 'StatesPack', st%d%pack_states)
 
