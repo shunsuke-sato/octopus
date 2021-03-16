@@ -229,7 +229,7 @@ subroutine X(mesh_to_cube)(mesh, mf, cube, cf, local)
   logical :: local_
   R_TYPE, pointer :: gmf(:)
   type(accel_mem_t)         :: mf_buffer
-  type(accel_kernel_t), save :: dkernel, zkernel
+  type(accel_kernel_t), save :: X(kernel)
   type(profile_t), save :: prof_m2c
 
   PUSH_SUB(X(mesh_to_cube))
@@ -325,7 +325,7 @@ subroutine X(cube_to_mesh) (cube, cf, mesh, mf, local)
   R_TYPE, pointer :: gmf(:)
   integer                    :: bsize
   type(accel_mem_t)         :: mf_buffer
-  type(accel_kernel_t), save :: dkernel, zkernel
+  type(accel_kernel_t), save :: X(kernel)
   type(profile_t), save :: prof_c2m
 
   PUSH_SUB(X(cube_to_mesh))
