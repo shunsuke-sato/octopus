@@ -38,6 +38,10 @@ dist_share_DATA =                                                   \
         05-plane_waves.test                                         \
         05-plane_waves.01-pulse_pml.inp                             \
         06-circular-polarization.test                               \
-        06-circular-polarization.01-1_puse_circ_pol.inp
+        06-circular-polarization.01-1_puse_circ_pol.inp             \
+	07-mode-resolved-maxwell-ks-propagation.test                \
+	07-mode-resolved-maxwell-ks-propagation.01-1D-Helium-ground-state.inp \
+	07-mode-resolved-maxwell-ks-propagation.02-kick-of-the-electronic-subsystem.inp
+
 
 CLEANFILES = *~ *.bak
