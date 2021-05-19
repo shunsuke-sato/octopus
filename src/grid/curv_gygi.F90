@@ -23,7 +23,6 @@
 
 module curv_gygi_oct_m
   use global_oct_m
-  use ions_oct_m
   use messages_oct_m
   use namespace_oct_m
   use parser_oct_m
@@ -62,11 +61,12 @@ module curv_gygi_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine curv_gygi_init(cv, namespace, sb, ions, min_scaling_product)
+  subroutine curv_gygi_init(cv, namespace, sb, npos, pos, min_scaling_product)
     type(curv_gygi_t), intent(out) :: cv
     type(namespace_t), intent(in)  :: namespace
     type(simul_box_t), intent(in)  :: sb
-    type(ions_t),      intent(in)  :: ions
+    integer,           intent(in)  :: npos
+    FLOAT,             intent(in)  :: pos(:,:)
     FLOAT,             intent(out) :: min_scaling_product
 
     PUSH_SUB(curv_gygi_init)
@@ -112,9 +112,9 @@ contains
     if(cv%alpha<=M_ZERO) call messages_input_error(namespace, 'CurvGygiAlpha')
     if(cv%beta<=M_ZERO)  call messages_input_error(namespace, 'CurvGygiBeta')
 
-    cv%npos = ions%natoms
+    cv%npos = npos
     SAFE_ALLOCATE(cv%pos(1:sb%dim, 1:cv%npos))
-    cv%pos = ions%pos
+    cv%pos = pos
 
     call curv_gygi_min_scaling(sb, cv, min_scaling_product)
 

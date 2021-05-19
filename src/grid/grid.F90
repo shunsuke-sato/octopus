@@ -178,7 +178,7 @@ contains
     end if
 
     ! initialize curvilinear coordinates
-    call curvilinear_init(gr%cv, namespace, gr%sb, ions, grid_spacing)
+    call curvilinear_init(gr%cv, namespace, gr%sb, ions%natoms, ions%pos, grid_spacing)
 
     ! initialize derivatives
     call derivatives_init(gr%der, namespace, space, gr%sb%latt, gr%cv%method /= CURV_METHOD_UNIFORM)

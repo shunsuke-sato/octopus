@@ -159,6 +159,7 @@ contains
     this%ions%natoms = 0
     this%ions%ncatoms = 0
     this%ions%nspecies = 0
+    allocate(this%ions%pos(1:this%ions%natoms, 1:this%space%dim))
     this%ions%only_user_def = .false.
     this%ions%kinetic_energy = M_ZERO
     this%ions%latt = lattice_vectors_t(this%namespace, this%space)
@@ -697,6 +698,8 @@ contains
 
     call simul_box_end(this%gr%sb)
     call grid_end(this%gr)
+
+    deallocate(this%ions%pos)
 
     call profiling_out(prof)
 

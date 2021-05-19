@@ -27,7 +27,6 @@
 
 module curv_modine_oct_m
   use global_oct_m
-  use ions_oct_m
   use messages_oct_m
   use namespace_oct_m
   use parser_oct_m
@@ -129,11 +128,12 @@ contains
   end subroutine getf2
 
   ! ---------------------------------------------------------
-  subroutine curv_modine_init(cv, namespace, sb, ions, spacing, min_scaling_product)
+  subroutine curv_modine_init(cv, namespace, sb, npos, pos, spacing, min_scaling_product)
     type(curv_modine_t), target, intent(out) :: cv
     type(namespace_t),           intent(in)  :: namespace
     type(simul_box_t),   target, intent(in)  :: sb
-    type(ions_t),                intent(in)  :: ions
+    integer,                     intent(in)  :: npos
+    FLOAT,                       intent(in)  :: pos(:,:)
     FLOAT,                       intent(in)  :: spacing(:)
     FLOAT,                       intent(out) :: min_scaling_product
 
@@ -169,8 +169,8 @@ contains
       call messages_fatal(1)
     end if
 
-    SAFE_ALLOCATE(cv%Jlocal(1:ions%natoms))
-    SAFE_ALLOCATE(cv%Jrange(1:ions%natoms))
+    SAFE_ALLOCATE(cv%Jlocal(1:npos))
+    SAFE_ALLOCATE(cv%Jrange(1:npos))
 
     ! \warning: the reading has to be done for each atom kind
 
@@ -209,7 +209,7 @@ contains
     call find_atom_points()
     call optimize()
 
-    cv%natoms = ions%natoms
+    cv%natoms = npos
 
     call curv_modine_min_scaling(sb, cv, min_scaling_product)
 
@@ -223,19 +223,19 @@ contains
       PUSH_SUB(curv_modine_init.find_atom_points)
 
       ! Initialize csi
-      SAFE_ALLOCATE(cv%csi(1:sb%dim, 1:ions%natoms))
-      cv%csi = ions%pos
+      SAFE_ALLOCATE(cv%csi(1:sb%dim, 1:npos))
+      cv%csi = npos
 
       ! get first estimate for chi_atoms
-      SAFE_ALLOCATE(cv%chi_atoms(1:sb%dim, 1:ions%natoms))
+      SAFE_ALLOCATE(cv%chi_atoms(1:sb%dim, 1:npos))
       do jj = 1, 10  ! \warning: make something better
-        do iatom = 1, ions%natoms
-          call curv_modine_x2chi(sb, cv, rs, ions%pos(:, iatom), cv%chi_atoms(:, iatom))
+        do iatom = 1, npos
+          call curv_modine_x2chi(sb, cv, rs, pos(:, iatom), cv%chi_atoms(:, iatom))
         end do
         cv%csi(:,:) = cv%chi_atoms(:,:)
       end do
 
-      do iatom = 1, ions%natoms
+      do iatom = 1, npos
         ! These are the chi positions where we want the atoms.
         cv%chi_atoms(:, iatom) = nint(cv%chi_atoms(:, iatom) / spacing(:)) * spacing(:)
       end do
@@ -253,14 +253,14 @@ contains
       sb_p  => sb
       cv_p  => cv
 
-      SAFE_ALLOCATE(x_p(1:sb%dim*ions%natoms))
-      SAFE_ALLOCATE(my_csi(1:sb%dim*ions%natoms))
-      SAFE_ALLOCATE(start_csi(1:sb%dim*ions%natoms))
+      SAFE_ALLOCATE(x_p(1:sb%dim*npos))
+      SAFE_ALLOCATE(my_csi(1:sb%dim*npos))
+      SAFE_ALLOCATE(start_csi(1:sb%dim*npos))
 
-      do iatom = 1, ions%natoms
+      do iatom = 1, npos
         do idim = 1, sb%dim
           index = (iatom-1)*sb%dim + idim
-          x_p(index)       = ions%pos(idim, iatom)
+          x_p(index)       = pos(idim, iatom)
           start_csi(index) = cv%chi_atoms(idim, iatom)
         end do
       end do
@@ -274,7 +274,7 @@ contains
       end if
 
       ! Now set csi to the new values
-      do iatom = 1, ions%natoms
+      do iatom = 1, npos
         do idim = 1, sb%dim
           index = (iatom-1)*sb_p%dim + idim
           cv_p%csi(idim, iatom) = my_csi(index)
