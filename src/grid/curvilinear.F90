@@ -30,7 +30,6 @@ module curvilinear_oct_m
   use parser_oct_m
   use profiling_oct_m
   use root_solver_oct_m
-  use simul_box_oct_m
   use unit_oct_m
   use unit_system_oct_m
   use varinfo_oct_m
@@ -69,13 +68,14 @@ module curvilinear_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine curvilinear_init(cv, namespace, sb, npos, pos, spacing)
-    type(curvilinear_t), intent(out) :: cv
-    type(namespace_t),   intent(in)  :: namespace
-    type(simul_box_t),   intent(in)  :: sb
-    integer,             intent(in)  :: npos
-    FLOAT,               intent(in)  :: pos(:,:)
-    FLOAT,               intent(in)  :: spacing(:)
+  subroutine curvilinear_init(cv, namespace, dim, npos, pos, lsize, spacing)
+    type(curvilinear_t),     intent(out) :: cv
+    type(namespace_t),       intent(in)  :: namespace
+    integer,                 intent(in)  :: dim
+    integer,                 intent(in)  :: npos
+    FLOAT,                   intent(in)  :: pos(:,:)
+    FLOAT,                   intent(in)  :: lsize(:)
+    FLOAT,                   intent(in)  :: spacing(:)
 
     PUSH_SUB(curvilinear_init)
 
@@ -113,15 +113,15 @@ contains
 
     select case(cv%method)
     case(CURV_METHOD_GYGI)
-      call curv_gygi_init(cv%gygi, namespace, sb, npos, pos, cv%min_mesh_scaling_product)
+      call curv_gygi_init(cv%gygi, namespace, dim, npos, pos, cv%min_mesh_scaling_product)
     case(CURV_METHOD_BRIGGS)
-      call curv_briggs_init(cv%briggs, namespace, sb, spacing, cv%min_mesh_scaling_product)
+      call curv_briggs_init(cv%briggs, namespace, dim, lsize, spacing, cv%min_mesh_scaling_product)
     case(CURV_METHOD_MODINE)
-      call curv_modine_init(cv%modine, namespace, sb, npos, pos, spacing, cv%min_mesh_scaling_product)
+      call curv_modine_init(cv%modine, namespace, dim, npos, pos, lsize, spacing, cv%min_mesh_scaling_product)
     end select
 
     ! initialize root solver
-    call root_solver_init(cv%rs, namespace, sb%dim,  &
+    call root_solver_init(cv%rs, namespace, dim, &
       solver_type = ROOT_NEWTON, maxiter = 500, abs_tolerance = CNST(1.0e-10))
 
     POP_SUB(curvilinear_init)
@@ -131,9 +131,10 @@ contains
   subroutine curvilinear_copy(this_out, this_in)
     type(curvilinear_t), intent(inout) :: this_out
     type(curvilinear_t), intent(in)    :: this_in
-    !
+
     PUSH_SUB(curvilinear_copy)
-    this_out%method=this_in%method
+
+    this_out%method = this_in%method
     select case(this_in%method)
     case(CURV_METHOD_GYGI)
       call curv_gygi_copy(this_out%gygi, this_in%gygi)
@@ -142,8 +143,8 @@ contains
     case(CURV_METHOD_MODINE)
       call curv_modine_copy(this_out%modine, this_in%modine)
     end select
+
     POP_SUB(curvilinear_copy)
-    return
   end subroutine curvilinear_copy
 
   ! ---------------------------------------------------------
@@ -164,37 +165,36 @@ contains
     POP_SUB(curvilinear_end)
   end subroutine curvilinear_end
 
-
   ! ---------------------------------------------------------
-  subroutine curvilinear_chi2x(sb, latt, cv, chi, x)
-    type(simul_box_t),       intent(in)  :: sb
-    type(lattice_vectors_t), intent(in)  :: latt
+  subroutine curvilinear_chi2x(cv, dim, latt, chi, x)
     type(curvilinear_t),     intent(in)  :: cv
+    integer,                 intent(in)  :: dim
+    type(lattice_vectors_t), intent(in)  :: latt
     FLOAT,                   intent(in)  :: chi(:)  !< chi(1:sb%dim)
     FLOAT,                   intent(out) :: x(:)    !< x(1:sb%dim)
 
     ! no push_sub because called too frequently
     x = M_ZERO
 
-    select case(cv%method)
+    select case (cv%method)
     case(CURV_METHOD_UNIFORM)
-      x(1:sb%dim) = matmul(latt%rlattice_primitive(1:sb%dim,1:sb%dim), chi(1:sb%dim))
+      x(1:dim) = matmul(latt%rlattice_primitive(1:dim,1:dim), chi(1:dim))
     case(CURV_METHOD_GYGI)
-      call curv_gygi_chi2x(sb, cv%gygi, cv%rs, chi, x)
+      call curv_gygi_chi2x(cv%gygi, dim, cv%rs, chi, x)
     case(CURV_METHOD_BRIGGS)
-      call curv_briggs_chi2x(sb, cv%briggs, chi, x)
+      call curv_briggs_chi2x(cv%briggs, dim, chi, x)
     case(CURV_METHOD_MODINE)
-      call curv_modine_chi2x(sb, cv%modine, chi, x)
+      call curv_modine_chi2x(cv%modine, dim, chi, x)
     end select
 
   end subroutine curvilinear_chi2x
 
 
   ! ---------------------------------------------------------
-  subroutine curvilinear_x2chi(sb, latt, cv, x, chi)
-    type(simul_box_t),       intent(in)  :: sb
-    type(lattice_vectors_t), intent(in)  :: latt
+  subroutine curvilinear_x2chi(cv, dim, latt, x, chi)
     type(curvilinear_t),     intent(in)  :: cv
+    integer,                 intent(in)  :: dim
+    type(lattice_vectors_t), intent(in)  :: latt
     FLOAT,                   intent(in)  :: x(MAX_DIM)
     FLOAT,                   intent(out) :: chi(MAX_DIM)
 
@@ -204,9 +204,9 @@ contains
 
     select case(cv%method)
     case(CURV_METHOD_UNIFORM)
-      chi(1:sb%dim) = matmul(x(1:sb%dim), latt%klattice_primitive)
+      chi(1:dim) = matmul(x(1:dim), latt%klattice_primitive)
     case(CURV_METHOD_GYGI)
-      call curv_gygi_x2chi(sb, cv%gygi, x, chi)
+      call curv_gygi_x2chi(cv%gygi, dim, x, chi)
     case(CURV_METHOD_BRIGGS, CURV_METHOD_MODINE)
       message(1) = "Internal error in curvilinear_x2chi"
       call messages_fatal(1)
@@ -217,10 +217,10 @@ contains
 
 
   ! ---------------------------------------------------------
-  FLOAT function curvilinear_det_Jac(sb, latt, cv, x, chi) result(jdet)
-    type(simul_box_t),       intent(in)  :: sb
-    type(lattice_vectors_t), intent(in)  :: latt
+  FLOAT function curvilinear_det_Jac(cv, dim, latt, x, chi) result(jdet)
     type(curvilinear_t),     intent(in)  :: cv
+    integer,                 intent(in)  :: dim
+    type(lattice_vectors_t), intent(in)  :: latt
     FLOAT,                   intent(in)  :: x(:)    !<   x(sb%dim)
     FLOAT,                   intent(in)  :: chi(:)  !< chi(sb%dim)
 
@@ -230,24 +230,24 @@ contains
 
     ! No PUSH_SUB, called too often
 
-    SAFE_ALLOCATE(Jac(1:sb%dim, 1:sb%dim))
+    SAFE_ALLOCATE(Jac(1:dim, 1:dim))
 
     select case(cv%method)
     case(CURV_METHOD_UNIFORM)
-      Jac(1:sb%dim, 1:sb%dim) = latt%rlattice_primitive(1:sb%dim, 1:sb%dim)
-      jdet = lalg_determinant(sb%dim, Jac, preserve_mat = .false.)      
+      Jac(1:dim, 1:dim) = latt%rlattice_primitive(1:dim, 1:dim)
+      jdet = lalg_determinant(dim, Jac, preserve_mat = .false.)      
     case(CURV_METHOD_GYGI)
-      call curv_gygi_jacobian(sb, cv%gygi, x, dummy, Jac)
-      jdet = M_ONE/lalg_determinant(sb%dim, Jac, preserve_mat = .false.)
+      call curv_gygi_jacobian(cv%gygi, dim, x, dummy, Jac)
+      jdet = M_ONE/lalg_determinant(dim, Jac, preserve_mat = .false.)
     case(CURV_METHOD_BRIGGS)
-      call curv_briggs_jacobian_inv(sb, cv%briggs, chi, Jac)
+      call curv_briggs_jacobian_inv(cv%briggs, dim, chi, Jac)
       jdet = M_ONE
-      do i = 1, sb%dim
+      do i = 1, dim
         jdet = jdet * Jac(i,i) ! Jacobian is diagonal in this method
       end do
     case(CURV_METHOD_MODINE)
-      call curv_modine_jacobian_inv(sb, cv%modine, chi, dummy, Jac)
-      jdet = M_ONE*lalg_determinant(sb%dim, Jac, preserve_mat = .false.)
+      call curv_modine_jacobian_inv(cv%modine, dim, chi, dummy, Jac)
+      jdet = M_ONE*lalg_determinant(dim, Jac, preserve_mat = .false.)
     end select
 
     SAFE_DEALLOCATE_A(Jac)

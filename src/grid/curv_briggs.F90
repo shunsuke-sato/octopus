@@ -28,7 +28,6 @@ module curv_briggs_oct_m
   use messages_oct_m
   use namespace_oct_m
   use parser_oct_m
-  use simul_box_oct_m
 
   implicit none
 
@@ -49,24 +48,25 @@ module curv_briggs_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine curv_briggs_init(cv, namespace, sb, spacing, min_scaling_product)
+  subroutine curv_briggs_init(cv, namespace, dim, lsize, spacing, min_scaling_product)
     type(curv_briggs_t), intent(out) :: cv
     type(namespace_t),   intent(in)  :: namespace
-    type(simul_box_t),   intent(in)  :: sb
+    integer,             intent(in)  :: dim
+    FLOAT,               intent(in)  :: lsize(:)
     FLOAT,               intent(in)  :: spacing(:)
     FLOAT,               intent(out) :: min_scaling_product
   
     cv%L = M_ZERO
-    cv%L(1:sb%dim) = sb%lsize(1:sb%dim)
+    cv%L(1:dim) = lsize(1:dim)
 
     call parse_variable(namespace, 'CurvBriggsBeta', M_HALF, cv%beta)
 
-    if(cv%beta<M_ZERO.or.cv%beta>M_ONE) then
+    if (cv%beta < M_ZERO .or. cv%beta > M_ONE) then
       message(1) = 'The parameter "CurvBriggsBeta" must lie between 0 and 1.'
       call messages_fatal(1)
     end if
 
-    call curv_briggs_min_scaling(sb, cv, spacing, min_scaling_product)
+    call curv_briggs_min_scaling(cv, dim, spacing, min_scaling_product)
 
   end subroutine curv_briggs_init
 
@@ -74,62 +74,60 @@ contains
   subroutine curv_briggs_copy(this_out, this_in)
     type(curv_briggs_t), intent(inout) :: this_out
     type(curv_briggs_t), intent(in)    :: this_in
-    !
+
     PUSH_SUB(curv_briggs_copy)
-    this_out%L=this_in%L
-    this_out%beta=this_in%beta
+
+    this_out%L = this_in%L
+    this_out%beta = this_in%beta
+
     POP_SUB(curv_briggs_copy)
-    return
   end subroutine curv_briggs_copy
 
   ! ---------------------------------------------------------
-  subroutine curv_briggs_chi2x(sb, cv, chi, x)
-    type(simul_box_t),   intent(in)  :: sb
+  subroutine curv_briggs_chi2x(cv, dim, chi, x)
     type(curv_briggs_t), intent(in)  :: cv
-    FLOAT,               intent(in)  :: chi(:)  !< chi(sb%dim)
-    FLOAT,               intent(out) :: x(:)    !< x(sb%dim)
+    integer,             intent(in)  :: dim
+    FLOAT,               intent(in)  :: chi(:)  !< chi(dim)
+    FLOAT,               intent(out) :: x(:)    !< x(dim)
 
     integer :: i
 
-    do i = 1, sb%dim
-      x(i) = chi(i) - cv%L(i)*cv%beta/(M_TWO*M_PI)*   &
-        sin(M_TWO*M_PI*chi(i)/cv%L(i))
+    do i = 1, dim
+      x(i) = chi(i) - cv%L(i)*cv%beta/(M_TWO*M_PI)*sin(M_TWO*M_PI*chi(i)/cv%L(i))
     end do
 
   end subroutine curv_briggs_chi2x
 
-
   ! ---------------------------------------------------------
-  subroutine curv_briggs_jacobian_inv(sb, cv, chi, J)
-    type(simul_box_t),   intent(in)  :: sb
+  subroutine curv_briggs_jacobian_inv(cv, dim, chi, J)
     type(curv_briggs_t), intent(in)  :: cv
-    FLOAT,               intent(in)  :: chi(:)  !< chi(sb%dim)
-    FLOAT,               intent(out) :: J(:,:)  !< J(sb%dim,sb%dim), the Jacobian
+    integer,             intent(in)  :: dim
+    FLOAT,               intent(in)  :: chi(:)  !< chi(dim)
+    FLOAT,               intent(out) :: J(:,:)  !< J(dim,dim), the Jacobian
 
     integer :: i
 
     J(:,:) = M_ZERO
-    do i = 1, sb%dim
+    do i = 1, dim
       J(i,i) = M_ONE - cv%beta*cos(M_TWO*M_PI*chi(i)/cv%L(i))
     end do
 
   end subroutine curv_briggs_jacobian_inv
 
-
   ! ---------------------------------------------------------
-  subroutine curv_briggs_min_scaling(sb, cv, spacing, min_scaling_product)
-    type(simul_box_t),   intent(in)  :: sb
+  subroutine curv_briggs_min_scaling(cv, dim, spacing, min_scaling_product)
     type(curv_briggs_t), intent(in)  :: cv
+    integer,             intent(in)  :: dim
     FLOAT,               intent(in)  :: spacing(:)
     FLOAT,               intent(out) :: min_scaling_product
 
     integer :: idim
 
-    min_scaling_product = 1.0
-    do idim = 1, sb%dim
+    min_scaling_product = M_ONE
+    do idim = 1, dim
       ! corresponds to the distance of grid points at [+spacing/2,-spacing/2]
-      min_scaling_product = min_scaling_product * (1.0 / &
-        (1.0 - cv%L(idim) * cv%beta / (M_PI * spacing(idim)) * sin(M_PI * spacing(idim) / cv%L(idim))))
+      min_scaling_product = min_scaling_product * (M_ONE / &
+        (M_ONE - cv%L(idim) * cv%beta / (M_PI * spacing(idim)) * sin(M_PI * spacing(idim) / cv%L(idim))))
     end do
   end subroutine curv_briggs_min_scaling
 

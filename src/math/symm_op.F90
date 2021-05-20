@@ -124,7 +124,7 @@ contains
     !Where A is the matrix containing the lattice vectors as column
     this%rot_cart = M_ZERO
     this%rot_cart(1:dim, 1:dim)  = matmul(latt%rlattice(1:dim, 1:dim), &
-                    matmul(rot(1:dim, 1:dim), latt%rlattice_inverse(1:dim, 1:dim)))
+                    matmul(rot(1:dim, 1:dim),transpose(latt%klattice(1:dim, 1:dim))/ (M_TWO * M_PI)))
     do idim = dim+1,3
       this%rot_cart(idim,idim) = M_ONE
     end do
