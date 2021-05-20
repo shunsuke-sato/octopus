@@ -172,7 +172,7 @@ end subroutine mesh_init_stage_1
 subroutine mesh_init_stage_2(mesh, space, sb, cv, stencil)
   type(mesh_t),        intent(inout) :: mesh
   type(space_t),       intent(in)    :: space
-  type(simul_box_t),   intent(in)    :: sb
+  class(box_t),        intent(in)    :: sb
   type(curvilinear_t), intent(in)    :: cv
   type(stencil_t),     intent(in)    :: stencil
 
@@ -368,7 +368,7 @@ subroutine mesh_init_stage_3(mesh, namespace, space, stencil, mc, parent)
 
   call mesh_cube_map_init(mesh%cube_map, mesh%idx, mesh%np_global)
 
-  call mesh_get_vol_pp(mesh%sb)
+  call mesh_get_vol_pp()
 
   call profiling_out(mesh_init_prof)
   POP_SUB(mesh_init_stage_3)
@@ -816,7 +816,7 @@ contains
     mesh%x(:, :) = M_ZERO
     do ii = 1, mesh%np_part
       jj = mesh_local2global(mesh, ii)
-      mesh%x(ii, 1:mesh%sb%dim) = mesh_x_global(mesh, jj)
+      mesh%x(ii, 1:space%dim) = mesh_x_global(mesh, jj)
     end do
 
     !%Variable PartitionPrint
@@ -842,8 +842,7 @@ contains
 
   ! ---------------------------------------------------------
   !> calculate the volume of integration
-  subroutine mesh_get_vol_pp(sb)
-    type(simul_box_t), intent(in) :: sb
+  subroutine mesh_get_vol_pp()
 
     integer :: jj(1:MAX_DIM), ip, np
     FLOAT   :: chi(MAX_DIM)
