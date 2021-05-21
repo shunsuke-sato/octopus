@@ -63,8 +63,6 @@ module curvilinear_oct_m
     FLOAT, public :: min_mesh_scaling_product ! product of the smallest scaling :: min(distance between the grid points / spacing)
   end type curvilinear_t
 
-  character(len=23), parameter :: dump_tag = '*** curvilinear_dump **'
-
 contains
 
   ! ---------------------------------------------------------
@@ -73,9 +71,9 @@ contains
     type(namespace_t),       intent(in)  :: namespace
     integer,                 intent(in)  :: dim
     integer,                 intent(in)  :: npos
-    FLOAT,                   intent(in)  :: pos(:,:)
-    FLOAT,                   intent(in)  :: lsize(:)
-    FLOAT,                   intent(in)  :: spacing(:)
+    FLOAT,                   intent(in)  :: pos(1:dim,1:npos)
+    FLOAT,                   intent(in)  :: lsize(1:dim)
+    FLOAT,                   intent(in)  :: spacing(1:dim)
 
     PUSH_SUB(curvilinear_init)
 
@@ -157,7 +155,7 @@ contains
     case(CURV_METHOD_GYGI)
       call curv_gygi_end(cv%gygi)
     case(CURV_METHOD_BRIGGS)
-      !
+      call curv_briggs_end(cv%briggs)
     case(CURV_METHOD_MODINE)
       call curv_modine_end(cv%modine)
     end select
@@ -170,8 +168,8 @@ contains
     type(curvilinear_t),     intent(in)  :: cv
     integer,                 intent(in)  :: dim
     type(lattice_vectors_t), intent(in)  :: latt
-    FLOAT,                   intent(in)  :: chi(:)  !< chi(1:sb%dim)
-    FLOAT,                   intent(out) :: x(:)    !< x(1:sb%dim)
+    FLOAT,                   intent(in)  :: chi(:)
+    FLOAT,                   intent(out) :: x(:)
 
     ! no push_sub because called too frequently
     x = M_ZERO
@@ -189,14 +187,13 @@ contains
 
   end subroutine curvilinear_chi2x
 
-
   ! ---------------------------------------------------------
   subroutine curvilinear_x2chi(cv, dim, latt, x, chi)
     type(curvilinear_t),     intent(in)  :: cv
     integer,                 intent(in)  :: dim
     type(lattice_vectors_t), intent(in)  :: latt
-    FLOAT,                   intent(in)  :: x(MAX_DIM)
-    FLOAT,                   intent(out) :: chi(MAX_DIM)
+    FLOAT,                   intent(in)  :: x(:)
+    FLOAT,                   intent(out) :: chi(:)
 
     PUSH_SUB(curvilinear_x2chi)
 
@@ -215,16 +212,15 @@ contains
     POP_SUB(curvilinear_x2chi)
   end subroutine curvilinear_x2chi
 
-
   ! ---------------------------------------------------------
   FLOAT function curvilinear_det_Jac(cv, dim, latt, x, chi) result(jdet)
     type(curvilinear_t),     intent(in)  :: cv
     integer,                 intent(in)  :: dim
     type(lattice_vectors_t), intent(in)  :: latt
-    FLOAT,                   intent(in)  :: x(:)    !<   x(sb%dim)
-    FLOAT,                   intent(in)  :: chi(:)  !< chi(sb%dim)
+    FLOAT,                   intent(in)  :: x(:)
+    FLOAT,                   intent(in)  :: chi(:)
 
-    FLOAT :: dummy(MAX_DIM)
+    FLOAT :: dummy(dim)
     FLOAT, allocatable :: Jac(:,:)
     integer :: i
 
@@ -234,7 +230,7 @@ contains
 
     select case(cv%method)
     case(CURV_METHOD_UNIFORM)
-      Jac(1:dim, 1:dim) = latt%rlattice_primitive(1:dim, 1:dim)
+      Jac(:,:) = latt%rlattice_primitive(:,:)
       jdet = lalg_determinant(dim, Jac, preserve_mat = .false.)      
     case(CURV_METHOD_GYGI)
       call curv_gygi_jacobian(cv%gygi, dim, x, dummy, Jac)
@@ -257,7 +253,7 @@ contains
   ! ---------------------------------------------------------
   subroutine curvilinear_write_info(cv, unit)
     type(curvilinear_t), intent(in) :: cv
-    integer,            intent(in) :: unit
+    integer,             intent(in) :: unit
 
     PUSH_SUB(curvilinear_write_info)
 
@@ -286,8 +282,6 @@ contains
 
     POP_SUB(curvilinear_write_info)
   end subroutine curvilinear_write_info
-
-  ! ---------------------------------------------------------
 
 end module curvilinear_oct_m
 

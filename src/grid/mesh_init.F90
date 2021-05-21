@@ -178,7 +178,7 @@ subroutine mesh_init_stage_2(mesh, space, sb, cv, stencil)
 
   integer :: il, ik, ix, iy, iz, is
   integer :: ii, jj, kk
-  FLOAT   :: chi(MAX_DIM)
+  FLOAT   :: chi(3)
   integer :: nr(1:2, 1:MAX_DIM), res
   logical, allocatable :: in_box(:)
   FLOAT,   allocatable :: xx(:, :)
@@ -214,7 +214,7 @@ subroutine mesh_init_stage_2(mesh, space, sb, cv, stencil)
 
   mesh%idx%lxyz_inv(:,:,:) = 0
   res = 1
-  SAFE_ALLOCATE(xx(mesh%idx%nr(1,1):mesh%idx%nr(2,1), 1:MAX_DIM))
+  SAFE_ALLOCATE(xx(mesh%idx%nr(1,1):mesh%idx%nr(2,1), 1:space%dim))
   SAFE_ALLOCATE(in_box(mesh%idx%nr(1,1):mesh%idx%nr(2,1)))
   chi = M_ZERO
 
@@ -243,7 +243,7 @@ subroutine mesh_init_stage_2(mesh, space, sb, cv, stencil)
       chi(2) = TOFLOAT(iy) * mesh%spacing(2)
       do ix = mesh%idx%nr(1,1), mesh%idx%nr(2,1)
         chi(1) = TOFLOAT(ix) * mesh%spacing(1)
-        call curvilinear_chi2x(cv, space%dim, sb%latt, chi(:), xx(ix, :))
+        call curvilinear_chi2x(cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(ix, 1:space%dim))
       end do
 
       in_box = sb%contains_points(mesh%idx%nr(2,1) - mesh%idx%nr(1,1) + 1, xx)
@@ -504,7 +504,7 @@ contains
 #ifdef HAVE_MPI
                   if(.not. mesh%parallel_in_domains) then
 #endif
-                    call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi, xx)
+                    call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
                     mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
                   end if
@@ -568,7 +568,7 @@ contains
           chi(2) = TOFLOAT(iy)*mesh%spacing(2)
           chi(3) = TOFLOAT(iz)*mesh%spacing(3)
 
-          call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi, xx)
+          call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
           mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
         end if
@@ -633,7 +633,7 @@ contains
               chi(2) = TOFLOAT(iy)*mesh%spacing(2)
               chi(3) = TOFLOAT(iz)*mesh%spacing(3)
 
-              call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi, xx)
+              call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
               mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
             end if
@@ -863,7 +863,8 @@ contains
     do ip = 1, np
       call mesh_local_index_to_coords(mesh, ip, jj)
       chi(1:space%dim) = jj(1:space%dim)*mesh%spacing(1:space%dim)
-      mesh%vol_pp(ip) = mesh%vol_pp(ip)*curvilinear_det_Jac(mesh%cv, space%dim, mesh%sb%latt, mesh%x(ip, :), chi(1:space%dim))
+      mesh%vol_pp(ip) = mesh%vol_pp(ip)*curvilinear_det_Jac(mesh%cv, space%dim, mesh%sb%latt, mesh%x(ip, 1:space%dim), &
+        chi(1:space%dim))
     end do
 
     if(mesh%use_curvilinear) then
@@ -873,12 +874,12 @@ contains
     end if
 
     if (space%dim == 3) then
-      mesh%surface_element(1) = sqrt(abs(sum(dcross_product(sb%latt%rlattice_primitive(1:3, 2), &
-                                                            sb%latt%rlattice_primitive(1:3, 3))**2)))
-      mesh%surface_element(2) = sqrt(abs(sum(dcross_product(sb%latt%rlattice_primitive(1:3, 3), &
-                                                            sb%latt%rlattice_primitive(1:3, 1))**2)))
-      mesh%surface_element(3) = sqrt(abs(sum(dcross_product(sb%latt%rlattice_primitive(1:3, 1), &
-                                                            sb%latt%rlattice_primitive(1:3, 2))**2)))
+      mesh%surface_element(1) = sqrt(abs(sum(dcross_product(mesh%sb%latt%rlattice_primitive(1:3, 2), &
+                                                            mesh%sb%latt%rlattice_primitive(1:3, 3))**2)))
+      mesh%surface_element(2) = sqrt(abs(sum(dcross_product(mesh%sb%latt%rlattice_primitive(1:3, 3), &
+                                                            mesh%sb%latt%rlattice_primitive(1:3, 1))**2)))
+      mesh%surface_element(3) = sqrt(abs(sum(dcross_product(mesh%sb%latt%rlattice_primitive(1:3, 1), &
+                                                            mesh%sb%latt%rlattice_primitive(1:3, 2))**2)))
     else
       mesh%surface_element(1:space%dim) = M_ZERO
     end if

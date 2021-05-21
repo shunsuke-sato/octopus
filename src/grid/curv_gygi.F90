@@ -124,7 +124,7 @@ contains
   subroutine curv_gygi_copy(this_out, this_in)
     type(curv_gygi_t), intent(inout) :: this_out
     type(curv_gygi_t), intent(in)    :: this_in
-    !
+
     PUSH_SUB(curv_gygi_copy)
 
     this_out%A = this_in%A
@@ -159,7 +159,6 @@ contains
 
   end subroutine getf 
 
-
   ! ---------------------------------------------------------
   subroutine curv_gygi_chi2x(cv, dim, rs, chi, x)
     type(curv_gygi_t), target, intent(in)  :: cv
@@ -180,7 +179,7 @@ contains
 
     call droot_solver_run(rs, getf, x, conv, startval = chi)
 
-    if(.not.conv) then
+    if (.not. conv) then
       do i = 1, cv%npos
         conv = .false.
         i_p = i
@@ -190,7 +189,7 @@ contains
 
     nullify(cv_p)
 
-    if(.not.conv) then
+    if (.not. conv) then
       message(1) = "During the construction of the adaptive grid, the Newton-Raphson"
       message(2) = "method did not converge for point:"
       write(message(3),'(9f14.6)') x(1:dim)
@@ -201,13 +200,12 @@ contains
 
   end subroutine curv_gygi_chi2x
 
-
   ! ---------------------------------------------------------
   subroutine curv_gygi_x2chi(cv, dim, x, chi)
     type(curv_gygi_t), intent(in)  :: cv
     integer,           intent(in)  :: dim
-    FLOAT,             intent(in)  :: x(:)    ! x(dim)
-    FLOAT,             intent(out) :: chi(:)  ! chi(dim)
+    FLOAT,             intent(in)  :: x(:)    !< x(dim)
+    FLOAT,             intent(out) :: chi(:)  !< chi(dim)
 
     integer :: i, ia
     FLOAT   :: r, ar, th, ex
@@ -229,12 +227,12 @@ contains
   end subroutine curv_gygi_x2chi
 
   ! ---------------------------------------------------------
-  subroutine curv_gygi_jacobian(cv, dim, x, chi, J, natoms)
+  subroutine curv_gygi_jacobian(cv, dim, x, chi, jac, natoms)
     type(curv_gygi_t), intent(in)  :: cv
     integer,           intent(in)  :: dim
-    FLOAT,             intent(in)  :: x(:)    !< x(dim)
-    FLOAT,             intent(out) :: chi(:)  !< chi(dim)
-    FLOAT,             intent(out) :: J(:,:)  !< J(dim,dim), the Jacobian
+    FLOAT,             intent(in)  :: x(:)       !< x(dim)
+    FLOAT,             intent(out) :: chi(:)     !< chi(dim)
+    FLOAT,             intent(out) :: jac(:, :)  !< jac(dim,dim), the Jacobian
     integer, optional, intent(in)  :: natoms
 
     integer :: i, ix, iy, natoms_
@@ -243,9 +241,9 @@ contains
 
     ! no push_sub, called too frequently
 
-    J(1:dim, 1:dim) = M_ZERO
+    jac(1:dim, 1:dim) = M_ZERO
     do ix = 1, dim
-      J(ix, ix) = M_ONE
+      jac(ix, ix) = M_ONE
       chi(ix)   = x(ix)
     end do
 
@@ -265,9 +263,9 @@ contains
       do ix = 1, dim
         chi(ix) = chi(ix) + f_alpha*(x(ix) - cv%pos(ix, i))
 
-        J(ix, ix) = J(ix, ix) + f_alpha
+        jac(ix, ix) = jac(ix, ix) + f_alpha
         do iy = 1, dim
-          J(ix, iy) = J(ix, iy) + (x(ix) - cv%pos(ix, i))*(x(iy) - cv%pos(iy, i))/r*df_alpha
+          jac(ix, iy) = jac(ix, iy) + (x(ix) - cv%pos(ix, i))*(x(iy) - cv%pos(iy, i))/r*df_alpha
         end do
       end do
     end do
@@ -280,7 +278,8 @@ contains
     integer,           intent(in)  :: dim
     FLOAT,             intent(out) :: min_scaling_product
     
-    min_scaling_product = (1.0 / (1.0 + cv%A))**dim
+    min_scaling_product = (M_ONE / (M_ONE + cv%A))**dim
+
   end subroutine curv_gygi_min_scaling
 
 end module curv_gygi_oct_m

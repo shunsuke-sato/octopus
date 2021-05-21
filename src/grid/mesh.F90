@@ -619,11 +619,9 @@ contains
     if(mesh%parallel_in_domains .or. force_) then
       call mesh_global_index_to_coords(mesh, ip, ix)
       chi(1:mesh%sb%dim) = ix(1:mesh%sb%dim) * mesh%spacing(1:mesh%sb%dim)
-      chi(mesh%sb%dim + 1:MAX_DIM) = M_ZERO
-      xx = M_ZERO ! this initialization is required by gfortran 4.4 or we get NaNs
-      call curvilinear_chi2x(mesh%cv, mesh%sb%dim, mesh%sb%latt, chi, xx)
+      call curvilinear_chi2x(mesh%cv, mesh%sb%dim, mesh%sb%latt, chi(1:mesh%sb%dim), xx)
     else
-      xx(1:mesh%sb%dim) = mesh%x(ip, 1:mesh%sb%dim)
+      xx(:) = mesh%x(ip,:)
     end if
 
   end function mesh_x_global
