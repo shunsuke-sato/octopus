@@ -278,6 +278,7 @@ grid_f_srcs =                                 \
 	grid/batch.F90                        \
 	grid/batch_ops.F90                    \
 	grid/boundaries.F90                   \
+	grid/coordinate_system.F90            \
 	grid/cube.F90                         \
 	grid/cube_function.F90                \
 	grid/curv_briggs.F90                  \
