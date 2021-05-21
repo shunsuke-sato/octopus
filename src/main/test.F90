@@ -1357,7 +1357,7 @@ contains
     sys => electrons_t(global_namespace, generate_epot=.false.)
     call sys%init_parallelization(mpi_world)
 
-    call multigrid_init(mgrid, global_namespace, sys%space, sys%gr%cv, sys%gr%mesh, sys%gr%der, &
+    call multigrid_init(mgrid, global_namespace, sys%space, sys%gr%mesh, sys%gr%der, &
                           sys%gr%stencil, sys%mc, used_for_preconditioner = .true.)
 
     call multigrid_test_interpolation(mgrid, sys%space)

@@ -317,7 +317,7 @@ contains
 
     if(poisson_is_multigrid(hm%psolver)) then
       SAFE_ALLOCATE(hm%psolver%mgrid)
-      call multigrid_init(hm%psolver%mgrid, namespace, space, gr%cv, gr%mesh, gr%der, gr%stencil, mc)
+      call multigrid_init(hm%psolver%mgrid, namespace, space, gr%mesh, gr%der, gr%stencil, mc)
     end if
 
     ! Initialize external potential

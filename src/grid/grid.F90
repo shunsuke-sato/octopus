@@ -193,7 +193,7 @@ contains
     enlarge = max(enlarge, gr%der%n_ghost)
 
     call mesh_init_stage_1(gr%mesh, namespace, space, gr%sb, gr%cv, grid_spacing, enlarge)
-    call mesh_init_stage_2(gr%mesh, space, gr%sb, gr%cv, gr%stencil)
+    call mesh_init_stage_2(gr%mesh, space, gr%sb, gr%stencil)
 
     POP_SUB(grid_init_stage_1)
   end subroutine grid_init_stage_1
