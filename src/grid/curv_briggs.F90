@@ -24,6 +24,7 @@
 !! It assumes that the Oxygen atom is located at x0=0 (see Eq. (12))
 
 module curv_briggs_oct_m
+  use coordinate_system_oct_m
   use global_oct_m
   use messages_oct_m
   use namespace_oct_m
@@ -35,53 +36,73 @@ module curv_briggs_oct_m
   private
   public ::                     &
     curv_briggs_t,              &
-    curv_briggs_init,           &
-    curv_briggs_end,            &
-    curv_briggs_copy,           &
-    curv_briggs_chi2x,          &
-    curv_briggs_jacobian_inv
+    curv_briggs_copy
 
-  type curv_briggs_t
+  type, extends(coordinate_system_t) :: curv_briggs_t
     private
     FLOAT, allocatable :: lsize(:) !< size of the box
     FLOAT :: beta                  !< adjustable parameter between 0 and 1 that controls the degree of scaling
+  contains
+    procedure :: chi2x => curv_briggs_chi2x
+    procedure :: x2chi => curv_briggs_x2chi
+    procedure :: det_jac => curv_briggs_det_jac
+    procedure :: write_info => curv_briggs_write_info
+    final :: curv_briggs_finalize
   end type curv_briggs_t
+
+  interface curv_briggs_t
+    procedure curv_briggs_constructor
+  end interface curv_briggs_t
 
 contains
 
   ! ---------------------------------------------------------
-  subroutine curv_briggs_init(cv, namespace, dim, lsize, spacing, min_scaling_product)
-    type(curv_briggs_t), intent(out) :: cv
+  function curv_briggs_constructor(namespace, dim, lsize, spacing) result(briggs)
     type(namespace_t),   intent(in)  :: namespace
     integer,             intent(in)  :: dim
     FLOAT,               intent(in)  :: lsize(1:dim)
     FLOAT,               intent(in)  :: spacing(1:dim)
-    FLOAT,               intent(out) :: min_scaling_product
-  
-    SAFE_ALLOCATE(cv%lsize(1:dim))
-    cv%lsize(1:dim) = lsize(1:dim)
+    class(curv_briggs_t), pointer :: briggs
 
-    call parse_variable(namespace, 'CurvBriggsBeta', M_HALF, cv%beta)
+    integer :: idim
 
-    if (cv%beta < M_ZERO .or. cv%beta > M_ONE) then
+    PUSH_SUB(curv_briggs_constructor)
+
+    SAFE_ALLOCATE(briggs)
+
+    briggs%local_basis = .true.
+    briggs%orthogonal = .true. ! This needs to be checked
+    briggs%dim = dim
+    SAFE_ALLOCATE(briggs%lsize(1:dim))
+    briggs%lsize(1:dim) = lsize(1:dim)
+
+    call parse_variable(namespace, 'CurvBriggsBeta', M_HALF, briggs%beta)
+
+    if (briggs%beta < M_ZERO .or. briggs%beta > M_ONE) then
       message(1) = 'The parameter "CurvBriggsBeta" must lie between 0 and 1.'
       call messages_fatal(1)
     end if
 
-    call curv_briggs_min_scaling(cv, dim, spacing, min_scaling_product)
+    briggs%min_mesh_scaling_product = M_ONE
+    do idim = 1, briggs%dim
+      ! corresponds to the distance of grid points at [+spacing/2,-spacing/2]
+      briggs%min_mesh_scaling_product = briggs%min_mesh_scaling_product * (M_ONE / &
+        (M_ONE - briggs%lsize(idim) * briggs%beta / (M_PI * spacing(idim)) * sin(M_PI * spacing(idim) / briggs%lsize(idim))))
+    end do
 
-  end subroutine curv_briggs_init
+    POP_SUB(curv_briggs_constructor)
+  end function curv_briggs_constructor
 
   ! ---------------------------------------------------------
-  subroutine curv_briggs_end(cv)
-    type(curv_briggs_t), intent(inout) :: cv
+  subroutine curv_briggs_finalize(this)
+    type(curv_briggs_t), intent(inout) :: this
 
-    PUSH_SUB(curv_briggs_end)
+    PUSH_SUB(curv_briggs_finalize)
 
-    SAFE_DEALLOCATE_A(cv%lsize)
+    SAFE_DEALLOCATE_A(this%lsize)
 
-    POP_SUB(curv_briggs_end)
-  end subroutine curv_briggs_end
+    POP_SUB(curv_briggs_finalize)
+  end subroutine curv_briggs_finalize
 
   ! ---------------------------------------------------------
   subroutine curv_briggs_copy(this_out, this_in)
@@ -97,48 +118,61 @@ contains
   end subroutine curv_briggs_copy
 
   ! ---------------------------------------------------------
-  subroutine curv_briggs_chi2x(cv, dim, chi, x)
-    type(curv_briggs_t), intent(in)  :: cv
-    integer,             intent(in)  :: dim
-    FLOAT,               intent(in)  :: chi(:)  !< chi(dim)
-    FLOAT,               intent(out) :: x(:)    !< x(dim)
+  subroutine curv_briggs_chi2x(this, chi, xx)
+    class(curv_briggs_t), target, intent(in)  :: this
+    FLOAT,                        intent(in)  :: chi(:)  !< chi(dim)
+    FLOAT,                        intent(out) :: xx(:)   !< xx(dim)
 
-    x = chi - cv%lsize*cv%beta/(M_TWO*M_PI)*sin(M_TWO*M_PI*chi/cv%lsize)
+    ! no PUSH_SUB, called too often
+
+    xx = chi - this%lsize*this%beta/(M_TWO*M_PI)*sin(M_TWO*M_PI*chi/this%lsize)
 
   end subroutine curv_briggs_chi2x
 
   ! ---------------------------------------------------------
-  subroutine curv_briggs_jacobian_inv(cv, dim, chi, jac)
-    type(curv_briggs_t), intent(in)  :: cv
-    integer,             intent(in)  :: dim
-    FLOAT,               intent(in)  :: chi(:)    !< x(dim)
-    FLOAT,               intent(out) :: jac(:,:)  !< jac(dim,dim), the Jacobian
+  subroutine curv_briggs_x2chi(this, xx, chi)
+    class(curv_briggs_t), target, intent(in)  :: this
+    FLOAT,                        intent(in)  :: xx(:)   !< xx(dim)
+    FLOAT,                        intent(out) :: chi(:)  !< chi(dim)
 
-    integer :: idim
+    ! no PUSH_SUB, called too often
 
-    jac = M_ZERO
-    do idim = 1, dim
-      jac(idim, idim) = M_ONE - cv%beta*cos(M_TWO*M_PI*chi(idim)/cv%lsize(idim))
-    end do
+    message(1) = "Internal error in curv_briggs_x2chi"
+    call messages_fatal(1)
 
-  end subroutine curv_briggs_jacobian_inv
+  end subroutine curv_briggs_x2chi
 
   ! ---------------------------------------------------------
-  subroutine curv_briggs_min_scaling(cv, dim, spacing, min_scaling_product)
-    type(curv_briggs_t), intent(in)  :: cv
-    integer,             intent(in)  :: dim
-    FLOAT,               intent(in)  :: spacing(1:dim)
-    FLOAT,               intent(out) :: min_scaling_product
+  FLOAT function curv_briggs_det_jac(this, xx, chi) result(jdet)
+    class(curv_briggs_t), intent(in)  :: this
+    FLOAT,                intent(in)  :: xx(:)
+    FLOAT,                intent(in)  :: chi(:)
 
     integer :: idim
+    FLOAT :: jac(1:this%dim)
 
-    min_scaling_product = M_ONE
-    do idim = 1, dim
-      ! corresponds to the distance of grid points at [+spacing/2,-spacing/2]
-      min_scaling_product = min_scaling_product * (M_ONE / &
-        (M_ONE - cv%lsize(idim) * cv%beta / (M_PI * spacing(idim)) * sin(M_PI * spacing(idim) / cv%lsize(idim))))
+    ! no PUSH_SUB, called too often
+
+    ! Jacobian is diagonal in this method
+    do idim = 1, this%dim
+      jac(idim) = M_ONE - this%beta*cos(M_TWO*M_PI*chi(idim)/this%lsize(idim))
     end do
-  end subroutine curv_briggs_min_scaling
+    jdet = product(jac)
+
+  end function curv_briggs_det_jac
+
+  ! ---------------------------------------------------------
+  subroutine curv_briggs_write_info(this, unit)
+    class(curv_briggs_t), intent(in) :: this
+    integer,              intent(in) :: unit
+
+    PUSH_SUB(curv_briggs_write_info)
+
+    write(message(1), '(a)') '  Curvilinear Method = briggs'
+    call messages_info(1, unit)
+
+    POP_SUB(curv_briggs_write_info)
+  end subroutine curv_briggs_write_info
 
 end module curv_briggs_oct_m
 

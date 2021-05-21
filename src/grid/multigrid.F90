@@ -22,7 +22,6 @@ module multigrid_oct_m
   use batch_oct_m
   use batch_ops_oct_m
   use boundaries_oct_m
-  use curvilinear_oct_m
   use derivatives_oct_m
   use global_oct_m
   use index_oct_m
@@ -174,7 +173,7 @@ contains
       
       call multigrid_mesh_half(space, mgrid%level(i-1)%mesh, mgrid%level(i)%mesh, stencil)
 
-      call derivatives_init(mgrid%level(i)%der, namespace, space, mesh%sb%latt, mesh%cv%method /= CURV_METHOD_UNIFORM, order=order)
+      call derivatives_init(mgrid%level(i)%der, namespace, space, mesh%sb%latt, mesh%coord_system%local_basis, order=order)
 
       call mesh_init_stage_3(mgrid%level(i)%mesh, namespace, space, stencil, mc, parent = mgrid%level(i - 1)%mesh)
 
@@ -327,7 +326,7 @@ contains
     mesh_out%idx%dim          =  mesh_in%idx%dim
     mesh_out%use_curvilinear  =  mesh_in%use_curvilinear
     mesh_out%masked_periodic_boundaries = mesh_in%masked_periodic_boundaries
-    mesh_out%cv               => mesh_in%cv
+    mesh_out%coord_system     => mesh_in%coord_system
 
     mesh_out%spacing(:)  = 2*mesh_in%spacing(:)
     mesh_out%idx%nr(1,:) = (mesh_in%idx%nr(1,:)+mesh_in%idx%enlarge(:))/2
@@ -356,7 +355,7 @@ contains
     mesh_out%idx%dim          =  mesh_in%idx%dim
     mesh_out%use_curvilinear =  mesh_in%use_curvilinear
     mesh_out%masked_periodic_boundaries = mesh_in%masked_periodic_boundaries
-    mesh_out%cv             => mesh_in%cv
+    mesh_out%coord_system    => mesh_in%coord_system
 
     mesh_out%spacing(:)  = M_HALF*mesh_in%spacing(:)
     mesh_out%idx%nr(1,:) = (mesh_in%idx%nr(1,:)+mesh_in%idx%enlarge(:))*2

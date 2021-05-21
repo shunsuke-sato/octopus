@@ -272,18 +272,19 @@ ions_srcs = $(ions_f_srcs) $(ions_c_srcs)
 
 # Sources in grid
 grid_f_srcs =                                 \
+	grid/affine_coordinates.F90           \
 	grid/allocate_hardware_aware_f.F90    \
 	grid/basins.F90                       \
 	grid/basis_set_abst.F90               \
 	grid/batch.F90                        \
 	grid/batch_ops.F90                    \
 	grid/boundaries.F90                   \
+	grid/cartesian.F90                    \
 	grid/coordinate_system.F90            \
 	grid/cube.F90                         \
 	grid/cube_function.F90                \
 	grid/curv_briggs.F90                  \
 	grid/curv_gygi.F90                    \
-	grid/curvilinear.F90                  \
 	grid/curv_modine.F90                  \
 	grid/derivatives.F90                  \
 	grid/fourier_shell.F90                \

@@ -21,7 +21,7 @@
 module mesh_init_oct_m
   use box_hypercube_oct_m
   use checksum_interface_oct_m
-  use curvilinear_oct_m
+  use coordinate_system_oct_m
   use global_oct_m
   use hypercube_oct_m
   use index_oct_m
@@ -58,12 +58,12 @@ module mesh_init_oct_m
 contains
 
 ! ---------------------------------------------------------
-subroutine mesh_init_stage_1(mesh, namespace, space, sb, cv, spacing, enlarge)
+subroutine mesh_init_stage_1(mesh, namespace, space, sb, coord_system, spacing, enlarge)
   type(mesh_t),                intent(inout) :: mesh
   type(namespace_t),           intent(in)    :: namespace
   type(space_t),               intent(in)    :: space
   type(simul_box_t),   target, intent(in)    :: sb
-  type(curvilinear_t), target, intent(in)    :: cv
+  class(coordinate_system_t), target, intent(in) :: coord_system
   FLOAT,                       intent(in)    :: spacing(1:MAX_DIM)
   integer,                     intent(in)    :: enlarge(MAX_DIM)
 
@@ -77,8 +77,8 @@ subroutine mesh_init_stage_1(mesh, namespace, space, sb, cv, spacing, enlarge)
 
   mesh%sb => sb     ! keep an internal pointer
   mesh%spacing = spacing ! this number can change in the following
-  mesh%use_curvilinear = cv%method /= CURV_METHOD_UNIFORM
-  mesh%cv => cv
+  mesh%use_curvilinear = coord_system%local_basis
+  mesh%coord_system => coord_system
 
   mesh%idx%dim = space%dim
   select type (box => sb%box)
@@ -100,7 +100,7 @@ subroutine mesh_init_stage_1(mesh, namespace, space, sb, cv, spacing, enlarge)
       jj = jj + 1
       chi(idir) = TOFLOAT(jj)*mesh%spacing(idir)
       if ( mesh%use_curvilinear ) then
-        call curvilinear_chi2x(cv, space%dim, sb%latt, chi(1:space%dim), x(1:space%dim))
+        call coord_system%chi2x(chi(1:space%dim), x(1:space%dim))
         out = x(idir) > sb%lsize(idir) + DELTA_
       else
         ! do the same comparison here as in simul_box_contains_points
@@ -242,7 +242,7 @@ subroutine mesh_init_stage_2(mesh, space, sb, stencil)
       chi(2) = TOFLOAT(iy) * mesh%spacing(2)
       do ix = mesh%idx%nr(1,1), mesh%idx%nr(2,1)
         chi(1) = TOFLOAT(ix) * mesh%spacing(1)
-        call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(ix, 1:space%dim))
+        call mesh%coord_system%chi2x(chi(1:space%dim), xx(ix, 1:space%dim))
       end do
 
       in_box = sb%contains_points(mesh%idx%nr(2,1) - mesh%idx%nr(1,1) + 1, xx)
@@ -503,7 +503,7 @@ contains
 #ifdef HAVE_MPI
                   if(.not. mesh%parallel_in_domains) then
 #endif
-                    call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
+                    call mesh%coord_system%chi2x(chi(1:space%dim), xx(1:space%dim))
                     mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
                   end if
@@ -567,7 +567,7 @@ contains
           chi(2) = TOFLOAT(iy)*mesh%spacing(2)
           chi(3) = TOFLOAT(iz)*mesh%spacing(3)
 
-          call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
+          call mesh%coord_system%chi2x(chi(1:space%dim), xx(1:space%dim))
           mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
         end if
@@ -632,7 +632,7 @@ contains
               chi(2) = TOFLOAT(iy)*mesh%spacing(2)
               chi(3) = TOFLOAT(iz)*mesh%spacing(3)
 
-              call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
+              call mesh%coord_system%chi2x(chi(1:space%dim), xx(1:space%dim))
               mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
             end if
@@ -862,8 +862,7 @@ contains
     do ip = 1, np
       call mesh_local_index_to_coords(mesh, ip, jj)
       chi(1:space%dim) = jj(1:space%dim)*mesh%spacing(1:space%dim)
-      mesh%vol_pp(ip) = mesh%vol_pp(ip)*curvilinear_det_Jac(mesh%cv, space%dim, mesh%sb%latt, mesh%x(ip, 1:space%dim), &
-        chi(1:space%dim))
+      mesh%vol_pp(ip) = mesh%vol_pp(ip)*mesh%coord_system%det_Jac(mesh%x(ip, 1:space%dim), chi(1:space%dim))
     end do
 
     if(mesh%use_curvilinear) then

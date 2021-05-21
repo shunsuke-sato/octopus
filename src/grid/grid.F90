@@ -19,9 +19,14 @@
 #include "global.h"
 
 module grid_oct_m
+  use affine_coordinates_oct_m
   use box_image_oct_m
+  use cartesian_oct_m
+  use coordinate_system_oct_m
   use cube_oct_m
-  use curvilinear_oct_m
+  use curv_briggs_oct_m
+  use curv_gygi_oct_m
+  use curv_modine_oct_m
   use derivatives_oct_m
   use global_oct_m
   use ions_oct_m
@@ -42,6 +47,7 @@ module grid_oct_m
   use symmetries_oct_m
   use unit_oct_m
   use unit_system_oct_m
+  use varinfo_oct_m
 
   implicit none
 
@@ -58,12 +64,17 @@ module grid_oct_m
     type(simul_box_t)           :: sb
     type(mesh_t)                :: mesh
     type(derivatives_t)         :: der
-    type(curvilinear_t)         :: cv
+    class(coordinate_system_t), pointer :: coord_system
     type(stencil_t)             :: stencil
 
     type(symmetries_t)          :: symm
   end type grid_t
 
+  integer, parameter, public :: &
+    CURV_METHOD_UNIFORM = 1,    &
+    CURV_METHOD_GYGI    = 2,    &
+    CURV_METHOD_BRIGGS  = 3,    &
+    CURV_METHOD_MODINE  = 4
 
 contains
 
@@ -77,7 +88,7 @@ contains
     type(stencil_t) :: cube
     integer :: enlarge(1:MAX_DIM)
     type(block_t) :: blk
-    integer :: idir
+    integer :: idir, cv_method
     FLOAT :: def_h, def_rsize
     FLOAT :: grid_spacing(1:MAX_DIM)
 
@@ -177,11 +188,60 @@ contains
       call messages_experimental('PeriodicBoundaryMask')
     end if
 
-    ! initialize curvilinear coordinates
-    call curvilinear_init(gr%cv, namespace, space%dim, ions%natoms, ions%pos, gr%sb%lsize(1:space%dim), grid_spacing(1:space%dim))
+    ! Initialize coordinate system
+
+    !%Variable CurvMethod
+    !%Type integer
+    !%Default curv_uniform
+    !%Section Mesh::Curvilinear
+    !%Description
+    !% The relevant functions in octopus are represented on a mesh in real space.
+    !% This mesh may be an evenly spaced regular rectangular grid (standard mode),
+    !% or else an adaptive or curvilinear grid. We have implemented
+    !% three kinds of adaptive meshes, although only one is currently working,
+    !% the one invented by F. Gygi (<tt>curv_gygi</tt>). The code will stop if any of
+    !% the other two is invoked. All are experimental with domain parallelization.
+    !%Option curv_uniform 1
+    !% Regular, uniform rectangular grid.
+    !%Option curv_gygi 2
+    !% The deformation of the grid is done according to the scheme described by
+    !% F. Gygi [F. Gygi and G. Galli, <i>Phys. Rev. B</i> <b>52</b>, R2229 (1995)].
+    !%Option curv_briggs 3
+    !% The deformation of the grid is done according to the scheme described by
+    !% Briggs [E.L. Briggs, D.J. Sullivan, and J. Bernholc, <i>Phys. Rev. B</i> <b>54</b> 14362 (1996)]
+    !% (NOT WORKING).
+    !%Option curv_modine 4
+    !% The deformation of the grid is done according to the scheme described by
+    !% Modine [N.A. Modine, G. Zumbach and E. Kaxiras, <i>Phys. Rev. B</i> <b>55</b>, 10289 (1997)]
+    !% (NOT WORKING).
+    !%End
+    call parse_variable(namespace, 'CurvMethod', CURV_METHOD_UNIFORM, cv_method)
+    if (.not. varinfo_valid_option('CurvMethod', cv_method)) call messages_input_error(namespace, 'CurvMethod')
+    call messages_print_var_option(stdout, "CurvMethod", cv_method)
+
+    ! FIXME: The other two methods are apparently not working
+    if (cv_method > CURV_METHOD_GYGI) then
+      call messages_experimental('Selected curvilinear coordinates method')
+    end if
+
+    select case (cv_method)
+    case (CURV_METHOD_BRIGGS)
+      gr%coord_system => curv_briggs_t(namespace, space%dim, gr%sb%lsize(1:space%dim), grid_spacing(1:space%dim))
+    case (CURV_METHOD_GYGI)
+      gr%coord_system => curv_gygi_t(namespace, space%dim, ions%natoms, ions%pos)
+    case (CURV_METHOD_MODINE)
+      gr%coord_system => curv_modine_t(namespace, space%dim, ions%natoms, ions%pos, gr%sb%lsize(1:space%dim), &
+        grid_spacing(1:space%dim))
+    case default
+      if (ions%latt%nonorthogonal) then
+        gr%coord_system => affine_coordinates_t(namespace, space%dim, ions%latt%rlattice_primitive)
+      else
+        gr%coord_system => cartesian_t(namespace, space%dim)
+      end if
+    end select
 
     ! initialize derivatives
-    call derivatives_init(gr%der, namespace, space, gr%sb%latt, gr%cv%method /= CURV_METHOD_UNIFORM)
+    call derivatives_init(gr%der, namespace, space, gr%sb%latt, gr%coord_system%local_basis)
     ! the stencil used to generate the grid is a union of a cube (for
     ! multigrid) and the Laplacian.
     call stencil_cube_get_lapl(cube, space%dim, order = 2)
@@ -192,7 +252,7 @@ contains
     enlarge(1:space%dim) = 2
     enlarge = max(enlarge, gr%der%n_ghost)
 
-    call mesh_init_stage_1(gr%mesh, namespace, space, gr%sb, gr%cv, grid_spacing, enlarge)
+    call mesh_init_stage_1(gr%mesh, namespace, space, gr%sb, gr%coord_system, grid_spacing, enlarge)
     call mesh_init_stage_2(gr%mesh, space, gr%sb, gr%stencil)
 
     POP_SUB(grid_init_stage_1)
@@ -224,12 +284,18 @@ contains
   subroutine grid_end(gr)
     type(grid_t), intent(inout) :: gr
 
+    class(coordinate_system_t), pointer :: coord_system
+
     PUSH_SUB(grid_end)
 
     call nl_operator_global_end()
 
     call derivatives_end(gr%der)
-    call curvilinear_end(gr%cv)
+
+    ! We need to take a pointer here, otherwise we run into a gfortran bug.
+    coord_system => gr%coord_system
+    SAFE_DEALLOCATE_P(coord_system)
+
     call mesh_end(gr%mesh)
 
     call symmetries_end(gr%symm)
@@ -264,7 +330,7 @@ contains
     call mesh_write_info(gr%mesh, iunit)
 
     if (gr%mesh%use_curvilinear) then
-      call curvilinear_write_info(gr%cv, iunit)
+      call gr%coord_system%write_info(iunit)
     end if
     
     call messages_print_stress(iunit)
