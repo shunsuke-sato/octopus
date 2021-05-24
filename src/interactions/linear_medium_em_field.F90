@@ -57,10 +57,7 @@ module linear_medium_em_field_oct_m
     private
 
     type(grid_t), pointer, public    :: system_gr !< pointer to grid of the Maxwell system
-
     type(single_medium_box_t), public :: medium_box
-
-    logical, public :: allocated_partner_arrays
 
   contains
     procedure :: init => linear_medium_em_field_init
@@ -96,8 +93,6 @@ contains
     this%partner_quantities(2) = PERMEABILITY
     this%partner_quantities(3) = E_CONDUCTIVITY
     this%partner_quantities(4) = M_CONDUCTIVITY
-
-    this%allocated_partner_arrays = .false.
 
     POP_SUB(linear_medium_em_field_constructor)
   end function linear_medium_em_field_constructor

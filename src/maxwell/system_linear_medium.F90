@@ -71,9 +71,6 @@ module system_linear_medium_oct_m
     procedure :: initial_conditions => system_linear_medium_initial_conditions
     procedure :: do_td_operation => system_linear_medium_do_td
     procedure :: iteration_info => system_linear_medium_iteration_info
-    procedure :: output_start => system_linear_medium_output_start
-    procedure :: output_write => system_linear_medium_output_write
-    procedure :: output_finish => system_linear_medium_output_finish
     procedure :: is_tolerance_reached => system_linear_medium_is_tolerance_reached
     procedure :: update_quantity => system_linear_medium_update_quantity
     procedure :: update_exposed_quantity => system_linear_medium_update_exposed_quantity
@@ -318,7 +315,6 @@ contains
     select type (interaction)
     type is (linear_medium_em_field_t)
       call generate_medium_box(partner, interaction%medium_box, interaction%system_gr)
-      interaction%allocated_partner_arrays = .true.
 
       if (partner%check_medium_points) then
         SAFE_ALLOCATE(tmp(interaction%system_gr%mesh%np))
@@ -359,25 +355,9 @@ contains
     PUSH_SUB(system_linear_medium_do_td)
 
     select case (operation%id)
-    case (SKIP)
-      ! Do nothing
-    case (STORE_CURRENT_STATUS)
-      ! For the moment we do nothing
-    case (EXPMID_START)
-      ! Empty for the moment
-    case (EXPMID_FINISH)
-      ! Empty for the moment
-    case (EXPMID_PREDICT_DT_2)
-      ! Empty for the moment
-    case (UPDATE_HAMILTONIAN)
-      ! Empty for the moment
-    case (EXPMID_PREDICT_DT)
-      ! Empty for the moment
     case default
-      message(1) = "Unsupported TD operation."
-      call messages_fatal(1, namespace=this%namespace)
+      ! Do nothing
     end select
-
 
     POP_SUB(system_linear_medium_do_td)
   end subroutine system_linear_medium_do_td
@@ -404,38 +384,6 @@ contains
 
     POP_SUB(system_linear_medium_iteration_info)
   end subroutine system_linear_medium_iteration_info
-
-  ! ---------------------------------------------------------
-  subroutine system_linear_medium_output_start(this)
-    class(system_linear_medium_t), intent(inout) :: this
-
-    PUSH_SUB(system_linear_medium_output_start)
-
-    ! Output info for first iteration
-    call this%output_write()
-
-    POP_SUB(system_linear_medium_output_start)
-  end subroutine system_linear_medium_output_start
-
-  ! ---------------------------------------------------------
-  subroutine system_linear_medium_output_finish(this)
-    class(system_linear_medium_t), intent(inout) :: this
-
-    PUSH_SUB(system_linear_medium_output_finish)
-
-    POP_SUB(system_linear_medium_output_finish)
-  end subroutine system_linear_medium_output_finish
-
-  ! ---------------------------------------------------------
-  subroutine system_linear_medium_output_write(this)
-    class(system_linear_medium_t), intent(inout) :: this
-
-    if(.not.mpi_grp_is_root(mpi_world)) return ! only first node outputs
-
-    PUSH_SUB(system_linear_medium_output_write)
-
-    POP_SUB(system_linear_medium_output_write)
-  end subroutine system_linear_medium_output_write
 
   ! ---------------------------------------------------------
   subroutine system_linear_medium_update_quantity(this, iq)
@@ -468,7 +416,7 @@ contains
 
     select case (iq)
     case (PERMITTIVITY, PERMEABILITY, E_CONDUCTIVITY, M_CONDUCTIVITY)
-      partner%quantities(iq)%clock = partner%quantities(iq)%clock + CLOCK_TICK
+      call partner%quantities(iq)%clock%set_time(partner%prop%clock)
     case default
       message(1) = "Incompatible quantity."
       call messages_fatal(1)
@@ -500,12 +448,7 @@ contains
   subroutine system_linear_medium_finalize(this)
     type(system_linear_medium_t), intent(inout) :: this
 
-    type(profile_t), save :: prof
-
     PUSH_SUB(system_linear_medium_finalize)
-
-    call profiling_in(prof, 'MEDIUM_BOX_END')
-    call profiling_out(prof)
 
     call system_end(this)
 
