@@ -33,6 +33,7 @@ module multisystem_oct_m
   use parser_oct_m
   use profiling_oct_m
   use propagator_oct_m
+  use propagator_static_oct_m
   use system_oct_m
   use system_factory_abst_oct_m
   implicit none
@@ -263,10 +264,13 @@ contains
       call system%init_propagator()
     end do
 
-    ! Initialize the propagator of the multisystem
+    ! Initialize the propagator of the multisystem. By default the
+    ! multisystem itself and its own quantities are kept unchaged 
+    ! by using the static propagator. However, the subsystems are allowed to have
+    ! their own propagators and those do not have to be static.
     ! Needs to be done after initializing the subsystems propagators,
     ! as we use the smallest dt of the subsystems.
-    this%prop => propagator_t(this%smallest_algo_dt())
+    this%prop => propagator_static_t(this%smallest_algo_dt())
     this%interaction_timing = OPTION__INTERACTIONTIMING__TIMING_EXACT
     call this%prop%rewind()
 

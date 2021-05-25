@@ -36,6 +36,7 @@ module system_oct_m
   use propagator_oct_m
   use propagator_beeman_oct_m
   use propagator_exp_mid_oct_m
+  use propagator_static_oct_m
   use propagator_verlet_oct_m
   use quantity_oct_m
   use space_oct_m
@@ -607,12 +608,14 @@ contains
 
     !%Variable TDSystemPropagator
     !%Type integer
-    !%Default verlet
+    !%Default static
     !%Section Time-Dependent::Propagation
     !%Description
     !% A variable to set the propagator in the multisystem framework.
     !% This is a temporary solution, and should be replaced by the
     !% TDPropagator variable.
+    !%Option static 0
+    !% (Experimental) Do not propagate the system in time.
     !%Option verlet 1
     !% (Experimental) Verlet propagator.
     !%Option beeman 2
@@ -624,8 +627,8 @@ contains
     !%Option exp_mid_scf 5
     !% (Experimental) Exponential midpoint propagator with predictor-corrector scheme.
     !%End
-    call parse_variable(this%namespace, 'TDSystemPropagator', PROP_VERLET, prop)
-    if(.not.varinfo_valid_option('TDSystemPropagator', prop)) call messages_input_error(this%namespace, 'TDSystemPropagator')
+    call parse_variable(this%namespace, 'TDSystemPropagator', PROP_STATIC, prop)
+    if (.not.varinfo_valid_option('TDSystemPropagator', prop)) call messages_input_error(this%namespace, 'TDSystemPropagator')
     call messages_print_var_option(stdout, 'TDSystemPropagator', prop)
 
     ! This variable is also defined (and properly documented) in td/td.F90.
@@ -637,18 +640,20 @@ contains
     call messages_print_var_option(stdout, 'TDSystemPropagator', prop)
 
     select case(prop)
-    case(PROP_VERLET)
+    case (PROP_STATIC)
+      this%prop => propagator_static_t(dt)
+    case (PROP_VERLET)
       this%prop => propagator_verlet_t(dt)
-    case(PROP_BEEMAN)
+    case (PROP_BEEMAN)
       this%prop => propagator_beeman_t(dt, predictor_corrector=.false.)
-    case(PROP_BEEMAN_SCF)
+    case (PROP_BEEMAN_SCF)
       this%prop => propagator_beeman_t(dt, predictor_corrector=.true.)
-    case(PROP_EXPMID)
+    case (PROP_EXPMID)
       this%prop => propagator_exp_mid_t(dt, predictor_corrector=.false.)
-    case(PROP_EXPMID_SCF)
+    case (PROP_EXPMID_SCF)
       this%prop => propagator_exp_mid_t(dt, predictor_corrector=.true.)
     case default
-      this%prop => propagator_t(dt)
+      call messages_input_error(this%namespace, 'TDSystemPropagator')
     end select
 
     call this%prop%rewind()
