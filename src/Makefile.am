@@ -483,6 +483,7 @@ multisystem_f_srcs =                                 \
 	multisystem/propagator.F90                   \
 	multisystem/propagator_beeman.F90            \
 	multisystem/propagator_exp_mid.F90           \
+	multisystem/propagator_static.F90            \
 	multisystem/propagator_verlet.F90            \
 	multisystem/quantity.F90                     \
 	multisystem/system.F90                       \
