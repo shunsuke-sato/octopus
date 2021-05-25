@@ -355,8 +355,11 @@ contains
     PUSH_SUB(linear_medium_do_td)
 
     select case (operation%id)
-    case default
+    case (SKIP)
       ! Do nothing
+    case default
+      message(1) = "Unsupported TD operation."
+      call messages_fatal(1, namespace=this%namespace)
     end select
 
     POP_SUB(linear_medium_do_td)
