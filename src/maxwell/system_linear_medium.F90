@@ -46,14 +46,14 @@ module system_linear_medium_oct_m
 
   private
   public ::           &
-    system_linear_medium_t,    &
-    system_linear_medium_init
+    linear_medium_t,    &
+    linear_medium_init
 
   integer, parameter :: &
     MEDIUM_PARALLELEPIPED = 1,         &
     MEDIUM_BOX_FILE       = 2
 
-  type, extends(system_t) :: system_linear_medium_t
+  type, extends(system_t) :: linear_medium_t
      integer            :: box_shape
      integer            :: edge_profile  !< edge shape profile (smooth or steep)
      FLOAT              :: center(3) !< center of a box
@@ -66,21 +66,21 @@ module system_linear_medium_oct_m
      logical            :: check_medium_points = .false.
 
   contains
-    procedure :: init_interaction => system_linear_medium_init_interaction
-    procedure :: init_interaction_as_partner => system_linear_medium_init_interaction_as_partner
-    procedure :: initial_conditions => system_linear_medium_initial_conditions
-    procedure :: do_td_operation => system_linear_medium_do_td
-    procedure :: iteration_info => system_linear_medium_iteration_info
-    procedure :: is_tolerance_reached => system_linear_medium_is_tolerance_reached
-    procedure :: update_quantity => system_linear_medium_update_quantity
-    procedure :: update_exposed_quantity => system_linear_medium_update_exposed_quantity
-    procedure :: copy_quantities_to_interaction => system_linear_medium_copy_quantities_to_interaction
-    final :: system_linear_medium_finalize
-  end type system_linear_medium_t
+    procedure :: init_interaction => linear_medium_init_interaction
+    procedure :: init_interaction_as_partner => linear_medium_init_interaction_as_partner
+    procedure :: initial_conditions => linear_medium_initial_conditions
+    procedure :: do_td_operation => linear_medium_do_td
+    procedure :: iteration_info => linear_medium_iteration_info
+    procedure :: is_tolerance_reached => linear_medium_is_tolerance_reached
+    procedure :: update_quantity => linear_medium_update_quantity
+    procedure :: update_exposed_quantity => linear_medium_update_exposed_quantity
+    procedure :: copy_quantities_to_interaction => linear_medium_copy_quantities_to_interaction
+    final :: linear_medium_finalize
+  end type linear_medium_t
 
-  interface system_linear_medium_t
-    procedure system_linear_medium_constructor
-  end interface system_linear_medium_t
+  interface linear_medium_t
+    procedure linear_medium_constructor
+  end interface linear_medium_t
 
 contains
 
@@ -89,18 +89,18 @@ contains
   !! corresponding type and then calls the init routine which is a type-bound
   !! procedure of the corresponding type. With this design, also derived
   !! classes can use the init routine of the parent class.
-  function system_linear_medium_constructor(namespace) result(sys)
-    class(system_linear_medium_t), pointer    :: sys
+  function linear_medium_constructor(namespace) result(sys)
+    class(linear_medium_t), pointer    :: sys
     type(namespace_t),           intent(in) :: namespace
 
-    PUSH_SUB(system_linear_medium_constructor)
+    PUSH_SUB(linear_medium_constructor)
 
     SAFE_ALLOCATE(sys)
 
-    call system_linear_medium_init(sys, namespace)
+    call linear_medium_init(sys, namespace)
 
-    POP_SUB(system_linear_medium_constructor)
-  end function system_linear_medium_constructor
+    POP_SUB(linear_medium_constructor)
+  end function linear_medium_constructor
 
   ! ---------------------------------------------------------
   !> The init routine is a module level procedure
@@ -108,15 +108,15 @@ contains
   !! signatures for the initialization routines because they are not
   !! type-bound and thus also not inherited.
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_init(this, namespace)
-    class(system_linear_medium_t), target, intent(inout) :: this
+  subroutine linear_medium_init(this, namespace)
+    class(linear_medium_t), target, intent(inout) :: this
     type(namespace_t),            intent(in)    :: namespace
 
     integer :: nlines, ncols, idim
     type(block_t) :: blk
     type(profile_t), save :: prof
 
-    PUSH_SUB(system_linear_medium_init)
+    PUSH_SUB(linear_medium_init)
 
     this%namespace = namespace
 
@@ -283,15 +283,15 @@ contains
 
     call profiling_out(prof)
 
-    POP_SUB(system_linear_medium_init)
-  end subroutine system_linear_medium_init
+    POP_SUB(linear_medium_init)
+  end subroutine linear_medium_init
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_init_interaction(this, interaction)
-    class(system_linear_medium_t), target, intent(inout) :: this
+  subroutine linear_medium_init_interaction(this, interaction)
+    class(linear_medium_t), target, intent(inout) :: this
     class(interaction_t),                intent(inout) :: interaction
 
-    PUSH_SUB(system_linear_medium_init_interaction)
+    PUSH_SUB(linear_medium_init_interaction)
 
     select type (interaction)
     class default
@@ -299,18 +299,18 @@ contains
       call messages_fatal(1)
     end select
 
-    POP_SUB(system_linear_medium_init_interaction)
-  end subroutine system_linear_medium_init_interaction
+    POP_SUB(linear_medium_init_interaction)
+  end subroutine linear_medium_init_interaction
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_init_interaction_as_partner(partner, interaction)
-    class(system_linear_medium_t),       intent(in)    :: partner
+  subroutine linear_medium_init_interaction_as_partner(partner, interaction)
+    class(linear_medium_t),       intent(in)    :: partner
     class(interaction_t),                intent(inout) :: interaction
 
     integer :: n_points, n_global_points
     integer, allocatable :: tmp(:)
 
-    PUSH_SUB(system_linear_medium_init_interaction_as_partner)
+    PUSH_SUB(linear_medium_init_interaction_as_partner)
 
     select type (interaction)
     type is (linear_medium_em_field_t)
@@ -334,63 +334,63 @@ contains
       call messages_fatal(1)
     end select
 
-    POP_SUB(system_linear_medium_init_interaction_as_partner)
-  end subroutine system_linear_medium_init_interaction_as_partner
+    POP_SUB(linear_medium_init_interaction_as_partner)
+  end subroutine linear_medium_init_interaction_as_partner
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_initial_conditions(this, from_scratch)
-    class(system_linear_medium_t), intent(inout) :: this
+  subroutine linear_medium_initial_conditions(this, from_scratch)
+    class(linear_medium_t), intent(inout) :: this
     logical,                 intent(in)    :: from_scratch
 
-    PUSH_SUB(system_linear_medium_initial_conditions)
+    PUSH_SUB(linear_medium_initial_conditions)
 
-    POP_SUB(system_linear_medium_initial_conditions)
-  end subroutine system_linear_medium_initial_conditions
+    POP_SUB(linear_medium_initial_conditions)
+  end subroutine linear_medium_initial_conditions
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_do_td(this, operation)
-    class(system_linear_medium_t),    intent(inout) :: this
+  subroutine linear_medium_do_td(this, operation)
+    class(linear_medium_t),    intent(inout) :: this
     class(algorithmic_operation_t), intent(in)    :: operation
 
-    PUSH_SUB(system_linear_medium_do_td)
+    PUSH_SUB(linear_medium_do_td)
 
     select case (operation%id)
     case default
       ! Do nothing
     end select
 
-    POP_SUB(system_linear_medium_do_td)
-  end subroutine system_linear_medium_do_td
+    POP_SUB(linear_medium_do_td)
+  end subroutine linear_medium_do_td
 
   ! ---------------------------------------------------------
-  logical function system_linear_medium_is_tolerance_reached(this, tol) result(converged)
-    class(system_linear_medium_t),   intent(in)    :: this
+  logical function linear_medium_is_tolerance_reached(this, tol) result(converged)
+    class(linear_medium_t),   intent(in)    :: this
     FLOAT,                     intent(in)    :: tol
 
-    PUSH_SUB(system_linear_medium_is_tolerance_reached)
+    PUSH_SUB(linear_medium_is_tolerance_reached)
 
     ! this routine is never called at present, no reason to be here
     ASSERT(.false.)
     converged = .false.
 
-    POP_SUB(system_linear_medium_is_tolerance_reached)
-  end function system_linear_medium_is_tolerance_reached
+    POP_SUB(linear_medium_is_tolerance_reached)
+  end function linear_medium_is_tolerance_reached
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_iteration_info(this)
-    class(system_linear_medium_t), intent(in) :: this
+  subroutine linear_medium_iteration_info(this)
+    class(linear_medium_t), intent(in) :: this
 
-    PUSH_SUB(system_linear_medium_iteration_info)
+    PUSH_SUB(linear_medium_iteration_info)
 
-    POP_SUB(system_linear_medium_iteration_info)
-  end subroutine system_linear_medium_iteration_info
+    POP_SUB(linear_medium_iteration_info)
+  end subroutine linear_medium_iteration_info
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_update_quantity(this, iq)
-    class(system_linear_medium_t), intent(inout) :: this
+  subroutine linear_medium_update_quantity(this, iq)
+    class(linear_medium_t), intent(inout) :: this
     integer,                     intent(in)    :: iq
 
-    PUSH_SUB(system_linear_medium_update_quantity)
+    PUSH_SUB(linear_medium_update_quantity)
 
     ! We are not allowed to update protected quantities!
     ASSERT(.not. this%quantities(iq)%protected)
@@ -401,15 +401,15 @@ contains
       call messages_fatal(1)
     end select
 
-    POP_SUB(system_linear_medium_update_quantity)
-  end subroutine system_linear_medium_update_quantity
+    POP_SUB(linear_medium_update_quantity)
+  end subroutine linear_medium_update_quantity
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_update_exposed_quantity(partner, iq)
-    class(system_linear_medium_t), intent(inout) :: partner
+  subroutine linear_medium_update_exposed_quantity(partner, iq)
+    class(linear_medium_t), intent(inout) :: partner
     integer,                     intent(in)    :: iq
 
-    PUSH_SUB(system_linear_medium_update_exposed_quantity)
+    PUSH_SUB(linear_medium_update_exposed_quantity)
 
     ! We are not allowed to update protected quantities!
     ASSERT(.not. partner%quantities(iq)%protected)
@@ -422,15 +422,15 @@ contains
       call messages_fatal(1)
     end select
 
-    POP_SUB(system_linear_medium_update_exposed_quantity)
-  end subroutine system_linear_medium_update_exposed_quantity
+    POP_SUB(linear_medium_update_exposed_quantity)
+  end subroutine linear_medium_update_exposed_quantity
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_copy_quantities_to_interaction(partner, interaction)
-    class(system_linear_medium_t),          intent(inout) :: partner
+  subroutine linear_medium_copy_quantities_to_interaction(partner, interaction)
+    class(linear_medium_t),          intent(inout) :: partner
     class(interaction_t),                 intent(inout) :: interaction
 
-    PUSH_SUB(system_linear_medium_copy_quantities_to_interaction)
+    PUSH_SUB(linear_medium_copy_quantities_to_interaction)
 
     select type (interaction)
     type is (linear_medium_em_field_t)
@@ -440,27 +440,27 @@ contains
       call messages_fatal(1)
     end select
 
-    POP_SUB(system_linear_medium_copy_quantities_to_interaction)
-  end subroutine system_linear_medium_copy_quantities_to_interaction
+    POP_SUB(linear_medium_copy_quantities_to_interaction)
+  end subroutine linear_medium_copy_quantities_to_interaction
 
 
   ! ---------------------------------------------------------
-  subroutine system_linear_medium_finalize(this)
-    type(system_linear_medium_t), intent(inout) :: this
+  subroutine linear_medium_finalize(this)
+    type(linear_medium_t), intent(inout) :: this
 
-    PUSH_SUB(system_linear_medium_finalize)
+    PUSH_SUB(linear_medium_finalize)
 
     call system_end(this)
 
-    POP_SUB(system_linear_medium_finalize)
-  end subroutine system_linear_medium_finalize
+    POP_SUB(linear_medium_finalize)
+  end subroutine linear_medium_finalize
 
 
   ! Specific routines for this system:
 
   ! ---------------------------------------------------------
   subroutine generate_medium_box(this, medium_box, gr)
-    type(system_linear_medium_t),intent(in)    :: this
+    type(linear_medium_t),intent(in)    :: this
     type(single_medium_box_t),   intent(inout) :: medium_box
     type(grid_t),                intent(in)    :: gr
 

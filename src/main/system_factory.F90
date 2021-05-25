@@ -102,7 +102,7 @@ contains
     case (SYSTEM_DFTBPLUS)
       system => system_dftb_t(namespace_t(name, parent=namespace))
     case (SYSTEM_LINEAR_MEDIUM)
-      system => system_linear_medium_t(namespace_t(name, parent=namespace))
+      system => linear_medium_t(namespace_t(name, parent=namespace))
     case default
       system => null()
     end select
