@@ -135,6 +135,7 @@ noinst_HEADERS +=                          \
 # Sources in math
 math_f_srcs =                                 \
 	math/accel_blas.F90                   \
+	math/basis_vectors.F90                \
 	math/blas.F90                         \
 	math/checksum_interface.F90           \
 	math/compressed_sensing.F90           \
