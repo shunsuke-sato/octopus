@@ -27,13 +27,11 @@
 
 module curv_modine_oct_m
   use global_oct_m
-  use ions_oct_m
   use messages_oct_m
   use namespace_oct_m
   use parser_oct_m
   use profiling_oct_m
   use root_solver_oct_m
-  use simul_box_oct_m
   use unit_oct_m
   use unit_system_oct_m
 
@@ -50,7 +48,7 @@ module curv_modine_oct_m
 
   type curv_modine_t
     private
-    FLOAT              :: L(MAX_DIM) !< size of the box
+    FLOAT, allocatable :: lsize(:)   !< size of the box
     FLOAT              :: xbar       !< size of central flat region (in units of L)
     FLOAT              :: Jbar       !< increase in density of points is 1/J
 
@@ -65,7 +63,7 @@ module curv_modine_oct_m
 
   integer, parameter :: qq = 3
 
-  type(simul_box_t),   pointer :: sb_p
+  integer                      :: dim_p
   type(curv_modine_t), pointer :: cv_p
   FLOAT,           allocatable :: x_p(:)
 
@@ -77,14 +75,18 @@ contains
     FLOAT, intent(out) :: ff(:), jf(:, :)
 
     integer :: i1, j1, i2, j2, index1, index2
-    FLOAT :: xx(MAX_DIM), chi2(MAX_DIM), rr, dd, dd2
+    FLOAT :: rr, dd, dd2
+    FLOAT, allocatable :: xx(:), chi2(:)
 
     PUSH_SUB(getf2)
+
+    SAFE_ALLOCATE(xx(1:dim_p))
+    SAFE_ALLOCATE(chi2(1:dim_p))
 
     ! first we fill in cv%csi with the values we have
     index1 = 1
     do i1 = 1, cv_p%natoms
-      do j1 = 1, sb_p%dim
+      do j1 = 1, dim_p
         cv_p%csi(j1, i1) = csi(index1)
         index1 = index1 + 1
       end do
@@ -93,18 +95,18 @@ contains
     ! get ff and jf
     jf(:,:) = M_ZERO
     do i1 = 1, cv_p%natoms
-      call curv_modine_chi2chi2(sb_p, cv_p, cv_p%chi_atoms(:,i1), chi2)
-      xx(:) = chi2(:)
+      call curv_modine_chi2chi2(cv_p, dim_p, cv_p%chi_atoms(:,i1), chi2)
+      xx = chi2
 
       do i2 = 1, cv_p%natoms
-        rr = sqrt(sum((chi2(:) - cv_p%csi(:,i2))**2))
+        rr = norm2(chi2 - cv_p%csi(:,i2))
         dd = exp(-rr**2/(M_TWO*cv_p%Jrange(i2)**2))
 
-        xx(:) = xx(:) - cv_p%Jlocal(i2)*(chi2(:) - cv_p%csi(:,i2)) * dd
+        xx = xx - cv_p%Jlocal(i2)*(chi2 - cv_p%csi(:,i2)) * dd
       end do
 
-      do j1 = 1, sb_p%dim
-        index1 = (i1-1)*sb_p%dim + j1
+      do j1 = 1, dim_p
+        index1 = (i1 - 1)*dim_p + j1
         ff(index1) = xx(j1) - x_p(index1)
 
         do i2 = 1, cv_p%natoms
@@ -112,11 +114,11 @@ contains
           dd  = exp(-rr**2/(M_TWO*cv_p%Jrange(i2)**2))
           dd2 = -M_TWO/(M_TWO*cv_p%Jrange(i2)**2)*dd
 
-          index2 = (i2-1)*sb_p%dim + j1
+          index2 = (i2 - 1)*dim_p + j1
           jf(index1, index2) = cv_p%Jlocal(i2) * dd
 
-          do j2 = 1, sb_p%dim
-            index2 = (i2-1)*sb_p%dim + j2
+          do j2 = 1, dim_p
+            index2 = (i2 - 1)*dim_p + j2
 
             jf(index1, index2) =  jf(index1, index2) + cv_p%Jlocal(i2) * dd2 * &
               (chi2(j1) - cv_p%csi(j1,i2))*(chi2(j2) - cv_p%csi(j2,i2))
@@ -125,16 +127,21 @@ contains
       end do
     end do
 
+    SAFE_DEALLOCATE_A(xx)
+    SAFE_DEALLOCATE_A(chi2)
+
     POP_SUB(getf2)
   end subroutine getf2
 
   ! ---------------------------------------------------------
-  subroutine curv_modine_init(cv, namespace, sb, ions, spacing, min_scaling_product)
+  subroutine curv_modine_init(cv, namespace, dim, npos, pos, lsize, spacing, min_scaling_product)
     type(curv_modine_t), target, intent(out) :: cv
     type(namespace_t),           intent(in)  :: namespace
-    type(simul_box_t),   target, intent(in)  :: sb
-    type(ions_t),                intent(in)  :: ions
-    FLOAT,                       intent(in)  :: spacing(:)
+    integer,                     intent(in)  :: dim
+    integer,                     intent(in)  :: npos
+    FLOAT,                       intent(in)  :: pos(1:dim,1:npos)
+    FLOAT,                       intent(in)  :: lsize(1:dim)
+    FLOAT,                       intent(in)  :: spacing(1:dim)
     FLOAT,                       intent(out) :: min_scaling_product
 
     type(root_solver_t) :: rs
@@ -161,16 +168,16 @@ contains
     !%End
     call parse_variable(namespace, 'CurvModineJBar', M_HALF, cv%Jbar)
 
-    cv%L = M_ZERO
-    cv%L(1:sb%dim) = sb%lsize(1:sb%dim) / cv%Jbar
+    SAFE_ALLOCATE(cv%lsize(1:dim))
+    cv%lsize = lsize / cv%Jbar
 
-    if(cv%xbar<M_ZERO.or.cv%xbar>M_ONE) then
+    if (cv%xbar < M_ZERO .or. cv%xbar > M_ONE) then
       message(1) = 'The parameter "CurvModineXBar" must lie between 0 and 1.'
       call messages_fatal(1)
     end if
 
-    SAFE_ALLOCATE(cv%Jlocal(1:ions%natoms))
-    SAFE_ALLOCATE(cv%Jrange(1:ions%natoms))
+    SAFE_ALLOCATE(cv%Jlocal(1:npos))
+    SAFE_ALLOCATE(cv%Jrange(1:npos))
 
     ! \warning: the reading has to be done for each atom kind
 
@@ -203,15 +210,15 @@ contains
     cv%Jrange(:) = cv%Jrange(1)
 
     ! initialize root solver for the optimization
-    call root_solver_init(rs, namespace, sb%dim, &
+    call root_solver_init(rs, namespace, dim, &
         solver_type = ROOT_NEWTON, maxiter = 500, abs_tolerance = CNST(1.0e-10))
 
     call find_atom_points()
     call optimize()
 
-    cv%natoms = ions%natoms
+    cv%natoms = npos
 
-    call curv_modine_min_scaling(sb, cv, min_scaling_product)
+    call curv_modine_min_scaling(cv, dim, min_scaling_product)
 
     POP_SUB(curv_modine_init)
 
@@ -223,19 +230,19 @@ contains
       PUSH_SUB(curv_modine_init.find_atom_points)
 
       ! Initialize csi
-      SAFE_ALLOCATE(cv%csi(1:sb%dim, 1:ions%natoms))
-      cv%csi = ions%pos
+      SAFE_ALLOCATE(cv%csi(1:dim, 1:npos))
+      cv%csi = npos
 
       ! get first estimate for chi_atoms
-      SAFE_ALLOCATE(cv%chi_atoms(1:sb%dim, 1:ions%natoms))
+      SAFE_ALLOCATE(cv%chi_atoms(1:dim, 1:npos))
       do jj = 1, 10  ! \warning: make something better
-        do iatom = 1, ions%natoms
-          call curv_modine_x2chi(sb, cv, rs, ions%pos(:, iatom), cv%chi_atoms(:, iatom))
+        do iatom = 1, npos
+          call curv_modine_x2chi(cv, dim, rs, pos(:, iatom), cv%chi_atoms(:, iatom))
         end do
         cv%csi(:,:) = cv%chi_atoms(:,:)
       end do
 
-      do iatom = 1, ions%natoms
+      do iatom = 1, npos
         ! These are the chi positions where we want the atoms.
         cv%chi_atoms(:, iatom) = nint(cv%chi_atoms(:, iatom) / spacing(:)) * spacing(:)
       end do
@@ -250,17 +257,17 @@ contains
 
       PUSH_SUB(curv_modine_init.optimize)
 
-      sb_p  => sb
+      dim_p = dim
       cv_p  => cv
 
-      SAFE_ALLOCATE(x_p(1:sb%dim*ions%natoms))
-      SAFE_ALLOCATE(my_csi(1:sb%dim*ions%natoms))
-      SAFE_ALLOCATE(start_csi(1:sb%dim*ions%natoms))
+      SAFE_ALLOCATE(x_p(1:dim*npos))
+      SAFE_ALLOCATE(my_csi(1:dim*npos))
+      SAFE_ALLOCATE(start_csi(1:dim*npos))
 
-      do iatom = 1, ions%natoms
-        do idim = 1, sb%dim
-          index = (iatom-1)*sb%dim + idim
-          x_p(index)       = ions%pos(idim, iatom)
+      do iatom = 1, npos
+        do idim = 1, dim
+          index = (iatom-1)*dim + idim
+          x_p(index)       = pos(idim, iatom)
           start_csi(index) = cv%chi_atoms(idim, iatom)
         end do
       end do
@@ -274,9 +281,9 @@ contains
       end if
 
       ! Now set csi to the new values
-      do iatom = 1, ions%natoms
-        do idim = 1, sb%dim
-          index = (iatom-1)*sb_p%dim + idim
+      do iatom = 1, npos
+        do idim = 1, dim
+          index = (iatom-1)*dim + idim
           cv_p%csi(idim, iatom) = my_csi(index)
         end do
       end do
@@ -285,7 +292,6 @@ contains
       SAFE_DEALLOCATE_A(my_csi)
       SAFE_DEALLOCATE_A(start_csi)
 
-      nullify(sb_p)
       nullify(cv_p)
 
       POP_SUB(curv_modine_init.optimize)
@@ -300,7 +306,7 @@ contains
 
     PUSH_SUB(curv_modine_copy)
 
-    this_out%L = this_in%L
+    SAFE_ALLOCATE_SOURCE_A(this_out%lsize, this_in%lsize)
     this_out%xbar = this_in%xbar
     this_out%Jbar = this_in%Jbar
     SAFE_ALLOCATE_SOURCE_A(this_out%Jlocal, this_in%Jlocal)
@@ -318,6 +324,7 @@ contains
 
     PUSH_SUB(curv_modine_end)
 
+    SAFE_DEALLOCATE_A(cv%lsize)
     SAFE_DEALLOCATE_A(cv%Jlocal)
     SAFE_DEALLOCATE_A(cv%Jrange)
     SAFE_DEALLOCATE_A(cv%chi_atoms)
@@ -326,43 +333,42 @@ contains
     POP_SUB(curv_modine_end)
   end subroutine curv_modine_end
 
-
   ! ---------------------------------------------------------
-  subroutine curv_modine_chi2chi2(sb, cv, chi_, chi2, Jac)
-    type(simul_box_t),   intent(in)  :: sb
+  subroutine curv_modine_chi2chi2(cv, dim, chi_, chi2, Jac)
     type(curv_modine_t), intent(in)  :: cv
-    FLOAT,               intent(in)  :: chi_(:)  !< chi_(sb%dim)
-    FLOAT,               intent(out) :: chi2(:)  !< chi2(sb%dim)
-    FLOAT,     optional, intent(out) :: Jac(:)   !< the Jacobian of this transformation is diagonal
+    integer,             intent(in)  :: dim
+    FLOAT,               intent(in)  :: chi_(1:dim)
+    FLOAT,               intent(out) :: chi2(1:dim)
+    FLOAT,     optional, intent(out) :: Jac(1:dim)   !< the Jacobian of this transformation is diagonal
 
-    FLOAT :: chibar(MAX_DIM), rr, chi
+    FLOAT :: chibar(dim), rr, chi
     logical :: neg
     integer :: i
 
     PUSH_SUB(curv_modine_chi2chi2)
 
-    chibar(1:sb%dim) = cv%xbar*cv%L(1:sb%dim)
+    chibar = cv%xbar*cv%lsize
 
-    do i = 1, sb%dim
+    do i = 1, dim
       neg = (chi_(i) < 0)
       chi = abs(chi_(i))
 
       chi2(i)  = cv%Jbar * chi
-      if(present(Jac)) Jac(i) = cv%Jbar
+      if (present(Jac)) Jac(i) = cv%Jbar
 
       if(chi > chibar(i)) then
-        rr = (chi-chibar(i))/(cv%L(i)-chibar(i))
+        rr = (chi - chibar(i))/(cv%lsize(i) - chibar(i))
 
-        chi2(i)  = chi2(i) + cv%L(i)/M_TWO*(1-cv%Jbar) * rr**qq *   &
-           (qq + M_ONE - (qq - M_ONE)*rr)
+        chi2(i)  = chi2(i) + cv%lsize(i)/M_TWO*(1 - cv%Jbar) * rr**qq * &
+          (qq + M_ONE - (qq - M_ONE)*rr)
 
         if(present(Jac)) then
-          Jac(i) = Jac(i) + cv%L(i)/M_TWO*(1-cv%Jbar) * rr**(qq-1)/(cv%L(i)-chibar(i)) *   &
-            (qq*(qq+1) - (qq**2-1)*rr)
+          Jac(i) = Jac(i) + cv%lsize(i)/M_TWO*(M_ONE - cv%Jbar) * rr**(qq - 1)/(cv%lsize(i) - chibar(i)) * &
+            (qq*(qq + M_ONE) - (qq**2 - M_ONE)*rr)
         end if
       end if
 
-      if(neg) chi2(i) = -chi2(i)
+      if (neg) chi2(i) = -chi2(i)
       ! CHECK if Jacobian does not have to be negated!
     end do
 
@@ -370,22 +376,22 @@ contains
   end subroutine curv_modine_chi2chi2
 
   ! ---------------------------------------------------------
-  subroutine curv_modine_chi2x(sb, cv, chi_, xx)
-    type(simul_box_t),   intent(in)  :: sb
+  subroutine curv_modine_chi2x(cv, dim, chi, xx)
     type(curv_modine_t), intent(in)  :: cv
-    FLOAT,               intent(in)  :: chi_(:)  !< chi_(sb%dim)
-    FLOAT,               intent(out) :: xx(:)    !< xx  (sb%dim)
+    integer,             intent(in)  :: dim
+    FLOAT,               intent(in)  :: chi(1:dim)
+    FLOAT,               intent(out) :: xx(1:dim)
 
-    FLOAT :: chi2(MAX_DIM), rr, dd
+    FLOAT :: chi2(dim), rr, dd
     integer :: iatom
 
     PUSH_SUB(curv_modine_chi2x)
 
-    call curv_modine_chi2chi2(sb, cv, chi_, chi2)
+    call curv_modine_chi2chi2(cv, dim, chi, chi2)
 
     xx(:) = chi2(:)
     do iatom = 1, cv%natoms
-      rr = max(sqrt(sum((chi2(:) - cv%csi(:, iatom))**2)), CNST(1e-6))
+      rr = max(norm2(chi2(:) - cv%csi(:, iatom)), CNST(1e-6))
       dd = exp(-rr**2/(M_TWO*cv%Jrange(iatom)**2))
 
       xx(:) = xx(:) - cv%Jlocal(iatom)*(chi2(:) - cv%csi(:, iatom)) * dd
@@ -396,36 +402,36 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine curv_modine_jacobian_inv(sb, cv, chi_, xx, Jac)
-    type(simul_box_t),   intent(in)  :: sb
+  subroutine curv_modine_jacobian_inv(cv, dim, chi, xx, Jac)
     type(curv_modine_t), intent(in)  :: cv
-    FLOAT,               intent(in)  :: chi_(:)  !< chi(sb%dim)
-    FLOAT,               intent(out) :: xx(:)    !< xx(sb%dim)
-    FLOAT,               intent(out) :: Jac(:,:) !< Jac(sb%dim,sb%dim), the Jacobian
+    integer,             intent(in)  :: dim
+    FLOAT,               intent(in)  :: chi(1:dim)
+    FLOAT,               intent(out) :: xx(1:dim)
+    FLOAT,               intent(out) :: Jac(1:dim, 1:dim) !< the Jacobian
 
-    FLOAT :: chi2(MAX_DIM), rr, dd, J2(MAX_DIM)
+    FLOAT :: chi2(dim), rr, dd, J2(dim)
     integer :: iatom, idim, idim2
 
     PUSH_SUB(curv_modine_jacobian_inv)
 
-    call curv_modine_chi2chi2(sb, cv, chi_, chi2, J2)
+    call curv_modine_chi2chi2(cv, dim, chi, chi2, J2)
 
     ! initialize both xx and the Jacobian
     xx(:) = chi2(:)
     Jac(:,:) = M_ZERO
-    do idim = 1, sb%dim
+    do idim = 1, dim
       Jac(idim, idim) = M_ONE
     end do
 
     do iatom = 1, cv%natoms
-      rr = max(sqrt(sum(chi2(:) - cv%csi(:, iatom))**2), CNST(1e-6))
+      rr = max(norm2(chi2(:) - cv%csi(:, iatom)), CNST(1e-6))
       dd = exp(-rr**2/(M_TWO*cv%Jrange(iatom)**2))
 
       xx(:) = xx(:) -  cv%Jlocal(iatom)*(chi2(:) - cv%csi(:, iatom)) * dd
 
-      do idim = 1, sb%dim
+      do idim = 1, dim
         Jac(idim, idim) = Jac(idim, idim) - cv%Jlocal(iatom) * dd
-        do idim2 = 1, sb%dim
+        do idim2 = 1, dim
           Jac(idim, idim2) = Jac(idim, idim2) + &
              cv%Jlocal(iatom)*(chi2(idim) - cv%csi(idim, iatom))*(chi2(idim2)-cv%csi(idim2, iatom)) * &
              M_TWO/(M_TWO*cv%Jrange(iatom)**2) * dd
@@ -433,13 +439,12 @@ contains
       end do
     end do
 
-    do idim = 1, sb%dim
+    do idim = 1, dim
       Jac(idim, :) = Jac(idim, :) * J2(:)
     end do
 
     POP_SUB(curv_modine_jacobian_inv)
   end subroutine curv_modine_jacobian_inv
-
 
   ! ---------------------------------------------------------
   subroutine getf(yy, ff, jf)
@@ -448,54 +453,52 @@ contains
 
     PUSH_SUB(getf)
 
-    call curv_modine_jacobian_inv(sb_p, cv_p, yy, ff, jf)
+    call curv_modine_jacobian_inv(cv_p, dim_p, yy, ff, jf)
     ff(:) = ff(:) - x_p(:)
 
     POP_SUB(getf)
   end subroutine getf 
 
-
   ! ---------------------------------------------------------
-  subroutine curv_modine_x2chi(sb, cv, rs, xx, chi)
-    type(simul_box_t),   target, intent(in)     :: sb
+  subroutine curv_modine_x2chi(cv, dim, rs, xx, chi)
     type(curv_modine_t), target, intent(in)     :: cv
+    integer,                     intent(in)     :: dim
     type(root_solver_t), target, intent(inout)  :: rs
-    FLOAT,                       intent(in)  :: xx(:)   !< xx(sb%dim)
-    FLOAT,                       intent(out) :: chi(:)  !< chi(sb%dim)
+    FLOAT,                       intent(in)     :: xx(1:dim)
+    FLOAT,                       intent(out)    :: chi(1:dim)
 
     logical :: conv
 
     PUSH_SUB(curv_modine_x2chi)
 
-    sb_p  => sb
+    dim_p  = dim
     cv_p  => cv
-    SAFE_ALLOCATE(x_p(1:sb%dim))
+    SAFE_ALLOCATE(x_p(1:dim))
     x_p(:) = xx(:)
 
     call droot_solver_run(rs, getf, chi, conv, startval = xx)
 
     SAFE_DEALLOCATE_A(x_p)
-    nullify(sb_p)
     nullify(cv_p)
 
     if(.not.conv) then
       message(1) = "During the construction of the adaptive grid, the Newton-Raphson"
       message(2) = "method did not converge for point:"
-      write(message(3),'(3f14.6)') xx(1:sb%dim)
+      write(message(3),'(3f14.6)') xx(1:dim)
       call messages_fatal(3)
     end if
 
     POP_SUB(curv_modine_x2chi)
   end subroutine curv_modine_x2chi
 
-
   ! ---------------------------------------------------------
-  subroutine curv_modine_min_scaling(sb, cv, min_scaling_product)
-    type(simul_box_t),   intent(in)  :: sb
+  subroutine curv_modine_min_scaling(cv, dim, min_scaling_product)
     type(curv_modine_t), intent(in)  :: cv
+    integer,             intent(in)  :: dim
     FLOAT,               intent(out) :: min_scaling_product
     
-    min_scaling_product = cv%Jbar**sb%dim
+    min_scaling_product = cv%Jbar**dim
+
   end subroutine curv_modine_min_scaling
 
 end module curv_modine_oct_m

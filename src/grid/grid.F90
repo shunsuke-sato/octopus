@@ -178,10 +178,10 @@ contains
     end if
 
     ! initialize curvilinear coordinates
-    call curvilinear_init(gr%cv, namespace, gr%sb, ions, grid_spacing)
+    call curvilinear_init(gr%cv, namespace, space%dim, ions%natoms, ions%pos, gr%sb%lsize(1:space%dim), grid_spacing(1:space%dim))
 
     ! initialize derivatives
-    call derivatives_init(gr%der, namespace, space, gr%sb, gr%cv%method /= CURV_METHOD_UNIFORM)
+    call derivatives_init(gr%der, namespace, space, gr%sb%latt, gr%cv%method /= CURV_METHOD_UNIFORM)
     ! the stencil used to generate the grid is a union of a cube (for
     ! multigrid) and the Laplacian.
     call stencil_cube_get_lapl(cube, space%dim, order = 2)
@@ -193,7 +193,7 @@ contains
     enlarge = max(enlarge, gr%der%n_ghost)
 
     call mesh_init_stage_1(gr%mesh, namespace, space, gr%sb, gr%cv, grid_spacing, enlarge)
-    call mesh_init_stage_2(gr%mesh, space, gr%sb, gr%cv, gr%stencil)
+    call mesh_init_stage_2(gr%mesh, space, gr%sb, gr%stencil)
 
     POP_SUB(grid_init_stage_1)
   end subroutine grid_init_stage_1

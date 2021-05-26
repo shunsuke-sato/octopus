@@ -100,7 +100,7 @@ subroutine mesh_init_stage_1(mesh, namespace, space, sb, cv, spacing, enlarge)
       jj = jj + 1
       chi(idir) = TOFLOAT(jj)*mesh%spacing(idir)
       if ( mesh%use_curvilinear ) then
-        call curvilinear_chi2x(sb, cv, chi(1:space%dim), x(1:space%dim))
+        call curvilinear_chi2x(cv, space%dim, sb%latt, chi(1:space%dim), x(1:space%dim))
         out = x(idir) > sb%lsize(idir) + DELTA_
       else
         ! do the same comparison here as in simul_box_contains_points
@@ -169,16 +169,15 @@ end subroutine mesh_init_stage_1
 !> This subroutine checks if every grid point belongs to the internal
 !! mesh, based on the global lxyz_inv matrix. Afterwards, it counts
 !! how many points has the mesh and the enlargement.
-subroutine mesh_init_stage_2(mesh, space, sb, cv, stencil)
+subroutine mesh_init_stage_2(mesh, space, sb, stencil)
   type(mesh_t),        intent(inout) :: mesh
   type(space_t),       intent(in)    :: space
-  type(simul_box_t),   intent(in)    :: sb
-  type(curvilinear_t), intent(in)    :: cv
+  class(box_t),        intent(in)    :: sb
   type(stencil_t),     intent(in)    :: stencil
 
   integer :: il, ik, ix, iy, iz, is
   integer :: ii, jj, kk
-  FLOAT   :: chi(MAX_DIM)
+  FLOAT   :: chi(3)
   integer :: nr(1:2, 1:MAX_DIM), res
   logical, allocatable :: in_box(:)
   FLOAT,   allocatable :: xx(:, :)
@@ -214,7 +213,7 @@ subroutine mesh_init_stage_2(mesh, space, sb, cv, stencil)
 
   mesh%idx%lxyz_inv(:,:,:) = 0
   res = 1
-  SAFE_ALLOCATE(xx(mesh%idx%nr(1,1):mesh%idx%nr(2,1), 1:MAX_DIM))
+  SAFE_ALLOCATE(xx(mesh%idx%nr(1,1):mesh%idx%nr(2,1), 1:space%dim))
   SAFE_ALLOCATE(in_box(mesh%idx%nr(1,1):mesh%idx%nr(2,1)))
   chi = M_ZERO
 
@@ -243,7 +242,7 @@ subroutine mesh_init_stage_2(mesh, space, sb, cv, stencil)
       chi(2) = TOFLOAT(iy) * mesh%spacing(2)
       do ix = mesh%idx%nr(1,1), mesh%idx%nr(2,1)
         chi(1) = TOFLOAT(ix) * mesh%spacing(1)
-        call curvilinear_chi2x(sb, cv, chi(:), xx(ix, :))
+        call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(ix, 1:space%dim))
       end do
 
       in_box = sb%contains_points(mesh%idx%nr(2,1) - mesh%idx%nr(1,1) + 1, xx)
@@ -368,7 +367,7 @@ subroutine mesh_init_stage_3(mesh, namespace, space, stencil, mc, parent)
 
   call mesh_cube_map_init(mesh%cube_map, mesh%idx, mesh%np_global)
 
-  call mesh_get_vol_pp(mesh%sb)
+  call mesh_get_vol_pp()
 
   call profiling_out(mesh_init_prof)
   POP_SUB(mesh_init_stage_3)
@@ -504,7 +503,7 @@ contains
 #ifdef HAVE_MPI
                   if(.not. mesh%parallel_in_domains) then
 #endif
-                    call curvilinear_chi2x(mesh%sb, mesh%cv, chi, xx)
+                    call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
                     mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
                   end if
@@ -568,7 +567,7 @@ contains
           chi(2) = TOFLOAT(iy)*mesh%spacing(2)
           chi(3) = TOFLOAT(iz)*mesh%spacing(3)
 
-          call curvilinear_chi2x(mesh%sb, mesh%cv, chi, xx)
+          call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
           mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
         end if
@@ -633,7 +632,7 @@ contains
               chi(2) = TOFLOAT(iy)*mesh%spacing(2)
               chi(3) = TOFLOAT(iz)*mesh%spacing(3)
 
-              call curvilinear_chi2x(mesh%sb, mesh%cv, chi, xx)
+              call curvilinear_chi2x(mesh%cv, space%dim, mesh%sb%latt, chi(1:space%dim), xx(1:space%dim))
               mesh%x(il, 1:space%dim) = xx(1:space%dim)
 #ifdef HAVE_MPI
             end if
@@ -816,7 +815,7 @@ contains
     mesh%x(:, :) = M_ZERO
     do ii = 1, mesh%np_part
       jj = mesh_local2global(mesh, ii)
-      mesh%x(ii, 1:mesh%sb%dim) = mesh_x_global(mesh, jj)
+      mesh%x(ii, 1:space%dim) = mesh_x_global(mesh, jj)
     end do
 
     !%Variable PartitionPrint
@@ -842,8 +841,7 @@ contains
 
   ! ---------------------------------------------------------
   !> calculate the volume of integration
-  subroutine mesh_get_vol_pp(sb)
-    type(simul_box_t), intent(in) :: sb
+  subroutine mesh_get_vol_pp()
 
     integer :: jj(1:MAX_DIM), ip, np
     FLOAT   :: chi(MAX_DIM)
@@ -863,8 +861,9 @@ contains
 
     do ip = 1, np
       call mesh_local_index_to_coords(mesh, ip, jj)
-      chi(1:space%dim) = jj(1:sb%dim)*mesh%spacing(1:space%dim)
-      mesh%vol_pp(ip) = mesh%vol_pp(ip)*curvilinear_det_Jac(sb, mesh%cv, mesh%x(ip, 1:sb%dim), chi(1:sb%dim))
+      chi(1:space%dim) = jj(1:space%dim)*mesh%spacing(1:space%dim)
+      mesh%vol_pp(ip) = mesh%vol_pp(ip)*curvilinear_det_Jac(mesh%cv, space%dim, mesh%sb%latt, mesh%x(ip, 1:space%dim), &
+        chi(1:space%dim))
     end do
 
     if(mesh%use_curvilinear) then
@@ -874,12 +873,12 @@ contains
     end if
 
     if (space%dim == 3) then
-      mesh%surface_element(1) = sqrt(abs(sum(dcross_product(sb%latt%rlattice_primitive(1:3, 2), &
-                                                            sb%latt%rlattice_primitive(1:3, 3))**2)))
-      mesh%surface_element(2) = sqrt(abs(sum(dcross_product(sb%latt%rlattice_primitive(1:3, 3), &
-                                                            sb%latt%rlattice_primitive(1:3, 1))**2)))
-      mesh%surface_element(3) = sqrt(abs(sum(dcross_product(sb%latt%rlattice_primitive(1:3, 1), &
-                                                            sb%latt%rlattice_primitive(1:3, 2))**2)))
+      mesh%surface_element(1) = sqrt(abs(sum(dcross_product(mesh%sb%latt%rlattice_primitive(1:3, 2), &
+                                                            mesh%sb%latt%rlattice_primitive(1:3, 3))**2)))
+      mesh%surface_element(2) = sqrt(abs(sum(dcross_product(mesh%sb%latt%rlattice_primitive(1:3, 3), &
+                                                            mesh%sb%latt%rlattice_primitive(1:3, 1))**2)))
+      mesh%surface_element(3) = sqrt(abs(sum(dcross_product(mesh%sb%latt%rlattice_primitive(1:3, 1), &
+                                                            mesh%sb%latt%rlattice_primitive(1:3, 2))**2)))
     else
       mesh%surface_element(1:space%dim) = M_ZERO
     end if

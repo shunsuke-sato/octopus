@@ -317,7 +317,7 @@ contains
 
     if(poisson_is_multigrid(hm%psolver)) then
       SAFE_ALLOCATE(hm%psolver%mgrid)
-      call multigrid_init(hm%psolver%mgrid, namespace, space, gr%cv, gr%mesh, gr%der, gr%stencil, mc)
+      call multigrid_init(hm%psolver%mgrid, namespace, space, gr%mesh, gr%der, gr%stencil, mc)
     end if
 
     ! Initialize external potential
@@ -500,14 +500,12 @@ contains
          .or. bitand(hm%xc%family, XC_FAMILY_OEP) /= 0) then
       !We test Slater before OEP, as Slater is treated as OEP for the moment....
       if(hm%xc%functional(FUNC_X,1)%id == XC_OEP_X_SLATER) then 
-        call exchange_operator_init(hm%exxop, namespace, space, st, gr%sb%latt, gr%der, mc, hm%kpoints, &
-                 M_ZERO, M_ONE, M_ZERO)
+        call exchange_operator_init(hm%exxop, namespace, space, st, gr%der, mc, hm%kpoints, M_ZERO, M_ONE, M_ZERO)
       else if(bitand(hm%xc%family, XC_FAMILY_OEP) /= 0 .or. hm%theory_level == RDMFT) then
-        call exchange_operator_init(hm%exxop, namespace, space, st, gr%sb%latt, gr%der, mc, hm%kpoints, &
-                 hm%xc%cam_omega, hm%xc%cam_alpha, hm%xc%cam_beta)
+        call exchange_operator_init(hm%exxop, namespace, space, st, gr%der, mc, hm%kpoints, hm%xc%cam_omega, hm%xc%cam_alpha, &
+          hm%xc%cam_beta)
       else
-        call exchange_operator_init(hm%exxop, namespace, space, st, gr%sb%latt, gr%der, mc, hm%kpoints, &
-                                     M_ONE, M_ZERO, M_ZERO)
+        call exchange_operator_init(hm%exxop, namespace, space, st, gr%der, mc, hm%kpoints, M_ONE, M_ZERO, M_ZERO)
       end if
     end if
 
