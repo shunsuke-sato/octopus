@@ -501,6 +501,7 @@ interactions_f_srcs =                                 \
 	interactions/gravity.F90                      \
         interactions/ion_electron_local_potential.F90 \
 	interactions/interactions_factory.F90         \
+	interactions/linear_medium_em_field.F90       \
 	interactions/lorentz_force.F90                \
         interactions/nlcc.F90                         \
         interactions/potential_interaction.F90 
@@ -586,8 +587,8 @@ maxwell_f_srcs =                                 \
 	maxwell/energy_mxll.F90                  \
         maxwell/external_densities.F90           \
 	maxwell/hamiltonian_mxll.F90             \
-	maxwell/medium_mxll.F90                  \
 	maxwell/propagator_mxll.F90              \
+	maxwell/system_linear_medium.F90         \
 	maxwell/system_mxll.F90
 
 maxwell_srcs = $(maxwell_f_srcs)

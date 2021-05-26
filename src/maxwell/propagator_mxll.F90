@@ -46,7 +46,6 @@ module propagator_mxll_oct_m
   use math_oct_m
   use maxwell_boundary_op_oct_m
   use maxwell_function_oct_m
-  use medium_mxll_oct_m
   use mesh_oct_m
   use mesh_cube_parallel_map_oct_m
   use mesh_function_oct_m
@@ -73,7 +72,8 @@ module propagator_mxll_oct_m
     mxll_propagation_step,                   &
     transform_rs_densities,                  &
     energy_mxll_calc,                        &
-    spatial_constant_calculation
+    spatial_constant_calculation,            &
+    set_medium_rs_state
 
   ! The following routines are currently unused, but will be used in the near future.
   ! In order not to generate warnings about them, we declared them as public
@@ -231,8 +231,6 @@ contains
       st%rs_state_const = M_z0
     end if
 
-    call medium_box_init(namespace, hm%medium_box, hm%calc_medium_box, gr)
-
     !%Variable MaxwellTDETRSApprox
     !%Type integer
     !%Default no
@@ -289,7 +287,6 @@ contains
     !% not doing any numerical propagation of Maxwells equations.
     !%End
     call parse_variable(namespace, 'MaxwellPlaneWavesInBox', .false., tr%plane_waves_in_box)
-    call set_medium_rs_state(st, gr, hm)
 
     call derivatives_boundary_mask(hm%bc, gr%mesh, hm)
 
@@ -525,28 +522,26 @@ contains
 
     PUSH_SUB(set_medium_rs_state)
 
+    ASSERT(allocated(st%ep) .and. allocated(st%mu))
+
     call profiling_in(prof, 'SET_MEDIUM_RS_STATE')
 
-    SAFE_ALLOCATE(st%ep(1:gr%mesh%np_part))
-    SAFE_ALLOCATE(st%mu(1:gr%mesh%np_part))
-    st%ep = P_ep
-    st%mu = P_mu
     if (hm%calc_medium_box) then
-      do il = 1, hm%medium_box%number
-        do ip_in = 1, hm%medium_box%points_number(il)
-          ip = hm%medium_box%points_map(ip_in, il)
-          st%ep(ip) = hm%medium_box%ep(ip_in, il)
-          st%mu(ip) = hm%medium_box%mu(ip_in, il)
+      do il = 1, size(hm%medium_boxes)
+        do ip_in = 1, hm%medium_boxes(il)%points_number
+          ip = hm%medium_boxes(il)%points_map(ip_in)
+          st%ep(ip) = hm%medium_boxes(il)%ep(ip_in)
+          st%mu(ip) = hm%medium_boxes(il)%mu(ip_in)
         end do
       end do
     end if
 
     do idim = 1, st%dim
       if (hm%bc%bc_type(idim) == MXLL_BC_MEDIUM) then
-        do ip_in = 1, hm%bc%medium%points_number(idim)
-          ip = hm%bc%medium%points_map(ip_in, idim)
-          st%ep(ip) = hm%bc%medium%ep(ip_in, idim)
-          st%mu(ip) = hm%bc%medium%mu(ip_in, idim)
+        do ip_in = 1, hm%bc%medium(idim)%points_number
+          ip = hm%bc%medium(idim)%points_map(ip_in)
+          st%ep(ip) = hm%bc%medium(idim)%ep(ip_in)
+          st%mu(ip) = hm%bc%medium(idim)%mu(ip_in)
         end do
       end if
     end do

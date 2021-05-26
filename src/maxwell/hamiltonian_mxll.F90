@@ -30,8 +30,8 @@ module hamiltonian_mxll_oct_m
   use hamiltonian_abst_oct_m
   use hamiltonian_elec_oct_m
   use math_oct_m
+  use linear_medium_em_field_oct_m
   use maxwell_boundary_op_oct_m
-  use medium_mxll_oct_m
   use mesh_cube_parallel_map_oct_m
   use mesh_oct_m
   use messages_oct_m
@@ -123,7 +123,8 @@ module hamiltonian_mxll_oct_m
     integer                        :: medium_calculation
 
     logical                        :: calc_medium_box = .false.
-    type(medium_box_t)             :: medium_box
+    type(single_medium_box_t), allocatable  :: medium_boxes(:)
+    logical                         :: medium_boxes_initialized = .false.
 
     !> maxwell hamiltonian_mxll
     integer                        :: operator
@@ -212,6 +213,7 @@ contains
     if (hm%operator == FARADAY_AMPERE_GAUSS) then
       hm%dim = hm%dim+1
     else if (hm%operator == FARADAY_AMPERE_MEDIUM) then
+      ! TODO: define this operator automatically if there is a linear medium system present 
       hm%dim = 2*hm%dim
       hm%calc_medium_box = .true.
     end if
@@ -268,6 +270,7 @@ contains
     type(hamiltonian_mxll_t), intent(inout) :: hm
 
     type(profile_t), save :: prof
+    integer :: il
 
     PUSH_SUB(hamiltonian_mxll_end)
 
@@ -280,7 +283,11 @@ contains
 
     call bc_mxll_end(hm%bc)
 
-    call medium_box_end(hm%medium_box)
+    if (allocated(hm%medium_boxes)) then
+      do il = 1, size(hm%medium_boxes)
+        call single_medium_box_end(hm%medium_boxes(il))
+      end do
+    end if
 
     call profiling_out(prof)
 
@@ -438,14 +445,14 @@ contains
       do idir = 1, 3
         if ((hm%bc%bc_type(idir) == MXLL_BC_MEDIUM) .and. &
             (hm%medium_calculation == OPTION__MAXWELLMEDIUMCALCULATION__RS)) then
-          call apply_medium_box(hm%bc%medium, idir)
+          call apply_medium_box(hm%bc%medium(idir))
         end if
       end do
 
       if (hm%calc_medium_box .and. &
            (hm%medium_calculation == OPTION__MAXWELLMEDIUMCALCULATION__RS) ) then
-        do il = 1, hm%medium_box%number
-          call apply_medium_box(hm%medium_box, il)
+        do il = 1, size(hm%medium_boxes)
+          call apply_medium_box(hm%medium_boxes(il))
         end do
       end if
     end if
@@ -585,9 +592,8 @@ contains
         POP_SUB(hamiltonian_mxll_apply_batch.apply_constant_boundary)
       end subroutine apply_constant_boundary
 
-      subroutine apply_medium_box(medium, idir)
-        type(medium_box_t),  intent(in) :: medium
-        integer,             intent(in) :: idir
+      subroutine apply_medium_box(medium)
+        type(single_medium_box_t),  intent(in) :: medium
 
         integer :: ifield
         type(profile_t), save :: prof_medium_box
@@ -596,13 +602,13 @@ contains
         call profiling_in(prof_medium_box, "MEDIUM_BOX")
         !$omp parallel do private(ip, cc, aux_ep, aux_mu, sigma_e, sigma_m, &
         !$omp ff_plus, ff_minus, hpsi, ff_real, ff_imag, ifield, coeff_real, coeff_imag)
-        do ip_in = 1, medium%points_number(idir)
-          ip          = medium%points_map(ip_in, idir)
-          cc          = medium%c(ip_in, idir)/P_c
-          aux_ep(1:3) = medium%aux_ep(ip_in, 1:3, idir)
-          aux_mu(1:3) = medium%aux_mu(ip_in, 1:3, idir)
-          sigma_e     = medium%sigma_e(ip_in, idir)
-          sigma_m     = medium%sigma_m(ip_in, idir)
+        do ip_in = 1, medium%points_number
+          ip          = medium%points_map(ip_in)
+          cc          = medium%c(ip_in)/P_c
+          aux_ep(1:3) = medium%aux_ep(ip_in, 1:3)
+          aux_mu(1:3) = medium%aux_mu(ip_in, 1:3)
+          sigma_e     = medium%sigma_e(ip_in)
+          sigma_m     = medium%sigma_m(ip_in)
           select case(hpsib%status())
           case(BATCH_NOT_PACKED)
             ff_plus(1:3)  = psib%zff_linear(ip, 1:3)
@@ -633,6 +639,7 @@ contains
         call profiling_out(prof_medium_box)
         POP_SUB(hamiltonian_mxll_apply_batch.apply_medium_box)
       end subroutine apply_medium_box
+
   end subroutine hamiltonian_mxll_apply_batch
 
 
@@ -1103,13 +1110,13 @@ contains
     do idim = 1, 3
       if ( (hm%bc%bc_type(idim) == MXLL_BC_MEDIUM) .and. &
            (hm%medium_calculation == OPTION__MAXWELLMEDIUMCALCULATION__RS) ) then
-        do ip_in = 1, hm%bc%medium%points_number(idim)
-          ip          = hm%bc%medium%points_map(ip_in, idim)
-          cc          = hm%bc%medium%c(ip_in, idim)/P_c
-          aux_ep(:)   = hm%bc%medium%aux_ep(ip_in, :, idim)
-          aux_mu(:)   = hm%bc%medium%aux_mu(ip_in, :, idim)
-          sigma_e     = hm%bc%medium%sigma_e(ip_in, idim)
-          sigma_m     = hm%bc%medium%sigma_m(ip_in, idim)
+        do ip_in = 1, hm%bc%medium(idim)%points_number
+          ip          = hm%bc%medium(idim)%points_map(ip_in)
+          cc          = hm%bc%medium(idim)%c(ip_in)/P_c
+          aux_ep(:)   = hm%bc%medium(idim)%aux_ep(ip_in, :)
+          aux_mu(:)   = hm%bc%medium(idim)%aux_mu(ip_in, :)
+          sigma_e     = hm%bc%medium(idim)%sigma_e(ip_in)
+          sigma_m     = hm%bc%medium(idim)%sigma_m(ip_in)
           ff_plus(1)  = psi(ip, 1)
           ff_plus(2)  = psi(ip, 2)
           ff_plus(3)  = psi(ip, 3)
@@ -1166,14 +1173,14 @@ contains
 
     if (hm%calc_medium_box .and. &
          (hm%medium_calculation == OPTION__MAXWELLMEDIUMCALCULATION__RS) ) then
-      do il = 1, hm%medium_box%number
-        do ip_in = 1, hm%medium_box%points_number(il)
-          ip           = hm%medium_box%points_map(ip_in, il)
-          cc           = hm%medium_box%c(ip_in,il)/P_c
-          aux_ep(1:3)  = hm%medium_box%aux_ep(ip_in, 1:3, il)
-          aux_mu(1:3)  = hm%medium_box%aux_mu(ip_in, 1:3, il)
-          sigma_e      = hm%medium_box%sigma_e(ip_in, il)
-          sigma_m      = hm%medium_box%sigma_m(ip_in, il)
+      do il = 1, size(hm%medium_boxes)
+        do ip_in = 1, hm%medium_boxes(il)%points_number
+          ip           = hm%medium_boxes(il)%points_map(ip_in)
+          cc           = hm%medium_boxes(il)%c(ip_in)/P_c
+          aux_ep(1:3)  = hm%medium_boxes(il)%aux_ep(ip_in, 1:3)
+          aux_mu(1:3)  = hm%medium_boxes(il)%aux_mu(ip_in, 1:3)
+          sigma_e      = hm%medium_boxes(il)%sigma_e(ip_in)
+          sigma_m      = hm%medium_boxes(il)%sigma_m(ip_in)
           ff_plus(1)   = psi(ip, 1)
           ff_plus(2)   = psi(ip, 2)
           ff_plus(3)   = psi(ip, 3)

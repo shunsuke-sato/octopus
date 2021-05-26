@@ -33,6 +33,7 @@ module system_mxll_oct_m
   use ions_oct_m
   use iso_c_binding
   use lattice_vectors_oct_m
+  use linear_medium_em_field_oct_m
   use loct_oct_m
   use lorentz_force_oct_m
   use maxwell_boundary_op_oct_m
@@ -110,6 +111,8 @@ module system_mxll_oct_m
     procedure :: output_start => system_mxll_output_start
     procedure :: output_write => system_mxll_output_write
     procedure :: output_finish => system_mxll_output_finish
+    procedure :: update_interactions_start => system_mxll_update_interactions_start
+    procedure :: update_interactions_finish => system_mxll_update_interactions_finish
     final :: system_mxll_finalize
   end type system_mxll_t
 
@@ -174,6 +177,7 @@ contains
     call mesh_interpolation_init(this%mesh_interpolate, this%gr%mesh)
 
     call this%supported_interactions_as_partner%add(LORENTZ_FORCE)
+    call this%supported_interactions%add(LINEAR_MEDIUM_EM_FIELD)
 
     call profiling_out(prof)
 
@@ -188,8 +192,9 @@ contains
     PUSH_SUB(system_mxll_init_interaction)
 
     select type (interaction)
+    type is (linear_medium_em_field_t)
+      call interaction%init(this%gr)
     class default
-      ! Currently Maxwell system does not know any type of interaction
       message(1) = "Trying to initialize an unsupported interaction by Maxwell."
       call messages_fatal(1)
     end select
@@ -673,6 +678,61 @@ contains
 
     POP_SUB(system_mxll_output_finish)
   end subroutine system_mxll_output_finish
+
+  ! ---------------------------------------------------------
+  subroutine system_mxll_update_interactions_start(this)
+    class(system_mxll_t), intent(inout) :: this
+
+    type(interaction_iterator_t) :: iter
+    integer :: int_counter
+
+    PUSH_SUB(system_mxll_update_interactions_start)
+
+    int_counter = 0
+    call iter%start(this%interactions)
+    do while (iter%has_next())
+      select type (interaction => iter%get_next())
+      class is (linear_medium_em_field_t)
+        int_counter = int_counter + 1
+      end select
+    end do
+
+    if (int_counter /= 0 .and. .not. allocated(this%hm%medium_boxes)) then
+       SAFE_ALLOCATE(this%hm%medium_boxes(int_counter))
+       this%hm%calc_medium_box = .true.
+    end if
+
+    POP_SUB(system_mxll_update_interactions_start)
+  end subroutine system_mxll_update_interactions_start
+
+  ! ---------------------------------------------------------
+  subroutine system_mxll_update_interactions_finish(this)
+    class(system_mxll_t), intent(inout) :: this
+
+    type(interaction_iterator_t) :: iter
+    integer :: iint
+    
+    PUSH_SUB(system_mxll_update_interactions_finish)
+
+    iint = 0
+    call iter%start(this%interactions)
+    do while (iter%has_next())
+      select type (interaction => iter%get_next())
+      class is (linear_medium_em_field_t)
+        if (allocated(this%hm%medium_boxes) .and. .not. this%hm%medium_boxes_initialized) then
+          iint = iint + 1
+          this%hm%medium_boxes(iint) = interaction%medium_box
+        end if
+      end select
+    end do
+
+    if (allocated(this%hm%medium_boxes) .and. .not. this%hm%medium_boxes_initialized) then
+       call set_medium_rs_state(this%st, this%gr, this%hm)
+      this%hm%medium_boxes_initialized = .true.
+    end if
+
+    POP_SUB(system_mxll_update_interactions_finish)
+  end subroutine system_mxll_update_interactions_finish
 
   ! ---------------------------------------------------------
   subroutine system_mxll_finalize(this)
