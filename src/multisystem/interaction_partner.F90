@@ -91,6 +91,7 @@ module interaction_partner_oct_m
       class(interaction_t),             intent(inout) :: interaction
     end subroutine interaction_partner_copy_quantities_to_interaction
 
+
   end interface
 
   !> These classes extends the list and list iterator to create a partner list

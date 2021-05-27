@@ -23,6 +23,7 @@ module interaction_with_partner_oct_m
   use interaction_oct_m
   use interaction_partner_oct_m
   use messages_oct_m
+  use multisystem_debug_oct_m
   use namespace_oct_m
   use profiling_oct_m
   implicit none
@@ -54,11 +55,18 @@ contains
     class(clock_t),                    intent(in)    :: requested_time
 
     logical :: allowed_to_update
+    type(event_handle_t) :: debug_handle
 
     PUSH_SUB(interaction_with_partner_update)
 
     ! We should only try to update the interaction if it is not yet at the requested time
     ASSERT(.not. (this%clock == requested_time))
+
+    debug_handle = multisystem_debug_write_event_in(event = event_function_call_t("interaction_with_partner_update"), &
+                                                   extra="target: "//trim(this%label)//"-"//trim(this%partner%namespace%get()), &
+                                                   interaction_clock = this%clock,      &
+                                                   partner_clock = this%partner%clock,  & 
+                                                   requested_clock = requested_time)
 
     allowed_to_update = this%partner%update_exposed_quantities(requested_time, this)
 
@@ -69,6 +77,9 @@ contains
       ! Update was successful, so set new interaction time
       updated = .true.
       call this%clock%set_time(requested_time)
+      call multisystem_debug_write_marker(event = event_clock_update_t( "interaction", &
+                                                    trim(this%label)//"-"//trim(this%partner%namespace%get()), & 
+                                                    this%clock, "set") )
 
       if (debug%info) then
         write(message(1), '(a,a,a,a,a)') "Debug: -- Updated '", trim(this%label), "' interaction with '", &
@@ -87,6 +98,11 @@ contains
       end if
       updated = .false.
     end if
+
+    call multisystem_debug_write_event_out(debug_handle, update = updated,   &
+                                            interaction_clock = this%clock,  &
+                                            partner_clock = this%partner%clock, &
+                                            requested_clock = requested_time)
 
     POP_SUB(interaction_with_partner_update)
   end function interaction_with_partner_update

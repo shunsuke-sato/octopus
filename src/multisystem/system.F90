@@ -30,6 +30,7 @@ module system_oct_m
   use messages_oct_m
   use mpi_oct_m
   use namespace_oct_m
+  use multisystem_debug_oct_m
   use linked_list_oct_m
   use parser_oct_m
   use profiling_oct_m
@@ -171,20 +172,26 @@ contains
     type(algorithmic_operation_t) :: tdop
     logical :: all_updated
 
+    type(event_handle_t) :: debug_handle
+
     PUSH_SUB(system_dt_operation)
 
     tdop = this%prop%get_td_operation()
 
     if (debug%info) then
-      write(message(1), '(a,a,1X,a)') "Debug: ", trim(tdop%label), " for '" + trim(this%namespace%get()) + "'"
+      write(message(1), '(a,a,1X,a)') "Debug: Start  ", trim(tdop%label), " for '" + trim(this%namespace%get()) + "'"
       call messages_info(1)
     end if
+
+    debug_handle = multisystem_debug_write_event_in(this%namespace, event_function_call_t("dt_operation", tdop),    &
+                                                    system_clock=this%clock, prop_clock=this%prop%clock)
 
     select case (tdop%id)
     case (FINISHED)
       if (.not. this%prop%step_is_done()) then
         ! Increment the system clock by one time-step
         this%clock = this%clock + CLOCK_TICK
+        call multisystem_debug_write_marker(this%namespace, event_clock_update_t("system",  "", this%clock, "tick" ) )
 
         ! Execute additional operations at the end of the time step
         call this%exec_end_of_timestep_tasks()
@@ -203,6 +210,7 @@ contains
     case (UPDATE_INTERACTIONS)
       ! We increment by one algorithmic step
       this%prop%clock = this%prop%clock + CLOCK_TICK
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("propagator", "", this%prop%clock, "tick") )
 
       ! Try to update all the interactions
       all_updated = this%update_interactions()
@@ -214,6 +222,7 @@ contains
         call this%prop%next()
       else
         this%prop%clock = this%prop%clock - CLOCK_TICK
+        call multisystem_debug_write_marker(this%namespace, event_clock_update_t("propagator", "", this%prop%clock, "reverse") )
       end if
 
     case (START_SCF_LOOP)
@@ -266,6 +275,14 @@ contains
       call this%prop%next()
     end select
 
+    if (debug%info) then
+      write(message(1), '(a,a,1X,a, l)') "Debug: Finish ", trim(tdop%label), " for '" + trim(this%namespace%get()) + "' ", &
+                                         this%prop%step_is_done()
+      call messages_info(1)
+    end if
+
+    call multisystem_debug_write_event_out(debug_handle, system_clock=this%clock, prop_clock=this%prop%clock)
+
     POP_SUB(system_dt_operation)
   end subroutine system_dt_operation
 
@@ -278,22 +295,36 @@ contains
     type(interaction_iterator_t) :: iter
     class(interaction_t), pointer :: interaction
 
+    character(len=MAX_INFO_LEN) :: extended_label
+ 
     PUSH_SUB(system_reset_clocks)
 
     ! Propagator clock
     this%prop%clock = this%prop%clock - accumulated_ticks*CLOCK_TICK
+    call multisystem_debug_write_marker(this%namespace, event_clock_update_t("propagator", "", this%prop%clock, "reset") )
 
     ! Interaction clocks
     call iter%start(this%interactions)
     do while (iter%has_next())
       interaction => iter%get_next()
       interaction%clock = interaction%clock - accumulated_ticks*CLOCK_TICK
+
+      select type (interaction)
+      class is (interaction_with_partner_t)
+        extended_label = trim(interaction%label)//"-"//trim(interaction%partner%namespace%get())
+      class default
+        extended_label = trim(interaction%label)
+      end select
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t( "interaction", extended_label, &
+                                                                                 interaction%clock, "reset") )
     end do
 
     ! Internal quantities clocks
     do iq = 1, MAX_QUANTITIES
       if (this%quantities(iq)%required) then
         this%quantities(iq)%clock = this%quantities(iq)%clock - accumulated_ticks*CLOCK_TICK
+        call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", QUANTITY_LABEL(iq), &
+                                                                                 this%quantities(iq)%clock, "reset") )
       end if
     end do
 
@@ -310,12 +341,20 @@ contains
     logical :: ahead_in_time, right_on_time, need_to_copy
     integer :: iq, q_id
 
+    type(event_handle_t) :: debug_handle
+
     PUSH_SUB(system_update_exposed_quantities)
 
     if (debug%info) then
       write(message(1), '(a,a,a)') "Debug: -- Updating exposed quantities for partner '", trim(partner%namespace%get()), "'"
       call messages_info(1)
     end if
+
+    debug_handle = multisystem_debug_write_event_in(system_namespace = partner%namespace, &
+                                                    event = event_function_call_t("system_update_exposed_quantities"), &
+                                                    partner_clock = partner%clock, &
+                                                    requested_clock = requested_time, &
+                                                    interaction_clock = interaction%clock )
 
     select type (interaction)
     class is (interaction_with_partner_t)
@@ -393,6 +432,11 @@ contains
       call messages_info(1)
     end if
 
+    call multisystem_debug_write_event_out(debug_handle, update=allowed_to_update, &
+                                                         partner_clock = partner%clock, &
+                                                         requested_clock = requested_time, &
+                                                         interaction_clock = interaction%clock )
+
     POP_SUB(system_update_exposed_quantities)
   contains
 
@@ -442,6 +486,11 @@ contains
 
     PUSH_SUB(system_init_all_interactions)
 
+    if (debug%info) then
+      write(message(1), '(a,a,1X,a)') "Debug: Start  init_all_interactions for "+ trim(this%namespace%get()) + "'"
+      call messages_info(1)
+    end if
+
     call iter%start(this%interactions)
     do while (iter%has_next())
       interaction => iter%get_next()
@@ -455,6 +504,11 @@ contains
         call this%init_interaction(interaction)
       end select
     end do
+    
+    if (debug%info) then
+      write(message(1), '(a,a,1X,a)') "Debug: Finish init_all_interactions for "+ trim(this%namespace%get()) + "'"
+      call messages_info(1)
+    end if
 
     POP_SUB(system_init_all_interactions)
   end subroutine system_init_all_interactions
@@ -705,8 +759,17 @@ contains
     class(system_t),      intent(inout) :: this
 
     logical :: all_updated
+    type(event_handle_t) :: debug_handle
 
     PUSH_SUB(system_propagation_start)
+
+    debug_handle = multisystem_debug_write_event_in(this%namespace, event_function_call_t("system_propagation_start"), &
+                                                    system_clock = this%clock, prop_clock = this%prop%clock)
+
+    if (debug%info) then
+      write(message(1), '(a,a,1X,a)') "Debug: Start  propagation_start for '" + trim(this%namespace%get()) + "'"
+      call messages_info(1)
+    end if
 
     ! Update interactions at initial time
     all_updated = this%update_interactions()
@@ -724,20 +787,33 @@ contains
     ! Write information for first iteration
     call this%iteration_info()
 
+    if (debug%info) then
+      write(message(1), '(a,a,1X,a)') "Debug: Finish propagation_start for '" + trim(this%namespace%get()) + "'"
+      call messages_info(1)
+    end if
+
+    call multisystem_debug_write_event_out(debug_handle, system_clock = this%clock, prop_clock = this%prop%clock)
+
     POP_SUB(system_propagation_start)
   end subroutine system_propagation_start
 
   ! ---------------------------------------------------------
   subroutine system_propagation_finish(this)
     class(system_t),      intent(inout) :: this
+    type(event_handle_t) :: debug_handle
 
     PUSH_SUB(system_propagation_finish)
+
+    debug_handle = multisystem_debug_write_event_in(this%namespace, event_function_call_t("system_propagation_finish"), &
+                                                    system_clock = this%clock, prop_clock = this%prop%clock)
 
     ! Finish output
     call this%output_finish()
 
     ! System-specific and propagator-specific finalization step
     call this%do_td_operation(this%prop%final_step)
+
+    call multisystem_debug_write_event_out(debug_handle, system_clock = this%clock, prop_clock = this%prop%clock)
 
     POP_SUB(system_propagation_finish)
   end subroutine system_propagation_finish
