@@ -85,17 +85,17 @@ contains
 
         select case(inb)
         case(0)
-          !          op%w(is, ip) = CNST(1.0) + weight/CNST(8.0)
+          !          op%w(is, ip) = M_ONE + weight/CNST(8.0)
           op%w(is, ip) = CNST(0.125)*(weight + CNST(7.0))
         case(1)
           !          op%w(is, ip) = weight/CNST(16.0)
-          op%w(is, ip) = CNST(0.0625)*(weight - CNST(1.0))
+          op%w(is, ip) = CNST(0.0625)*(weight - M_ONE)
         case(2)
           !          op%w(is, ip) = weight/CNST(32.0)
-          op%w(is, ip) = CNST(0.03125)*(weight - CNST(1.0))
+          op%w(is, ip) = CNST(0.03125)*(weight - M_ONE)
         case(3)
           !          op%w(is, ip) = weight/CNST(64.0)
-          op%w(is, ip) = CNST(0.015625)*(weight - CNST(1.0))
+          op%w(is, ip) = CNST(0.015625)*(weight - M_ONE)
         case default
           ASSERT(.false.)
         end select

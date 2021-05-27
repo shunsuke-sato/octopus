@@ -467,7 +467,7 @@ contains
     SAFE_ALLOCATE(res0(1:mesh0%np))
     SAFE_ALLOCATE(guess1(1:mesh1%np_part))
 
-    alpha = CNST(4.0)*mesh0%spacing(1)
+    alpha = M_FOUR*mesh0%spacing(1)
     beta = M_ONE / ( alpha**space%dim * sqrt(M_PI)**space%dim )
 
     ! Set the centers of the Gaussians by hand

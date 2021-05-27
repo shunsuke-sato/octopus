@@ -780,7 +780,7 @@ contains
 
         do iqn = st%d%kpt%start, st%d%kpt%end
           do ib = st%group%block_start, st%group%block_end
-            call batch_scal(gr%mesh%np, CNST(1.0) - mix_coefficient(scf%smix), st%group%psib(ib, iqn))
+            call batch_scal(gr%mesh%np, M_ONE - mix_coefficient(scf%smix), st%group%psib(ib, iqn))
             call batch_axpy(gr%mesh%np, mix_coefficient(scf%smix), psioutb(ib, iqn), st%group%psib(ib, iqn))
           end do
         end do

@@ -367,7 +367,7 @@ contains
 
             !Only if we really have the same atoms
             if(iatom == jatom .and. rij < TOL_HIRSHFELD) then
-              grad(ip, :) = grad(ip, :) + (CNST(3.0)*rri*atom_dens + rri**2*atom_der)*tdensity/this%total_density(ip)*xxi
+              grad(ip, :) = grad(ip, :) + (M_THREE*rri*atom_dens + rri**2*atom_der)*tdensity/this%total_density(ip)*xxi
             end if
 
           end do

@@ -896,7 +896,7 @@ subroutine X(linear_solver_qmr_dotp)(this, namespace, hm, mesh, st, xb, bb, shif
     residue(ii) = rho(ii)
     ! if b is zero, the solution is trivial
     if(status(ii) == QMR_NOT_CONVERGED .and. abs(norm_b(ii)) <= M_EPSILON) then
-      exception_saved = CNST(0.0)
+      exception_saved = M_ZERO
       status(ii) = QMR_B_ZERO
       residue(ii) = norm_b(ii)
       saved_iter(ii) = iter
@@ -909,11 +909,11 @@ subroutine X(linear_solver_qmr_dotp)(this, namespace, hm, mesh, st, xb, bb, shif
   call X(preconditioner_apply_batch)(this%pre, namespace, mesh, hm, vvb, zzb, 1, omega = shift)
   call mesh_batch_nrm2(mesh, zzb, xsi)
 
-  gamma = CNST(1.0)
+  gamma = M_ONE
   oldgamma = gamma
   eta   = CNST(-1.0)
-  alpha = CNST(1.0)
-  theta = CNST(0.0)
+  alpha = M_ONE
+  theta = M_ZERO
 
   do while(iter < this%max_iter)
     iter = iter + 1
@@ -991,7 +991,7 @@ subroutine X(linear_solver_qmr_dotp)(this, namespace, hm, mesh, st, xb, bb, shif
     ! z^{i+1} = P v^{i+1}
     call X(preconditioner_apply_batch)(this%pre, namespace, mesh, hm, vvb, zzb, 1, omega = shift)
     ! z^{i+1} = P v^{i+1}/ \alpha^{i+1}
-    call batch_scal(mesh%np, CNST(1.0)/alpha, zzb, a_full = .false.)
+    call batch_scal(mesh%np, M_ONE/alpha, zzb, a_full = .false.)
 
     ! \xsi_{i+1} = ||z^{i+1}||_2
     call mesh_batch_nrm2(mesh, zzb, xsi)
@@ -1004,7 +1004,7 @@ subroutine X(linear_solver_qmr_dotp)(this, namespace, hm, mesh, st, xb, bb, shif
 
       oldgamma(ii) = gamma(ii)
       ! \gamma_i = 1/sqrt(1+\theta_i^2)
-      gamma(ii) = CNST(1.0)/sqrt(CNST(1.0) + theta(ii)**2)
+      gamma(ii) = M_ONE/sqrt(M_ONE + theta(ii)**2)
 
       ! If \gamma_i == 0, method fails
       if(status(ii) == QMR_NOT_CONVERGED .and. abs(gamma(ii)) < M_EPSILON) then
@@ -1042,7 +1042,7 @@ subroutine X(linear_solver_qmr_dotp)(this, namespace, hm, mesh, st, xb, bb, shif
 
     ! FIXME: if the states are converged, why changing them here
     ! x^{i} = x^{i-1} + \delta_x^{i}
-    call batch_axpy(mesh%np, CNST(1.0), deltax, xb)
+    call batch_axpy(mesh%np, M_ONE, deltax, xb)
     ! r^{i} = r^{i-1} - \delta_r^i
     ! This is given by r^{i} = b - Hx^{i}
     call batch_axpy(mesh%np, CNST(-1.0), deltar, res)

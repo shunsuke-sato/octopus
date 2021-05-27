@@ -1711,7 +1711,7 @@ end subroutine X(compute_periodic_coulomb_integrals)
          do imp = 1, os%norbs
           ff(1:space%dim) = ff(1:space%dim) - this%X(n)(imp,im,ispin,ios)/st%smear%el_per_state*gradn(im,imp,ispin,1:space%dim)
          end do !imp
-       ff(1:space%dim) = ff(1:space%dim) + CNST(0.5)*gradn(im, im, ispin,1:space%dim)
+       ff(1:space%dim) = ff(1:space%dim) + M_HALF*gradn(im, im, ispin,1:space%dim)
        end do !im
      else
        ff(1:space%dim) = M_ZERO
@@ -1723,7 +1723,7 @@ end subroutine X(compute_periodic_coulomb_integrals)
                                            *gradn(im,imp,ispin,1:space%dim)
            end do !imp 
            if(ispin <= this%spin_channels) &
-             ff(1:space%dim) = ff(1:space%dim) + CNST(0.5)*gradn(im, im, ispin,1:space%dim)
+             ff(1:space%dim) = ff(1:space%dim) + M_HALF*gradn(im, im, ispin,1:space%dim)
          end do !im
        end do !ispin
      end if

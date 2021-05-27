@@ -169,7 +169,7 @@
       do dj = -1, 1
         do dk = -1, 1
           dd = abs(di) + abs(dj) + abs(dk)
-          weight(di, dj, dk) = CNST(0.5)**dd
+          weight(di, dj, dk) = M_HALF**dd
         end do
       end do
     end do
@@ -381,7 +381,7 @@
       do dj = -1, 1
         do dk = -1, 1
           dd = abs(di) + abs(dj) + abs(dk)
-          weight(di, dj, dk) = CNST(0.5)**dd
+          weight(di, dj, dk) = M_HALF**dd
         end do
       end do
     end do

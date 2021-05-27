@@ -450,7 +450,7 @@ contains
                   do idir = 1, der%dim
                     !$omp parallel do
                     do ip = 1, der%mesh%np
-                      gpsi(ip, idir, idim) = (M_ONE+CNST(2.0)*hm%vtau(ip,ispin))*gpsi(ip, idir, idim)
+                      gpsi(ip, idir, idim) = (M_ONE+M_TWO*hm%vtau(ip,ispin))*gpsi(ip, idir, idim)
                     end do
                     !$omp end parallel do
                   end do
@@ -610,8 +610,8 @@ contains
         do idir = 1, der%dim
           !$omp parallel do
           do ip = 1, der%mesh%np
-            gpsi_i(ip, idir, idim) = (M_ONE+CNST(2.0)*hm%vtau(ip,ispin))*gpsi_i(ip, idir, idim)
-            gpsi_j(ip, idir, idim) = (M_ONE+CNST(2.0)*hm%vtau(ip,ispin))*gpsi_j(ip, idir, idim)
+            gpsi_i(ip, idir, idim) = (M_ONE+M_TWO*hm%vtau(ip,ispin))*gpsi_i(ip, idir, idim)
+            gpsi_j(ip, idir, idim) = (M_ONE+M_TWO*hm%vtau(ip,ispin))*gpsi_j(ip, idir, idim)
           end do
           !$omp end parallel do
         end do

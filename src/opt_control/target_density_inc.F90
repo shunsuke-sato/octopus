@@ -89,7 +89,7 @@
           rotation_matrix = M_z0
 
           do ist = 1, tmp_st%nst
-            rotation_matrix(ist, ist) = CNST(1.0)
+            rotation_matrix(ist, ist) = M_ONE
           end do
 
           do ist = 1, tg%st%nst
@@ -485,7 +485,7 @@
 
     if(tg%curr_functional /= oct_no_curr) then
       if (target_mode(tg)  ==  oct_targetmode_static ) then
-        call chi_current(tg, gr, kpoints, CNST(1.0), psi_in, chi_out)
+        call chi_current(tg, gr, kpoints, M_ONE, psi_in, chi_out)
       end if
     end if 
 

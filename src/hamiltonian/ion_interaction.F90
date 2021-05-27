@@ -118,7 +118,7 @@ contains
 
     PUSH_SUB(ion_interaction_end)
 
-    this%alpha = -CNST(1.0)
+    this%alpha = -M_ONE
 
     call distributed_end(this%dist)
 
@@ -155,12 +155,12 @@ contains
 
     if(present(energy_components)) then
       ASSERT(ubound(energy_components, dim = 1) == ION_NUM_COMPONENTS)
-      energy_components = CNST(0.0)
+      energy_components = M_ZERO
     end if      
 
     if(present(force_components)) then
       ASSERT(all(ubound(force_components) == (/space%dim, natoms, ION_NUM_COMPONENTS/)))
-      force_components = CNST(0.0)
+      force_components = M_ZERO
     end if 
 
     energy = M_ZERO

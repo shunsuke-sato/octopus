@@ -756,7 +756,7 @@ contains
     ! the hartree energy density
     do is = 1, st%d%nspin
       do ip = 1, gr%mesh%np
-        energy_density(ip, is) = energy_density(ip, is) + CNST(0.5)*st%rho(ip, is)*hm%vhartree(ip)
+        energy_density(ip, is) = energy_density(ip, is) + M_HALF*st%rho(ip, is)*hm%vhartree(ip)
       end do
     end do
 

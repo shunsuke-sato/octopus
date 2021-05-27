@@ -429,7 +429,7 @@ subroutine X(subspace_diag_hamiltonian)(namespace, mesh, st, hm, ik, hmss)
         lda = int(hpsib(st%group%block_start)%pack_size(1), 8), &
         B = st%group%psib(st%group%block_start, ik)%ff_device, offB = 0_8, &
         ldb = int(st%group%psib(st%group%block_start, ik)%pack_size(1), 8), &
-        beta = R_TOTYPE(CNST(0.0)), &
+        beta = R_TOTYPE(M_ZERO), &
         C = hmss_buffer, offC = 0_8, ldc = int(st%nst, 8))
 
     else
@@ -467,7 +467,7 @@ subroutine X(subspace_diag_hamiltonian)(namespace, mesh, st, hm, ik, hmss)
           alpha = R_TOTYPE(mesh%volume_element), &
           A = hpsi_buffer, offA = 0_8, lda = int(st%nst, 8), &
           B = psi_buffer, offB = 0_8, ldb = int(st%nst, 8), &
-          beta = R_TOTYPE(CNST(1.0)), & 
+          beta = R_TOTYPE(M_ONE), & 
           C = hmss_buffer, offC = 0_8, ldc = int(st%nst, 8))
         
         call accel_finish()
@@ -495,7 +495,7 @@ subroutine X(subspace_diag_hamiltonian)(namespace, mesh, st, hm, ik, hmss)
     block_size = max(20, hardware%l2%size/(2*16*st%nst))
 #endif
 
-    hmss(1:st%nst, 1:st%nst) = CNST(0.0)
+    hmss(1:st%nst, 1:st%nst) = M_ZERO
     
     SAFE_ALLOCATE(psi(1:st%nst, 1:st%d%dim, 1:block_size))
     SAFE_ALLOCATE(hpsi(1:st%nst, 1:st%d%dim, 1:block_size))
@@ -524,7 +524,7 @@ subroutine X(subspace_diag_hamiltonian)(namespace, mesh, st, hm, ik, hmss)
         alpha = R_TOTYPE(mesh%volume_element),      &
         a = hpsi(1, 1, 1), lda = ubound(hpsi, dim = 1),   &
         b = psi(1, 1, 1), ldb = ubound(psi, dim = 1), &
-        beta = R_TOTYPE(CNST(1.0)),                     & 
+        beta = R_TOTYPE(M_ONE),                     & 
         c = hmss(1, 1), ldc = ubound(hmss, dim = 1))
     end do
 
@@ -533,7 +533,7 @@ subroutine X(subspace_diag_hamiltonian)(namespace, mesh, st, hm, ik, hmss)
 
   end if
   
-  call profiling_count_operations((R_ADD + R_MUL)*st%nst*(st%nst - CNST(1.0))*mesh%np)
+  call profiling_count_operations((R_ADD + R_MUL)*st%nst*(st%nst - M_ONE)*mesh%np)
   
   do ib = st%group%block_start, st%group%block_end
     call hpsib(ib)%end()

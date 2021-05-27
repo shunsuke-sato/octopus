@@ -428,7 +428,7 @@ subroutine X(eigensolver_cg2) (namespace, mesh, st, hm, xc, pre, tol, niter, con
           exit iter_loop
         end if
       else
-        if(first_delta_e <= CNST(2.0)*M_EPSILON) then
+        if(first_delta_e <= M_TWO*M_EPSILON) then
           if(converged == ist - 1) converged = ist ! only consider the first converged eigenvectors
           exit iter_loop
         end if

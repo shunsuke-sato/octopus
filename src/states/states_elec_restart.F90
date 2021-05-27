@@ -245,7 +245,7 @@ contains
           if (err /= 0) err2(1) = err2(1) + 1
 
           write(lines(1), '(e21.14,a,e21.14)') st%occ(ist,ik), ' | ', st%eigenval(ist, ik)
-          write(lines(1), '(a,a,e21.14)') trim(lines(1)), ' | ', CNST(0.0)
+          write(lines(1), '(a,a,e21.14)') trim(lines(1)), ' | ', M_ZERO
           do idir = 1, space%dim
             write(lines(1), '(a,a,e21.14)') trim(lines(1)), ' | ', kpoint(idir)
           end do
@@ -1444,7 +1444,7 @@ contains
 
         rotation_matrix = M_z0
         do ist = 1, stin%nst
-          rotation_matrix(ist, ist) = CNST(1.0)
+          rotation_matrix(ist, ist) = M_ONE
         end do
 
         do ist = 1, st%nst

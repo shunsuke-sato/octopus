@@ -289,7 +289,7 @@ contains
     out_file = io_open('td.general/chi', global_namespace, action='write')
     write(out_file,'(a)') trim(header)
     do kk = 1, energy_steps
-      dielectric(1:3, kk) = (dielectric(1:3, kk) - M_ONE)/(CNST(4.0)*M_PI)
+      dielectric(1:3, kk) = (dielectric(1:3, kk) - M_ONE)/(M_FOUR*M_PI)
       ww = (kk-1)*spectrum%energy_step + spectrum%min_energy
       write(out_file, '(e15.6)', advance='no') ww
       do idir = 1, space%dim

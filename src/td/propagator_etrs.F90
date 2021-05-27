@@ -88,7 +88,7 @@ contains
       SAFE_ALLOCATE(vhxc_t2(1:gr%mesh%np, 1:st%d%nspin))
       call lalg_copy(gr%mesh%np, st%d%nspin, hm%vhxc, vhxc_t1)
 
-      call propagation_ops_elec_fuse_density_exp_apply(tr%te, namespace, st, gr, hm, CNST(0.5)*dt, dt)
+      call propagation_ops_elec_fuse_density_exp_apply(tr%te, namespace, st, gr, hm, M_HALF*dt, dt)
 
       call v_ks_calc(ks, namespace, space, hm, st, ions, calc_current = .false., calc_energy = .false., calc_eigenval = .false.)
 
@@ -98,7 +98,7 @@ contains
 
     else
 
-      call propagation_ops_elec_exp_apply(tr%te, namespace, st, gr%mesh, hm, CNST(0.5)*dt)
+      call propagation_ops_elec_exp_apply(tr%te, namespace, st, gr%mesh, hm, M_HALF*dt)
 
     end if
 
@@ -117,7 +117,7 @@ contains
     call propagation_ops_elec_update_hamiltonian(namespace, space, st, gr%mesh, hm, time)
     
     ! propagate dt/2 with H(time - dt)
-    call propagation_ops_elec_fuse_density_exp_apply(tr%te, namespace, st, gr, hm, CNST(0.5)*dt)
+    call propagation_ops_elec_fuse_density_exp_apply(tr%te, namespace, st, gr, hm, M_HALF*dt)
 
     if(hm%theory_level /= INDEPENDENT_PARTICLES) then
       SAFE_DEALLOCATE_A(vhxc_t1)
@@ -353,8 +353,8 @@ contains
          tr%vksold%vtau_old(:, :, 1:3), time, tr%vksold%vtau_old(:, :, 0))
       do ispin = 1, st%d%nspin
         do ip = 1, gr%mesh%np
-          vold(ip, ispin) =  CNST(0.5)*dt*(hm%vhxc(ip, ispin) - vold(ip, ispin))
-          vtauold(ip, ispin) =  CNST(0.5)*dt*(hm%vtau(ip, ispin) - vtauold(ip, ispin))
+          vold(ip, ispin) =  M_HALF*dt*(hm%vhxc(ip, ispin) - vold(ip, ispin))
+          vtauold(ip, ispin) =  M_HALF*dt*(hm%vtau(ip, ispin) - vtauold(ip, ispin))
         end do
       end do
     else
@@ -364,7 +364,7 @@ contains
 
       do ispin = 1, st%d%nspin
         do ip = 1, gr%mesh%np
-          vold(ip, ispin) =  CNST(0.5)*dt*(hm%vhxc(ip, ispin) - vold(ip, ispin))
+          vold(ip, ispin) =  M_HALF*dt*(hm%vhxc(ip, ispin) - vold(ip, ispin))
         end do
       end do
     end if
@@ -438,10 +438,10 @@ contains
 
         call hamiltonian_elec_base_set_phase_corr(hm%hm_base, gr%mesh, st%group%psib(ib, ik))
         if (hamiltonian_elec_inh_term(hm)) then
-          call exponential_apply_batch(tr%te, namespace, gr%mesh, hm, st%group%psib(ib, ik), CNST(0.5)*dt, &
+          call exponential_apply_batch(tr%te, namespace, gr%mesh, hm, st%group%psib(ib, ik), M_HALF*dt, &
             inh_psib = hm%inh_st%group%psib(ib, ik))
         else
-          call exponential_apply_batch(tr%te, namespace, gr%mesh, hm, st%group%psib(ib, ik), CNST(0.5)*dt)
+          call exponential_apply_batch(tr%te, namespace, gr%mesh, hm, st%group%psib(ib, ik), M_HALF*dt)
         end if
         call hamiltonian_elec_base_unset_phase_corr(hm%hm_base, gr%mesh, st%group%psib(ib, ik))
 

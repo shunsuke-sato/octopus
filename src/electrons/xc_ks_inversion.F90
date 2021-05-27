@@ -402,7 +402,7 @@ contains
     !%Description
     !% prefactor for iterative KS inversion convergence scheme from Godby based on van Leeuwen scheme
     !%End    
-    call parse_variable(namespace, 'InvertKSGodbyMu', CNST(1.0), mu)
+    call parse_variable(namespace, 'InvertKSGodbyMu', M_ONE, mu)
 
     !%Variable InvertKSGodbyPower
     !%Type float
@@ -490,7 +490,7 @@ contains
         beta = diffdensity*CNST(0.001) !parameter to avoid numerical problems due to small denominator
   
         ! proposition to increase convergence speed progressively
-        alpha = max(CNST(0.05), CNST(0.5) - diffdensity*CNST(100.0)*CNST(0.45))
+        alpha = max(CNST(0.05), M_HALF - diffdensity*CNST(100.0)*CNST(0.45))
         write(message(1),'(a,2E15.4,3I8, 2E15.4)') &
           ' KSinversion: diffdensity, convdensity, imax, counter, max_iter, alpha, beta ', &
           diffdensity, convdensity, imax, counter, max_iter, alpha, beta

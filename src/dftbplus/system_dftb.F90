@@ -377,13 +377,13 @@ contains
 
       ! initialize with wrong arguments for the moment, will be overriden later
       call setChildValue(pElecDyn, "Steps", 1)
-      call setChildValue(pElecDyn, "TimeStep", CNST(1.0))
+      call setChildValue(pElecDyn, "TimeStep", M_ONE)
       call setChild(pElecDyn, "Perturbation", pPerturb)
       if (this%laser_field) then
         call setChild(pPerturb, "Laser", pLaser)
-        call setChildValue(pLaser, "PolarizationDirection", [ CNST(1.0) , CNST(0.0) , CNST(0.0) ])
-        call setChildValue(pLaser, "LaserEnergy", CNST(1.0))
-        call setChildValue(pElecDyn, "FieldStrength", CNST(1.0))
+        call setChildValue(pLaser, "PolarizationDirection", [ M_ONE , M_ZERO , M_ZERO ])
+        call setChildValue(pLaser, "LaserEnergy", M_ONE)
+        call setChildValue(pElecDyn, "FieldStrength", M_ONE)
       else
         call setChild(pPerturb, "None", pLaser)
       end if

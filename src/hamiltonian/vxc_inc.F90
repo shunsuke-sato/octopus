@@ -319,7 +319,7 @@ subroutine xc_get_vxc(der, xcs, st, kpoints, psolver, namespace, space, rho, isp
   ! is fully distributed we do not need to allgather first
   if(present(ex) .or. present(ec)) then
 
-    energy(1:2) = CNST(0.0)
+    energy(1:2) = M_ZERO
     
     if(der%mesh%use_curvilinear) then
       do ip = ipstart, ipend
@@ -402,7 +402,7 @@ subroutine xc_get_vxc(der, xcs, st, kpoints, psolver, namespace, space, rho, isp
       ! contains the correction applied to the xc potential.
       do is = 1, spin_channels
         do ip = 1, der%mesh%np
-          ex_per_vol(ip) = vx(ip)*(CNST(3.0)*rho(ip, is) + sum(der%mesh%x(ip, 1:space%dim)*gdens(ip, 1:space%dim, is)))
+          ex_per_vol(ip) = vx(ip)*(M_THREE*rho(ip, is) + sum(der%mesh%x(ip, 1:space%dim)*gdens(ip, 1:space%dim, is)))
         end do
       end do
     end if
@@ -542,21 +542,21 @@ contains
     case(UNPOLARIZED)
       !$omp parallel do
       do ii = 1, der%mesh%np
-        dedd(ii, 1) = CNST(0.0)
+        dedd(ii, 1) = M_ZERO
         dens(ii, 1) = max(rho(ii, 1), M_ZERO)
       end do
 
     case(SPIN_POLARIZED)
       !$omp parallel do
       do ii = 1, der%mesh%np
-        dedd(ii, 1:2) = CNST(0.0)
+        dedd(ii, 1:2) = M_ZERO
         dens(ii, 1) = max(rho(ii, 1), M_ZERO)
         dens(ii, 2) = max(rho(ii, 2), M_ZERO)
       end do
 
     case(SPINORS)
       do ii = 1, der%mesh%np
-        dedd(ii, 1:spin_channels) = CNST(0.0)
+        dedd(ii, 1:spin_channels) = M_ZERO
         d(1:spin_channels) = rho(ii, 1:spin_channels)
         dtot = d(1) + d(2)
         dpol = sqrt((d(1) - d(2))**2 + &
@@ -940,7 +940,7 @@ subroutine xc_density_correction_calc(xcs, der, psolver, namespace, space, nspin
   SAFE_ALLOCATE(lrvxc(1:der%mesh%np_part))
 
   do ip = 1, der%mesh%np
-    lrvxc(ip) = CNST(-1.0)/(CNST(4.0)*M_PI)*refvx(ip)
+    lrvxc(ip) = CNST(-1.0)/(M_FOUR*M_PI)*refvx(ip)
   end do
   call dderivatives_lapl(der, lrvxc, nxc)
 
@@ -979,7 +979,7 @@ subroutine xc_density_correction_calc(xcs, der, psolver, namespace, space, nspin
           write(iunit, *) x1, qxc
         end if
       end if
-      if(x1 > CNST(1.0)) exit
+      if(x1 > M_ONE) exit
 
       qxc = get_qxc(der%mesh, nxc, density(:, 1), x1)
 
@@ -1106,11 +1106,11 @@ subroutine xc_density_correction_calc(xcs, der, psolver, namespace, space, nspin
 
   if(debug%info) then
     if(mpi_world%rank == 0) then
-      print*, "DD",  -CNST(2.0)*dd, -CNST(2.0)*mindd, -CNST(2.0)*maxdd
+      print*, "DD",  -M_TWO*dd, -M_TWO*mindd, -M_TWO*maxdd
     end if
   end if
   
-  if(present(deltaxc)) deltaxc = -CNST(2.0)*dd
+  if(present(deltaxc)) deltaxc = -M_TWO*dd
 
   if(debug%info) then
     call dio_function_output(OPTION__OUTPUTFORMAT__AXIS_X, "./static", "fnxc", namespace, space, &
@@ -1142,7 +1142,7 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
 
   do ip = 1, mesh%np
     if(density(ip) < ncutoff) then
-      nxc2(ip) = CNST(0.0)
+      nxc2(ip) = M_ZERO
     else
       nxc2(ip) = nxc(ip)
     end if

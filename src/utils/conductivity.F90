@@ -78,7 +78,7 @@
 
     call space_init(space, global_namespace)
 
-    call spectrum_init(spectrum, global_namespace, default_energy_step = CNST(0.0001), default_max_energy  = CNST(1.0))
+    call spectrum_init(spectrum, global_namespace, default_energy_step = CNST(0.0001), default_max_energy  = M_ONE)
  
     !%Variable ConductivitySpectrumTimeStepFactor
     !%Type integer
@@ -381,7 +381,7 @@
       '###########################################################################################################################'
 
     v0 = sqrt(sum(vel0(1:space%dim)**2))
-    if(.not. from_forces .or. v0 < epsilon(v0)) v0 = CNST(1.0)
+    if(.not. from_forces .or. v0 < epsilon(v0)) v0 = M_ONE
 
     if( .not. from_forces .and. parse_is_defined(global_namespace, 'GaugeVectorField')) then
       if(parse_block(global_namespace, 'GaugeVectorField', blk) == 0) then
@@ -484,7 +484,7 @@
       '###########################################################################################################################'
 
     v0 = sqrt(sum(vel0(1:space%dim)**2))
-    if(.not. from_forces .or. v0 < epsilon(v0)) v0 = CNST(1.0)
+    if(.not. from_forces .or. v0 < epsilon(v0)) v0 = M_ONE
 
     do ifreq = 1, energy_steps
       ww = spectrum%energy_step*(ifreq - 1) + spectrum%min_energy

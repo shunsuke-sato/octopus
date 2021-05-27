@@ -93,7 +93,7 @@ contains
     !% necessarily a maximum, and not necessarily the global maximum). 
     !%End
     call parse_variable(namespace, 'OCTEps', CNST(1.0e-6), iterator%eps)
-    if(iterator%eps < M_ZERO) iterator%eps = tiny(CNST(1.0))
+    if(iterator%eps < M_ZERO) iterator%eps = tiny(M_ONE)
 
     !%Variable OCTMaxIter
     !%Type integer

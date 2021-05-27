@@ -93,7 +93,7 @@ contains
 
       end if
       ! make sure that if the spacing is too large, the orbitals fit in a few points at least
-      radius = max(radius, CNST(2.0)*maxval(mesh%spacing(1:mesh%sb%dim)))
+      radius = max(radius, M_TWO*maxval(mesh%spacing(1:mesh%sb%dim)))
 
     POP_SUB(atomic_orbital_get_radius)
   end function atomic_orbital_get_radius

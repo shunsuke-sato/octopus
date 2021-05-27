@@ -805,7 +805,7 @@ contains
   FLOAT pure function dlog2(xx)
     FLOAT, intent(in) :: xx
 
-    dlog2 = log(xx)/log(CNST(2.0))
+    dlog2 = log(xx)/log(M_TWO)
   end function dlog2
 
   ! -------------------------------------------------------
@@ -1032,10 +1032,10 @@ contains
       hh = hh / con
       call f(x+hh, fx1)
       call f(x-hh, fx2)
-      a(1,i) = (fx1-fx2) / (CNST(2.0)*hh)
+      a(1,i) = (fx1-fx2) / (M_TWO*hh)
       fac = con**2
       do j = 2, i
-        a(j,i) = (a(j-1,i)*fac-a(j-1,i-1)) / (fac-CNST(1.0))
+        a(j,i) = (a(j-1,i)*fac-a(j-1,i-1)) / (fac-M_ONE)
         fac = con**2*fac
         errt = max(abs(a(j,i)-a(j-1,i)),abs(a(j,i)-a(j-1,i-1)))
         if (errt .le. err) then
