@@ -110,9 +110,7 @@ module hamiltonian_elec_oct_m
     zhamiltonian_elec_apply_atom,         &
     hamiltonian_elec_dump_vhxc,           &
     hamiltonian_elec_load_vhxc,           &
-    hamiltonian_elec_set_vhxc,            &
-    dh_mgga_terms,                        &
-    zh_mgga_terms
+    hamiltonian_elec_set_vhxc
 
   type, extends(hamiltonian_abst_t) :: hamiltonian_elec_t
     ! Components are public by default
