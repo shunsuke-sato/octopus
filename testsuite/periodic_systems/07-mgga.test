@@ -1,12 +1,12 @@
 # -*- coding: utf-8 mode: shell-script -*-
 
-Test       : Diamond TB09 functional
+Test       : MGGA functionals for solids
 Program    : octopus
 TestGroups : long-run, periodic_systems
 Enabled    : Yes
 
 # ground state
-Input      : 07-tb09.01-gs_symm.inp
+Input      : 07-mgga.01-tb09_gs_symm.inp
 
 #The reference values for this test must be copied from the one without symmetries
 match ; Total k-points   ; GREPFIELD(static/info, 'Total number of k-points', 6) ; 27
@@ -39,7 +39,7 @@ match ; Indirect gap ; GREPFIELD(static/info, 'Indirect gap', 10, 0) ; 0.2153
 
 #No check for k-points higher than 2, as they might not belong to the IBZ
 
-Input      : 07-tb09.02-gs_nosymm.inp
+Input      : 07-mgga.02-tb09_gs_nosymm.inp
 
 match ; Total k-points   ; GREPFIELD(static/info, 'Total number of k-points', 6) ; 27
 match ; Reduced k-points ; GREPFIELD(static/info, 'Number of symmetry-reduced k-points', 6) ; 27
@@ -77,7 +77,7 @@ match ; Eigenvalue [  k=20,n=16  ] ; GREPFIELD(static/info, '#k =  20', 3, 17) ;
 match ; Eigenvalue [  k=20,n=17  ] ; GREPFIELD(static/info, '#k =  20', 3, 18) ; 0.505459
 
 
-Input      : 07-tb09.03-td.inp
+Input      : 07-mgga.03-tb09_td.inp
 
 match ; Energy           [step  1] ; LINEFIELD(td.general/energy, -21, 3) ; -3.361334127677e+01
 match ; Energy           [step  5] ; LINEFIELD(td.general/energy, -16, 3) ; -3.361381983449e+01
