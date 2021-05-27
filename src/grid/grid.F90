@@ -70,11 +70,11 @@ module grid_oct_m
     type(symmetries_t)          :: symm
   end type grid_t
 
-  integer, parameter, public :: &
-    CURV_METHOD_UNIFORM = 1,    &
-    CURV_METHOD_GYGI    = 2,    &
-    CURV_METHOD_BRIGGS  = 3,    &
-    CURV_METHOD_MODINE  = 4
+  integer, parameter :: &
+    CURV_AFFINE  = 1,   &
+    CURV_GYGI    = 2,   &
+    CURV_BRIGGS  = 3,   &
+    CURV_MODINE  = 4
 
 contains
 
@@ -201,7 +201,7 @@ contains
     !% three kinds of adaptive meshes, although only one is currently working,
     !% the one invented by F. Gygi (<tt>curv_gygi</tt>). The code will stop if any of
     !% the other two is invoked. All are experimental with domain parallelization.
-    !%Option curv_uniform 1
+    !%Option curv_affine 1
     !% Regular, uniform rectangular grid.
     !%Option curv_gygi 2
     !% The deformation of the grid is done according to the scheme described by
@@ -215,24 +215,24 @@ contains
     !% Modine [N.A. Modine, G. Zumbach and E. Kaxiras, <i>Phys. Rev. B</i> <b>55</b>, 10289 (1997)]
     !% (NOT WORKING).
     !%End
-    call parse_variable(namespace, 'CurvMethod', CURV_METHOD_UNIFORM, cv_method)
+    call parse_variable(namespace, 'CurvMethod', CURV_AFFINE, cv_method)
     if (.not. varinfo_valid_option('CurvMethod', cv_method)) call messages_input_error(namespace, 'CurvMethod')
     call messages_print_var_option(stdout, "CurvMethod", cv_method)
 
     ! FIXME: The other two methods are apparently not working
-    if (cv_method > CURV_METHOD_GYGI) then
+    if (cv_method > CURV_GYGI) then
       call messages_experimental('Selected curvilinear coordinates method')
     end if
 
     select case (cv_method)
-    case (CURV_METHOD_BRIGGS)
+    case (CURV_BRIGGS)
       gr%coord_system => curv_briggs_t(namespace, space%dim, gr%sb%lsize(1:space%dim), grid_spacing(1:space%dim))
-    case (CURV_METHOD_GYGI)
+    case (CURV_GYGI)
       gr%coord_system => curv_gygi_t(namespace, space%dim, ions%natoms, ions%pos)
-    case (CURV_METHOD_MODINE)
+    case (CURV_MODINE)
       gr%coord_system => curv_modine_t(namespace, space%dim, ions%natoms, ions%pos, gr%sb%lsize(1:space%dim), &
         grid_spacing(1:space%dim))
-    case default
+    case (CURV_AFFINE)
       if (ions%latt%nonorthogonal) then
         gr%coord_system => affine_coordinates_t(namespace, space%dim, ions%latt%rlattice_primitive)
       else
