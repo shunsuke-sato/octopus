@@ -1857,8 +1857,9 @@ contains
 
         ! calculate the Laplacian of the wavefunction
         if (present(density_laplacian)) then
+          ! We do not need to set the ghost points, as this is always done by the above gradient
           do st_dim = 1, st%d%dim
-            call zderivatives_lapl(der, wf_psi(:,st_dim), lwf_psi(:,st_dim), set_bc = .false.)
+            call zderivatives_lapl(der, wf_psi(:,st_dim), lwf_psi(:,st_dim), ghost_update = .false., set_bc = .false.)
           end do
         end if
 
