@@ -418,6 +418,8 @@ subroutine X(h_mgga_terms) (hm, mesh, psib, hpsib, ghost_update)
   do idir = 1, mesh%sb%dim
     call hpsib%copy_to(gradb(idir))
   end do
+  ! Here we must not set the boundary conditions, if we have k-points. 
+  ! This is properly done in hamiltonian_elec_apply_batch who is calling this routine
   call X(derivatives_batch_grad)(hm%der, psib, gradb, ghost_update, set_bc = .false.)
   
   do ii = 1, psib%nst_linear

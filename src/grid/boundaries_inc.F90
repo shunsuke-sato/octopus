@@ -327,7 +327,7 @@ subroutine X(boundaries_set_batch)(boundaries, ffb, phase_correction)
       ASSERT(.not. ffb%has_phase)
     end if
   class default
-    ASSERT(.not. present(phase_correction))
+    !In this case we can only assume that the user knows what he is doing
   end select
 
   ! The boundary points are at different locations depending on the presence

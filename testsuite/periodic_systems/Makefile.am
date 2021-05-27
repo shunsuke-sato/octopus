@@ -53,6 +53,7 @@ dist_share_DATA =                                \
 	07-mgga.01-tb09_gs_symm.inp              \
 	07-mgga.02-tb09_gs_nosymm.inp            \
 	07-mgga.03-tb09_td.inp                   \
+        07-mgga.04-br89_gs.inp                   \
 	08-benzene_supercell.test                \
 	08-benzene_supercell.01-gs.inp           \
 	09-etsf_io.test                          \
