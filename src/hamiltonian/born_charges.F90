@@ -174,7 +174,12 @@ contains
         call output_tensor(iunit, TOFLOAT(abs(this%charge(:, :, iatom))), dim, unit_one)
 
         write(iunit,'(a)') 'Phase:'
-        phase(1:dim, 1:dim) = atan2(aimag(this%charge(1:dim, 1:dim, iatom)), TOFLOAT(this%charge(1:dim, 1:dim, iatom)))
+
+        where (abs(this%charge(1:dim, 1:dim, iatom)) > M_EPSILON)
+          phase(1:dim, 1:dim) = atan2(aimag(this%charge(1:dim, 1:dim, iatom)), TOFLOAT(this%charge(1:dim, 1:dim, iatom)))
+        else where
+          phase(1:dim, 1:dim) = M_ZERO
+        end where
         call output_tensor(iunit, phase(:, :), dim, unit_one, write_average = .false.)
         write(iunit,'(a)')
       end do
