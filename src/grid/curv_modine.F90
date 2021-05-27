@@ -285,7 +285,7 @@ contains
     FLOAT,                        intent(in)  :: chi(:)
     FLOAT,                        intent(out) :: xx(:)
 
-    FLOAT :: chi2(this%dim), rr, dd
+    FLOAT :: chi2(this%dim), rr2, dd
     integer :: iatom
 
     ! no PUSH_SUB, called too often
@@ -294,8 +294,8 @@ contains
 
     xx(:) = chi2(:)
     do iatom = 1, this%npos
-      rr = max(norm2(chi2(:) - this%csi(:, iatom)), CNST(1e-6))
-      dd = exp(-rr**2/(M_TWO*this%Jrange(iatom)**2))
+      rr2 = sum((chi2(:) - this%csi(:, iatom))**2)
+      dd = exp(-rr2/(M_TWO*this%Jrange(iatom)**2))
 
       xx(:) = xx(:) - this%Jlocal(iatom)*(chi2(:) - this%csi(:, iatom)) * dd
     end do
@@ -341,7 +341,7 @@ contains
     ! no PUSH_SUB, called too often
 
     call curv_modine_jacobian_inv(this, chi, dummy, Jac)
-    jdet = M_ONE*lalg_determinant(this%dim, jac, preserve_mat = .false.)
+    jdet = lalg_determinant(this%dim, jac, preserve_mat = .false.)
 
   end function curv_modine_det_jac
 
@@ -406,7 +406,7 @@ contains
     FLOAT,               intent(out) :: xx(:)
     FLOAT,               intent(out) :: Jac(:, :) !< the Jacobian
 
-    FLOAT :: chi2(this%dim), rr, dd, J2(this%dim)
+    FLOAT :: chi2(this%dim), rr2, dd, J2(this%dim)
     integer :: iatom, idim, idim2
 
     ! no PUSH_SUB, called too often
@@ -421,8 +421,8 @@ contains
     end do
 
     do iatom = 1, this%npos
-      rr = max(norm2(chi2(:) - this%csi(:, iatom)), CNST(1e-6))
-      dd = exp(-rr**2/(M_TWO*this%Jrange(iatom)**2))
+      rr2 = sum((chi2(:) - this%csi(:, iatom))**2)
+      dd = exp(-rr2/(M_TWO*this%Jrange(iatom)**2))
 
       xx(:) = xx(:) -  this%Jlocal(iatom)*(chi2(:) - this%csi(:, iatom)) * dd
 
@@ -461,7 +461,7 @@ contains
     FLOAT, intent(out) :: ff(:), jf(:, :)
 
     integer :: i1, j1, i2, j2, index1, index2
-    FLOAT :: rr, dd, dd2
+    FLOAT :: rr2, dd, dd2
     FLOAT, allocatable :: xx(:), chi2(:)
 
     ! no PUSH_SUB, called too often
@@ -485,8 +485,8 @@ contains
       xx = chi2
 
       do i2 = 1, modine_p%npos
-        rr = norm2(chi2 - modine_p%csi(:,i2))
-        dd = exp(-rr**2/(M_TWO*modine_p%Jrange(i2)**2))
+        rr2 = sum((chi2 - modine_p%csi(:,i2))**2)
+        dd = exp(-rr2/(M_TWO*modine_p%Jrange(i2)**2))
 
         xx = xx - modine_p%Jlocal(i2)*(chi2 - modine_p%csi(:,i2)) * dd
       end do
@@ -496,8 +496,8 @@ contains
         ff(index1) = xx(j1) - x_p(index1)
 
         do i2 = 1, modine_p%npos
-          rr  = sqrt(sum((chi2 - modine_p%csi(:,i2))**2))
-          dd  = exp(-rr**2/(M_TWO*modine_p%Jrange(i2)**2))
+          rr2  = sum((chi2 - modine_p%csi(:,i2))**2)
+          dd  = exp(-rr2/(M_TWO*modine_p%Jrange(i2)**2))
           dd2 = -M_TWO/(M_TWO*modine_p%Jrange(i2)**2)*dd
 
           index2 = (i2 - 1)*modine_p%dim + j1
