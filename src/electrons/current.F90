@@ -161,7 +161,7 @@ contains
             do ip = 1, der%mesh%np
               st%current(ip, idir, 1) = st%current(ip, idir, 1) + ww*aimag(conjg(psi(ip, 1))*gpsi(ip, 1))
               st%current(ip, idir, 2) = st%current(ip, idir, 2) + ww*aimag(conjg(psi(ip, 2))*gpsi(ip, 2))
-              c_tmp = conjg(psi(ip, 1))*gpsi(ip, 2) - psi(ip, 2)*conjg(gpsi(ip, 1))
+              c_tmp = -M_HALF*M_ZI*(conjg(psi(ip, 2))*gpsi(ip, 1) - psi(ip, 1)*conjg(gpsi(ip, 2)))
               st%current(ip, idir, 3) = st%current(ip, idir, 3) + ww*TOFLOAT(c_tmp)
               st%current(ip, idir, 4) = st%current(ip, idir, 4) + ww*aimag(c_tmp)
             end do
@@ -349,8 +349,8 @@ contains
                     ww*aimag(conjg(psi(ip, 1))*hrpsi(ip, 1) - conjg(psi(ip, 1))*rhpsi(ip, 1))
                   st%current(ip, idir, 2) = st%current(ip, idir, 2) + &
                     ww*aimag(conjg(psi(ip, 2))*hrpsi(ip, 2) - conjg(psi(ip, 2))*rhpsi(ip, 2))
-                  c_tmp = conjg(psi(ip, 1))*hrpsi(ip, 2) - conjg(psi(ip, 1))*rhpsi(ip, 2) &
-                    -psi(ip, 2)*conjg(hrpsi(ip, 1)) - psi(ip, 2)*conjg(rhpsi(ip, 1))
+                  c_tmp = -M_HALF*M_ZI*(conjg(psi(ip, 2))*hrpsi(ip, 1) - conjg(psi(ip, 2))*rhpsi(ip, 1) &
+                    -psi(ip, 1)*conjg(hrpsi(ip, 2)) - psi(ip, 1)*conjg(rhpsi(ip, 2)))
                   st%current(ip, idir, 3) = st%current(ip, idir, 3) + ww*TOFLOAT(c_tmp)
                   st%current(ip, idir, 4) = st%current(ip, idir, 4) + ww*aimag(c_tmp)
                 end do
@@ -490,7 +490,7 @@ contains
                     ww*aimag(conjg(psi(ip, 1))*gpsi(ip, idir, 1))
                   st%current(ip, idir, 2) = st%current(ip, idir, 2) + &
                     ww*aimag(conjg(psi(ip, 2))*gpsi(ip, idir, 2))
-                  c_tmp = conjg(psi(ip, 1))*gpsi(ip, idir, 2) - psi(ip, 2)*conjg(gpsi(ip, idir, 1))
+                  c_tmp = -M_HALF*M_ZI*(conjg(psi(ip, 2))*gpsi(ip, idir, 1) - psi(ip, 1)*conjg(gpsi(ip, idir, 2)))
                   st%current(ip, idir, 3) = st%current(ip, idir, 3) + ww*TOFLOAT(c_tmp)
                   st%current(ip, idir, 4) = st%current(ip, idir, 4) + ww*aimag(c_tmp)
                 end do
