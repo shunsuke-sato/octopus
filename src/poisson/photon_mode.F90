@@ -143,6 +143,11 @@ contains
       call MPI_Bcast(this%lambda(1), this%nmodes, MPI_FLOAT, 0, mpi_world%comm, ierr)
       call MPI_Bcast(this%pol(1,1), this%nmodes*3, MPI_FLOAT, 0, mpi_world%comm, ierr)
 #endif
+    else
+        if(.not.parse_is_defined(namespace, 'PhotonModes')) then
+          call messages_write('You need to specify the correct external photon modes file or define the PhotonModes variable!')
+          call messages_fatal(namespace=namespace)
+        end if
     end if
 
     !%Variable PhotonModes
