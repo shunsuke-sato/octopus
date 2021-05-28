@@ -82,11 +82,6 @@ contains
 
     PUSH_SUB(states_elec_write_eigenvalues)
 
-    if(.not. st%calc_eigenval) then
-      POP_SUB(states_elec_write_eigenvalues)
-      return
-    end if
-    
     st_start_ = 1
     if(present(st_start)) st_start_ = st_start
     ASSERT(nst <= st%nst)
@@ -377,8 +372,8 @@ contains
 
     PUSH_SUB(states_elec_write_gaps)
 
-    if(.not. st%calc_eigenval .or. .not. mpi_grp_is_root(mpi_world) &
-     .or. .not. space%is_periodic() .or. st%smear%method  /=  SMEAR_SEMICONDUCTOR) then 
+    if(.not. mpi_grp_is_root(mpi_world) .or. .not. space%is_periodic() &
+         .or. st%smear%method  /=  SMEAR_SEMICONDUCTOR) then 
       POP_SUB(states_elec_write_gaps)
       return
     end if

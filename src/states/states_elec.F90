@@ -123,7 +123,6 @@ module states_elec_oct_m
     FLOAT, allocatable :: frozen_gdens(:,:,:)
     FLOAT, allocatable :: frozen_ldens(:,:)
 
-    logical            :: calc_eigenval
     logical            :: uniform_occ   !< .true. if occupations are equal for all states: no empty states, and no smearing
     
     FLOAT, allocatable :: eigenval(:,:) !< obviously the eigenvalues
@@ -274,22 +273,6 @@ contains
     !%End
     call parse_variable(namespace, 'ExcessCharge', M_ZERO, excess_charge)
 
-    !%Variable CalcEigenvalues
-    !%Type logical
-    !%Default yes
-    !%Section SCF
-    !%Description
-    !% (Experimental) When this variable is set to <tt>no</tt>,
-    !% Octopus will not calculate the eigenvalues or eigenvectors of
-    !% the Hamiltonian. Instead, Octopus will obtain the occupied
-    !% subspace. The advantage that calculation can be made faster by
-    !% avoiding subspace diagonalization and other calculations.
-    !%
-    !% This mode cannot be used with unoccupied states.    
-    !%End
-    call parse_variable(namespace, 'CalcEigenvalues', .true., st%calc_eigenval)
-    if(.not. st%calc_eigenval) call messages_experimental('CalcEigenvalues = .false.')
-    
     !%Variable TotalStates
     !%Type integer
     !%Default 0
@@ -837,12 +820,6 @@ contains
 
     st%uniform_occ = smear_is_semiconducting(st%smear) .and. .not. unoccupied_states
 
-    if(.not. st%calc_eigenval .and. .not. st%uniform_occ) then
-      call messages_write('Calculation of the eigenvalues is required with unoccupied states', new_line = .true.)
-      call messages_write('or smearing.')
-      call messages_fatal(namespace=namespace)
-    end if
-    
     POP_SUB(states_elec_read_initial_occs)
   end subroutine states_elec_read_initial_occs
 
@@ -1317,7 +1294,6 @@ contains
       SAFE_ALLOCATE_SOURCE_A(stout%rho, stin%rho)
     end if
 
-    stout%calc_eigenval = stin%calc_eigenval
     stout%uniform_occ = stin%uniform_occ
     
     if(.not. optional_default(exclude_eigenval, .false.)) then

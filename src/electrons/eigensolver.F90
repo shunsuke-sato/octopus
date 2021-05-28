@@ -453,7 +453,7 @@ contains
         call zeigensolver_run(eigens, namespace, gr%mesh, st, hm, iter, ik)
       end if
 
-      if(st%calc_eigenval .and. .not. eigens%folded_spectrum) then
+      if(.not. eigens%folded_spectrum) then
         ! recheck convergence after subspace diagonalization, since states may have reordered
         eigens%converged(ik) = 0
         do ist = 1, st%nst
