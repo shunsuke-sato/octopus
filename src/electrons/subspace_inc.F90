@@ -26,7 +26,7 @@ subroutine X(subspace_diag)(this, namespace, mesh, st, hm, ik, eigenval, diff)
   type(hamiltonian_elec_t),    intent(in)    :: hm
   integer,                     intent(in)    :: ik
   FLOAT,                       intent(out)   :: eigenval(:)
-  FLOAT, optional,             intent(out)   :: diff(:)
+  FLOAT,                       intent(out)   :: diff(:)
 
   integer :: ist
   R_TYPE, allocatable :: psi(:, :, :)
@@ -63,7 +63,7 @@ subroutine X(subspace_diag)(this, namespace, mesh, st, hm, ik, eigenval, diff)
     
   end select
 
-  if(present(diff) .and. st%parallel_in_states) then
+  if(st%parallel_in_states) then
     call states_elec_parallel_gather(st, diff)
   end if
 
@@ -80,7 +80,7 @@ subroutine X(subspace_diag_standard)(namespace, mesh, st, hm, ik, eigenval, diff
   type(hamiltonian_elec_t),    intent(in)    :: hm
   integer,                     intent(in)    :: ik
   FLOAT,                       intent(out)   :: eigenval(:)
-  FLOAT, optional,             intent(out)   :: diff(:)
+  FLOAT,                       intent(out)   :: diff(:)
 
   R_TYPE, allocatable :: hmss(:, :), rdiff(:)
   integer             :: ib, minst, maxst
@@ -108,42 +108,38 @@ subroutine X(subspace_diag_standard)(namespace, mesh, st, hm, ik, eigenval, diff
   ! old ones.
   call states_elec_rotate(st, namespace, mesh, hmss, ik)
   
-  ! Recalculate the residues if requested by the diff argument.
-  if(present(diff)) then 
-
-    call profiling_in(prof_diff, TOSTRING(X(SUBSPACE_DIFF)))
+  ! Recalculate the residues.
+  call profiling_in(prof_diff, TOSTRING(X(SUBSPACE_DIFF)))
     
-    SAFE_ALLOCATE(rdiff(1:st%nst))
-    rdiff(1:st%nst) = R_TOTYPE(M_ZERO)
+  SAFE_ALLOCATE(rdiff(1:st%nst))
+  rdiff(1:st%nst) = R_TOTYPE(M_ZERO)
     
-    do ib = st%group%block_start, st%group%block_end
+  do ib = st%group%block_start, st%group%block_end
       
-      minst = states_elec_block_min(st, ib)
-      maxst = states_elec_block_max(st, ib)
+    minst = states_elec_block_min(st, ib)
+    maxst = states_elec_block_max(st, ib)
 
-      if(hamiltonian_elec_apply_packed(hm)) call st%group%psib(ib, ik)%do_pack()
+    if(hamiltonian_elec_apply_packed(hm)) call st%group%psib(ib, ik)%do_pack()
       
-      call st%group%psib(ib, ik)%copy_to(hpsib)
+    call st%group%psib(ib, ik)%copy_to(hpsib)
 
-      call X(hamiltonian_elec_apply_batch)(hm, namespace, mesh, st%group%psib(ib, ik), hpsib)
-      call batch_axpy(mesh%np, -eigenval, st%group%psib(ib, ik), hpsib)
-      call X(mesh_batch_dotp_vector)(mesh, hpsib, hpsib, rdiff(minst:maxst), reduce = .false.)
+    call X(hamiltonian_elec_apply_batch)(hm, namespace, mesh, st%group%psib(ib, ik), hpsib)
+    call batch_axpy(mesh%np, -eigenval, st%group%psib(ib, ik), hpsib)
+    call X(mesh_batch_dotp_vector)(mesh, hpsib, hpsib, rdiff(minst:maxst), reduce = .false.)
 
-      call hpsib%end()
+    call hpsib%end()
 
-      if(hamiltonian_elec_apply_packed(hm)) call st%group%psib(ib, ik)%do_unpack(copy = .false.)
+    if(hamiltonian_elec_apply_packed(hm)) call st%group%psib(ib, ik)%do_unpack(copy = .false.)
       
-    end do
+  end do
 
-    if (mesh%parallel_in_domains) call mesh%allreduce(rdiff)
-    diff(1:st%nst) = sqrt(abs(rdiff(1:st%nst)))
+  if (mesh%parallel_in_domains) call mesh%allreduce(rdiff)
+  diff(1:st%nst) = sqrt(abs(rdiff(1:st%nst)))
 
-    SAFE_DEALLOCATE_A(rdiff)
+  SAFE_DEALLOCATE_A(rdiff)
 
-    call profiling_out(prof_diff)
+  call profiling_out(prof_diff)
     
-  end if
-
   SAFE_DEALLOCATE_A(hmss)
 
   POP_SUB(X(subspace_diag_standard))
@@ -162,7 +158,7 @@ subroutine X(subspace_diag_scalapack)(namespace, mesh, st, hm, ik, eigenval, psi
   integer,                  intent(in)    :: ik
   FLOAT,                    intent(out)   :: eigenval(:)
   R_TYPE, contiguous,       intent(inout) :: psi(:, :, st%st_start:)
-  FLOAT, optional,          intent(out)   :: diff(:)
+  FLOAT,                    intent(out)   :: diff(:)
  
 #ifdef HAVE_SCALAPACK
   R_TYPE, allocatable :: hs(:, :), hpsi(:, :, :), evectors(:, :)
@@ -368,13 +364,11 @@ subroutine X(subspace_diag_scalapack)(namespace, mesh, st, hm, ik, eigenval, psi
     R_TOTYPE(M_ZERO), psi(1, 1, st%st_start), 1, 1, psi_desc(1))
   call profiling_out(prof_gemm2)
 
-  ! Recalculate the residues if requested by the diff argument.
-  if(present(diff)) then 
-    do ist = st%st_start, st%st_end
-      call X(hamiltonian_elec_apply_single)(hm, namespace, mesh, psi(:, :, ist) , hpsi(:, :, st%st_start), ist, ik)
-      diff(ist) = X(states_elec_residue)(mesh, st%d%dim, hpsi(:, :, st%st_start), eigenval(ist), psi(:, :, ist))
-    end do
-  end if
+  ! Recalculate the residues.
+  do ist = st%st_start, st%st_end
+    call X(hamiltonian_elec_apply_single)(hm, namespace, mesh, psi(:, :, ist) , hpsi(:, :, st%st_start), ist, ik)
+    diff(ist) = X(states_elec_residue)(mesh, st%d%dim, hpsi(:, :, st%st_start), eigenval(ist), psi(:, :, ist))
+  end do
   
   SAFE_DEALLOCATE_A(hpsi)
   SAFE_DEALLOCATE_A(hs)
