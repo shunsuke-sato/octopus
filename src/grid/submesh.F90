@@ -243,7 +243,7 @@ contains
       !Recursive formulation for the volume of n-ellipsoid 
       !Garry Tee, NZ J. Mathematics Vol. 34 (2005) p. 165 eqs. 53,55
       rc_norm_n = product(ceiling(rc / mesh%spacing(1:space%dim)) + 1.0)
-      if (mesh%use_curvilinear) rc_norm_n = rc_norm_n / mesh%cv%min_mesh_scaling_product
+      if (mesh%use_curvilinear) rc_norm_n = rc_norm_n / mesh%coord_system%min_mesh_scaling_product
       max_elements_count = 3**space%dim * int(M_PI**floor(0.5 * space%dim) * rc_norm_n * f_n(space%dim)) 
 
       SAFE_ALLOCATE(map_temp(1:max_elements_count))

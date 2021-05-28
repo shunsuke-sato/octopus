@@ -19,7 +19,6 @@
 #include "global.h"
 
 module species_pot_oct_m
-  use curvilinear_oct_m
   use global_oct_m
   use io_function_oct_m
   use index_oct_m

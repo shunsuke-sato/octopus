@@ -22,7 +22,7 @@ module mesh_oct_m
   use basis_set_abst_oct_m
   use box_hypercube_oct_m
   use comm_oct_m
-  use curvilinear_oct_m
+  use coordinate_system_oct_m
   use global_oct_m
   use hypercube_oct_m
   use index_oct_m
@@ -85,7 +85,7 @@ module mesh_oct_m
   type, extends(basis_set_abst_t) :: mesh_t
     ! Components are public by default
     type(simul_box_t),   pointer :: sb  !< simulation box
-    type(curvilinear_t), pointer :: cv  
+    class(coordinate_system_t), pointer :: coord_system
     type(index_t)                :: idx 
     logical :: use_curvilinear
     
@@ -619,7 +619,7 @@ contains
     if(mesh%parallel_in_domains .or. force_) then
       call mesh_global_index_to_coords(mesh, ip, ix)
       chi(1:mesh%sb%dim) = ix(1:mesh%sb%dim) * mesh%spacing(1:mesh%sb%dim)
-      call curvilinear_chi2x(mesh%cv, mesh%sb%dim, mesh%sb%latt, chi(1:mesh%sb%dim), xx)
+      call mesh%coord_system%chi2x(chi(1:mesh%sb%dim), xx)
     else
       xx(:) = mesh%x(ip,:)
     end if
