@@ -126,7 +126,7 @@ subroutine mesh_init_stage_1(mesh, namespace, space, sb, coord_system, spacing, 
     ! one we selected. We choose the size that has the spacing closest
     ! to the requested one.
     do delta = -1, 1
-      spacing_new(delta) = CNST(2.0)*sb%lsize(idir)/TOFLOAT(2*mesh%idx%nr(2, idir) + 1 - delta)
+      spacing_new(delta) = M_TWO*sb%lsize(idir)/TOFLOAT(2*mesh%idx%nr(2, idir) + 1 - delta)
       spacing_new(delta) = abs(spacing_new(delta) - spacing(idir))
     end do
 
@@ -135,7 +135,7 @@ subroutine mesh_init_stage_1(mesh, namespace, space, sb, coord_system, spacing, 
     ASSERT(delta >= -1) 
     ASSERT(delta <=  1) 
 
-    mesh%spacing(idir) = CNST(2.0)*sb%lsize(idir)/TOFLOAT(2*mesh%idx%nr(2, idir) + 1 - delta)
+    mesh%spacing(idir) = M_TWO*sb%lsize(idir)/TOFLOAT(2*mesh%idx%nr(2, idir) + 1 - delta)
 
     ! we need to adjust the grid by adding or removing one point
     if(delta == -1) then
@@ -866,7 +866,7 @@ contains
     end do
 
     if(mesh%use_curvilinear) then
-      mesh%volume_element = CNST(1.0)
+      mesh%volume_element = M_ONE
     else
       mesh%volume_element = mesh%vol_pp(1)
     end if

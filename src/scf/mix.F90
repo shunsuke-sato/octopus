@@ -348,7 +348,7 @@ contains
         do is = 1, ns
           select case(sum(abs(smix%preconditioner%stencil%points(1:der%dim, is))))
           case(0)
-            smix%preconditioner%w(is, ip) = CNST(1.0) + weight/CNST(8.0)
+            smix%preconditioner%w(is, ip) = M_ONE + weight/CNST(8.0)
           case(1)
             smix%preconditioner%w(is, ip) = weight/CNST(16.0)
           case(2)

@@ -2218,7 +2218,7 @@ contains
     if(accel_is_enabled()) then
       max_mem = accel_global_memory_size()
       
-      if(st%d%cl_states_mem > CNST(1.0)) then
+      if(st%d%cl_states_mem > M_ONE) then
         max_mem = int(st%d%cl_states_mem, 8)*(1024_8)**2
       else if(st%d%cl_states_mem < CNST(0.0)) then
         max_mem = max_mem + int(st%d%cl_states_mem, 8)*(1024_8)**2

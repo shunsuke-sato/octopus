@@ -296,8 +296,8 @@ end if
       SAFE_DEALLOCATE_A(this%prev_vel)
 
     case (EXPMID_PREDICT_DT_2)
-      this%pos(:, 1:this%np) = CNST(1.5)*this%save_pos(:, 1:this%np) - CNST(0.5)*this%prev_pos(:, 1:this%np, 1)
-      this%vel(:, 1:this%np) = CNST(1.5)*this%save_vel(:, 1:this%np) - CNST(0.5)*this%prev_vel(:, 1:this%np, 1)
+      this%pos(:, 1:this%np) = CNST(1.5)*this%save_pos(:, 1:this%np) - M_HALF*this%prev_pos(:, 1:this%np, 1)
+      this%vel(:, 1:this%np) = CNST(1.5)*this%save_vel(:, 1:this%np) - M_HALF*this%prev_vel(:, 1:this%np, 1)
       this%prev_pos(:, 1:this%np, 1) = this%save_pos(:, 1:this%np)
       this%prev_vel(:, 1:this%np, 1) = this%save_vel(:, 1:this%np)
       this%quantities(POSITION)%clock = this%quantities(POSITION)%clock + CLOCK_TICK
@@ -356,8 +356,8 @@ end if
     case (EXPMID_CORRECT_DT_2)
       ! only correct for dt/2 if not converged yet
       if (.not. this%is_tolerance_reached(this%prop%scf_tol)) then
-        this%pos(:, 1:this%np) = CNST(0.5)*(this%pos(:, 1:this%np) + this%save_pos(:, 1:this%np))
-        this%vel(:, 1:this%np) = CNST(0.5)*(this%vel(:, 1:this%np) + this%save_vel(:, 1:this%np))
+        this%pos(:, 1:this%np) = M_HALF*(this%pos(:, 1:this%np) + this%save_pos(:, 1:this%np))
+        this%vel(:, 1:this%np) = M_HALF*(this%vel(:, 1:this%np) + this%save_vel(:, 1:this%np))
         this%quantities(POSITION)%clock = this%quantities(POSITION)%clock + CLOCK_TICK
         call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", &
                                             QUANTITY_LABEL(POSITION), this%quantities(POSITION)%clock, action="tick") )

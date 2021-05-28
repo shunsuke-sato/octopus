@@ -262,7 +262,7 @@ contains
       select case(sum(abs(this%corrector%stencil%points(1:der%dim, is))))
       case(0)
         this%corrector%w_re(is, 1) = CNST(27.0)/CNST(32.0) + &
-          (M_ONE - this%alpha_fmm)*M_TWO*M_PI*(CNST(3.0)/(M_PI*CNST(4.0)))**(CNST(2.0)/CNST(3.0))
+          (M_ONE - this%alpha_fmm)*M_TWO*M_PI*(M_THREE/(M_PI*M_FOUR))**(M_TWO/M_THREE)
       case(1)
         this%corrector%w_re(is, 1) = CNST(0.0625)
       case(2)
@@ -421,7 +421,7 @@ contains
 
       else ! Not common mesh; we add the self-interaction of the cell
         do ii = 1, mesh%np 
-          aux = M_TWO*M_PI*(CNST(3.0)*mesh%vol_pp(ii)/(M_PI*CNST(4.0)))**(CNST(2.0)/CNST(3.0))
+          aux = M_TWO*M_PI*(M_THREE*mesh%vol_pp(ii)/(M_PI*M_FOUR))**(M_TWO/M_THREE)
           pot(ii) = pot(ii) + aux*rho_tmp(ii)
         end do
       end if

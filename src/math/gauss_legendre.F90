@@ -32,11 +32,11 @@ module gauss_legendre_oct_m
   FLOAT, target :: GL_points_2(1) = (/                                   &
     CNST(-0.57735026919) /)
   FLOAT, target :: GL_weights_2(1) = (/                                  &
-    CNST(1.0) /)
+    M_ONE /)
 
   ! 3 point
   FLOAT, target :: GL_points_3(2) = (/                                   &
-    CNST(-0.774596669241), CNST(0.0) /)
+    CNST(-0.774596669241), M_ZERO /)
   FLOAT, target :: GL_weights_3(2) = (/                                  &
     CNST(0.555555555556), CNST(0.888888888889) /)
 
@@ -48,7 +48,7 @@ module gauss_legendre_oct_m
 
   ! 5 point
   FLOAT, target :: GL_points_5(3) = (/                                   &
-    CNST(-0.906179845939), CNST(-0.538469310106), CNST(0.0) /)
+    CNST(-0.906179845939), CNST(-0.538469310106), M_ZERO /)
   FLOAT, target :: GL_weights_5(3) = (/                                  &
     CNST(0.236926885056), CNST(0.478628670499), CNST(0.568888888889) /)
 
@@ -61,7 +61,7 @@ module gauss_legendre_oct_m
   ! 7 point
   FLOAT, target :: GL_points_7(4) = (/                                   &
     CNST(-0.949107912343), CNST(-0.741531185599), CNST(-0.405845151377), &
-    CNST(0.0) /)
+    M_ZERO /)
   FLOAT, target :: GL_weights_7(4) = (/                                  &
     CNST(0.129484966169), CNST(0.279705391489), CNST(0.381830050505),    &
     CNST(0.417959183673) /)
@@ -77,7 +77,7 @@ module gauss_legendre_oct_m
   ! 9 point
   FLOAT, target :: GL_points_9(5) = (/                                   &
     CNST(-0.968160239508), CNST(-0.836031107327), CNST(-0.613371432701), &
-    CNST(-0.324253423404), CNST(0.0) /)
+    CNST(-0.324253423404), M_ZERO /)
   FLOAT, target :: GL_weights_9(5) = (/                                  &
     CNST(0.0812743883616), CNST(0.180648160695), CNST(0.260610696403),   &
     CNST(0.31234707704), CNST(0.330239355001) /)
@@ -93,7 +93,7 @@ module gauss_legendre_oct_m
   ! 11 point
   FLOAT, target :: GL_points_11(6) = (/                                  &
     CNST(-0.978228658146), CNST(-0.887062599768), CNST(-0.730152005574), &
-    CNST(-0.519096129207), CNST(-0.269543155952), CNST(0.0) /)
+    CNST(-0.519096129207), CNST(-0.269543155952), M_ZERO /)
   FLOAT, target :: GL_weights_11(6) = (/                                 &
     CNST(0.0556685671162), CNST(0.125580369465), CNST(0.186290210928),   &
     CNST(0.233193764592),  CNST(0.26280454451),  CNST(0.272925086778) /)

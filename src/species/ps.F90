@@ -629,7 +629,7 @@ contains
 
     PUSH_SUB(ps_getradius)
 
-    ps%rc_max = CNST(0.0)
+    ps%rc_max = M_ZERO
 
     do l = 0, ps%lmax
       if(l == ps%llocal) cycle
@@ -678,7 +678,7 @@ contains
 
     case(PS_FILTER_TS)
       alpha = CNST(1.1)
-      gamma = CNST(2.0)
+      gamma = M_TWO
 
       rmax = spline_cutoff_radius(ps%vl, ps%projectors_sphere_threshold)
       call spline_filter_mask(ps%vl, max(0, ps%llocal), rmax, gmax, alpha, gamma)
@@ -1009,7 +1009,7 @@ contains
       ! Define the table for the pseudo-wavefunction components (using splines)
       ! with a correct normalization function
       do is = 1, ps%ispin
-        dens = CNST(0.0)
+        dens = M_ZERO
         do l = 1, ps%conf%p
           hato(2:ps_hgh%g%nrval) = ps_hgh%rphi(2:ps_hgh%g%nrval, l)/ps_hgh%g%rofi(2:ps_hgh%g%nrval)
           hato(1) = hato(2)
@@ -1074,7 +1074,7 @@ contains
       ! the wavefunctions
       do is = 1, ps%ispin
 
-        dens = CNST(0.0)
+        dens = M_ZERO
 
         do l = 1, ps_grid%no_l_channels
           hato(2:) = ps_grid%rphi(2:, l, 1+is)/g%rofi(2:)
@@ -1176,8 +1176,8 @@ contains
     SAFE_ALLOCATE(kbprojector(1:ps%g%nrval))
     SAFE_ALLOCATE(wavefunction(1:ps%g%nrval))
 
-    kbprojector = CNST(0.0)
-    wavefunction = CNST(0.0)
+    kbprojector = M_ZERO
+    wavefunction = M_ZERO
 
     density_is_known = .false.
 
@@ -1215,17 +1215,17 @@ contains
       SAFE_ALLOCATE(matrix(1:ps_xml%nchannels, 1:ps_xml%nchannels))
       SAFE_ALLOCATE(eigenvalues(1:ps_xml%nchannels))
 
-      ps%h = CNST(0.0)
+      ps%h = M_ZERO
 
       if(pseudo_nprojectors(ps_xml%pseudo) > 0) then
         do ll = 0, ps_xml%lmax
 
           if (is_diagonal(ps_xml%nchannels, ps_xml%dij(ll, :, :)) .or. &
               pseudo_has_total_angular_momentum(ps_xml%pseudo)) then
-            matrix = CNST(0.0)
+            matrix = M_ZERO
             do ic = 1, ps_xml%nchannels
               eigenvalues(ic) = ps_xml%dij(ll, ic, ic)
-              matrix(ic, ic) = CNST(1.0)
+              matrix(ic, ic) = M_ONE
             end do
           else
             ! diagonalize the coefficient matrix
@@ -1273,7 +1273,7 @@ contains
         ps%conf%l(ii) = ps_xml%wf_l(ii)
 
         if(ps%ispin == 2) then
-          ps%conf%occ(ii, 1) = min(ps_xml%wf_occ(ii), CNST(2.0)*ps_xml%wf_l(ii) + CNST(1.0))
+          ps%conf%occ(ii, 1) = min(ps_xml%wf_occ(ii), M_TWO*ps_xml%wf_l(ii) + M_ONE)
           ps%conf%occ(ii, 2) = ps_xml%wf_occ(ii) - ps%conf%occ(ii, 1)
         else
           ps%conf%occ(ii, 1) = ps_xml%wf_occ(ii)
@@ -1288,7 +1288,7 @@ contains
           if(ip <= ps_xml%grid_size) then
             wavefunction(ip) = ps_xml%wavefunction(ip, ii)
           else
-            wavefunction(ip) = CNST(0.0)
+            wavefunction(ip) = M_ZERO
           end if
         end do
       
@@ -1362,7 +1362,7 @@ contains
           ps%h(ll, 1, 1) = kbcos        
           kbprojector = kbprojector*kbnorm
         else
-          ps%h(ll, 1, 1) = CNST(0.0)
+          ps%h(ll, 1, 1) = M_ZERO
         end if
 
         call spline_fit(ps%g%nrval, ps%g%rofi, kbprojector, ps%kb(ll, 1))
@@ -1372,7 +1372,7 @@ contains
           if(ip <= ps_xml%grid_size) then
             wavefunction(ip) = ps_xml%wavefunction(ip, ll)
           else
-            wavefunction(ip) = CNST(0.0)
+            wavefunction(ip) = M_ZERO
           end if
         end do
 
@@ -1408,7 +1408,7 @@ contains
       SAFE_ALLOCATE(dens(1:ps%g%nrval, 1:1))
       
       dens(1:ps_xml%grid_size, 1) = ps_xml%density(1:ps_xml%grid_size)/ps%ispin
-      dens(ps_xml%grid_size + 1:ps%g%nrval, 1) = CNST(0.0)
+      dens(ps_xml%grid_size + 1:ps%g%nrval, 1) = M_ZERO
       
       do is = 1, ps%ispin
         call spline_fit(ps%g%nrval, ps%g%rofi, dens(:, 1), ps%density(is))
@@ -1535,9 +1535,9 @@ contains
     
     do ip = 1, ps%g%nrval
       rr = ps%g%rofi(ip)
-      vol(ip) = CNST(0.0)
+      vol(ip) = M_ZERO
       do ispin = 1, ps%ispin
-        vol(ip) = vol(ip) + spline_eval(ps%density(ispin), rr)*CNST(4.0)*M_PI*rr**5
+        vol(ip) = vol(ip) + spline_eval(ps%density(ispin), rr)*M_FOUR*M_PI*rr**5
       end do
     end do
 

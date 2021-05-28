@@ -211,7 +211,7 @@ contains
 
     do iatom = 1, ions%natoms
       ispecies = species_index(ions%atom(iatom)%species)
-      dr0dvra(iatom) = this%r0free(ispecies)/(CNST(3.0)*(vol_ratio(iatom)**(M_TWO/CNST(3.0))))
+      dr0dvra(iatom) = this%r0free(ispecies)/(M_THREE*(vol_ratio(iatom)**(M_TWO/M_THREE)))
       do jatom = 1, ions%natoms
         jspecies = species_index(ions%atom(jatom)%species)
         this%c6ab(iatom,jatom) = vol_ratio(iatom)*vol_ratio(jatom)*this%c6abfree(ispecies,jspecies) !this operation is done again inside the .c part for the non periodic case
@@ -227,8 +227,8 @@ contains
         do jatom = 1, ions%natoms
          jspecies = species_index(ions%atom(jatom)%species)
 
-         r0ab(iatom,jatom) = (vol_ratio(iatom)**(M_ONE/CNST(3.0)))*this%r0free(ispecies) &
-                           + (vol_ratio(jatom)**(M_ONE/CNST(3.0)))*this%r0free(jspecies)
+         r0ab(iatom,jatom) = (vol_ratio(iatom)**(M_ONE/M_THREE))*this%r0free(ispecies) &
+                           + (vol_ratio(jatom)**(M_ONE/M_THREE))*this%r0free(jspecies)
         end do
       end do
 
@@ -358,7 +358,7 @@ contains
 
     do iatom = 1, ions%natoms
       ispecies = species_index(ions%atom(iatom)%species)
-      dr0dvra(iatom) = this%r0free(ispecies)/(CNST(3.0)*(vol_ratio(iatom)**(M_TWO/CNST(3.0))))
+      dr0dvra(iatom) = this%r0free(ispecies)/(M_THREE*(vol_ratio(iatom)**(M_TWO/M_THREE)))
       do jatom = 1, ions%natoms
         jspecies = species_index(ions%atom(jatom)%species)
         c6ab(iatom, jatom) = vol_ratio(iatom)*vol_ratio(jatom)*this%c6abfree(ispecies, jspecies) 
@@ -371,8 +371,8 @@ contains
       do jatom = iatom, ions%natoms
        jspecies = species_index(ions%atom(jatom)%species)
 
-       r0ab(iatom, jatom) = (vol_ratio(iatom)**(M_ONE/CNST(3.0)))*this%r0free(ispecies) &
-                          + (vol_ratio(jatom)**(M_ONE/CNST(3.0)))*this%r0free(jspecies)
+       r0ab(iatom, jatom) = (vol_ratio(iatom)**(M_ONE/M_THREE))*this%r0free(ispecies) &
+                          + (vol_ratio(jatom)**(M_ONE/M_THREE))*this%r0free(jspecies)
        if(iatom /= jatom) r0ab(jatom, iatom) = r0ab(iatom, jatom)
       end do
     end do

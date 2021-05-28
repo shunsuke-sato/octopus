@@ -173,7 +173,7 @@ contains
 
         this%Fk(ik) = this%Fk(ik) + aux_funct(qpoint) * kpoints%full%weight(ik2)
       end do
-      this%Fk(ik) = this%Fk(ik)*CNST(4.0)*M_PI/kpoints%latt%rcell_volume
+      this%Fk(ik) = this%Fk(ik)*M_FOUR*M_PI/kpoints%latt%rcell_volume
     end do
 
     if(dist_kpt%parallel) then

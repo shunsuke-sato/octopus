@@ -270,7 +270,7 @@ contains
       !% The coordinates of the atomic orbitals used by the LCAO
       !% procedure will be rescaled by the value of this variable. 1.0 means no rescaling.
       !%End
-      call parse_variable(namespace, 'LCAOScaleFactor', CNST(1.0), this%orbital_scale_factor)
+      call parse_variable(namespace, 'LCAOScaleFactor', M_ONE, this%orbital_scale_factor)
       call messages_print_var_value(stdout, 'LCAOScaleFactor', this%orbital_scale_factor)
 
       !%Variable LCAOMaximumOrbitalRadius
@@ -990,7 +990,7 @@ contains
           if(iatom /= this%atom(iorb)) cycle
           
           call species_iwf_ilm(ions%atom(iatom)%species, this%level(iorb), 1, ii, ll, mm)
-          factor = ps%conf%occ(ii, 1)/(CNST(2.0)*ll + CNST(1.0))
+          factor = ps%conf%occ(ii, 1)/(M_TWO*ll + M_ONE)
          
           if(states_are_real(st)) then
             call dget_ao(this, st, mesh, ions, iorb, 1, dorbital, use_psi = .true.)
@@ -1021,12 +1021,12 @@ contains
 
         do iorb = 1, this%norb_atom(iatom)/this%mult
           call species_iwf_ilm(ions%atom(iatom)%species, iorb, 1, ii, ll, mm)
-          factors(iorb) = ps%conf%occ(ii, 1)/(CNST(2.0)*ll + CNST(1.0))
+          factors(iorb) = ps%conf%occ(ii, 1)/(M_TWO*ll + M_ONE)
         end do
 
         !$omp parallel do private(ip, aa, iorb) 
         do ip = 1, this%sphere(iatom)%np
-          aa = CNST(0.0)
+          aa = M_ZERO
           do iorb = 1, this%norb_atom(iatom)/this%mult
             aa = aa + factors(iorb)*this%orbitals(iatom)%dff_linear(ip, iorb)**2
           end do
@@ -1263,7 +1263,7 @@ contains
             if (abs(mag(2)) <= M_EPSILON) then
               phi = M_ZERO
             elseif (mag(2) < M_ZERO) then
-              phi = M_PI*CNST(3.0/2.0)
+              phi = M_PI*M_THREE*M_HALF
             elseif (mag(2) > M_ZERO) then
               phi = M_PI*M_HALF
             end if

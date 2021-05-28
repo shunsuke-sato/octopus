@@ -229,7 +229,7 @@ contains
 
         ASSERT(allocated(ps%density))
 
-        rmax = CNST(0.0)
+        rmax = M_ZERO
         do isp = 1, spin_channels
           rmax = max(rmax, spline_cutoff_radius(ps%density(isp), ps%projectors_sphere_threshold))
         end do
@@ -270,7 +270,7 @@ contains
         end do
 
         ! normalize
-        nrm = CNST(0.0)
+        nrm = M_ZERO
         do isp = 1, spin_channels
           nrm = nrm + dmf_integrate(mesh, rho(:, isp))
         end do
@@ -313,7 +313,7 @@ contains
 
         ASSERT(allocated(ps%density))
 
-        rmax = CNST(0.0)
+        rmax = M_ZERO
 
         do isp = 1, spin_channels
           rmax = max(rmax, spline_cutoff_radius(ps%density(isp), ps%projectors_sphere_threshold))
@@ -347,7 +347,7 @@ contains
         end do
 
         ! normalize
-        nrm = CNST(0.0)
+        nrm = M_ZERO
         do isp = 1, spin_channels
           nrm = nrm + dmf_integrate(mesh, rho(:, isp))
         end do
@@ -655,7 +655,7 @@ contains
       beta    = M_ONE
 
       ! the first dim variables are the position of the delta function
-      startval(1:space%dim) = CNST(1.0)
+      startval(1:space%dim) = M_ONE
 
       ! the dim+1 variable is the normalization of the delta function
       startval(space%dim+1) = beta

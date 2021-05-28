@@ -304,7 +304,7 @@ contains
 
     ! Here we put a Gaussian as the right-hand side of the linear solver
     ! Values are taken from the poisson_test routine
-    alpha = CNST(4.0)*sys%gr%mesh%spacing(1)
+    alpha = M_FOUR*sys%gr%mesh%spacing(1)
     beta = M_ONE / ( alpha**sys%space%dim * sqrt(M_PI)**sys%space%dim )
     ! The Gaussian is centered around the origin
     center = M_ZERO
@@ -706,7 +706,7 @@ contains
     end if
 
     do itime = 1, param%repetitions
-      call exponential_apply_batch(te, sys%namespace, sys%gr%mesh, sys%hm, sys%st%group%psib(1, 1), CNST(1.0))
+      call exponential_apply_batch(te, sys%namespace, sys%gr%mesh, sys%hm, sys%st%group%psib(1, 1), M_ONE)
     end do
 
     call test_prints_info_batch(sys%st, sys%gr, sys%st%group%psib(1, 1))
@@ -1174,8 +1174,8 @@ contains
 
     PUSH_SUB(test_clock)
 
-    test_clock_a = clock_t(time_step=CNST(2.0), initial_tick=100)
-    test_clock_b = clock_t(time_step=CNST(1.0))
+    test_clock_a = clock_t(time_step=M_TWO, initial_tick=100)
+    test_clock_b = clock_t(time_step=M_ONE)
     call test_clock_a%print()
     call test_clock_b%print()
 
@@ -1309,7 +1309,7 @@ contains
     PUSH_SUB(test_batch_set_gaussian)
 
     ! use a similar function as in the derivatives test
-    da = CNST(1.0)/mesh%sb%lsize(1)
+    da = M_ONE/mesh%sb%lsize(1)
     db = CNST(10.0)
     dc = CNST(100.0)
 

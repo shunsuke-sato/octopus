@@ -456,7 +456,7 @@ contains
     do idir = 1,3
        stress_l(idir,idir) = stress_l(idir,idir) + ss
     end do
-    stress_l = CNST(0.5) * stress_l
+    stress_l = M_HALF * stress_l
 
     
     stress_Hartree =  stress_l

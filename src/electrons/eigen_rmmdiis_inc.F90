@@ -167,10 +167,10 @@ subroutine X(eigensolver_rmmdiis) (namespace, mesh, st, hm, pre, tol, niter, con
       cc = R_REAL(me(2, ii))*R_REAL(fr(4, ii)) - R_REAL(fr(2, ii))*R_REAL(me(1, ii))
 
       !This is the solution of ca*x^2+cb*x+cc using Mueller formula
-      lambda(ist) = - M_TWO * cc / (cb + sqrt(cb**2 - CNST(4.0) * ca * cc))
+      lambda(ist) = - M_TWO * cc / (cb + sqrt(cb**2 - M_FOUR * ca * cc))
 
       ! restrict the value of lambda to be between 0.1 and 1.0
-      if(abs(lambda(ist)) > CNST(1.0)) lambda(ist) = lambda(ist)/abs(lambda(ist))
+      if(abs(lambda(ist)) > M_ONE) lambda(ist) = lambda(ist)/abs(lambda(ist))
       if(abs(lambda(ist)) < CNST(0.1)) lambda(ist) = CNST(0.1)*lambda(ist)/abs(lambda(ist))
     end do
 
@@ -220,7 +220,7 @@ subroutine X(eigensolver_rmmdiis) (namespace, mesh, st, hm, pre, tol, niter, con
           if(jter < iter - 1 .and. kter < iter - 1) then
             ! it was calculated on the previous iteration
             ! in parallel this was already reduced, so we set it to zero in non-root ranks
-            if(mesh%parallel_in_domains .and. mesh%mpi_grp%rank /= 0) mm(jter, kter, 1:2, 1:bsize) = CNST(0.0)
+            if(mesh%parallel_in_domains .and. mesh%mpi_grp%rank /= 0) mm(jter, kter, 1:2, 1:bsize) = M_ZERO
             cycle
           end if
 
@@ -267,8 +267,8 @@ subroutine X(eigensolver_rmmdiis) (namespace, mesh, st, hm, pre, tol, niter, con
             failed(ii) = .true.
             last(ii) = iter - 1
      
-            evec(1:iter - 1, 1, ii) = CNST(0.0)
-            evec(iter, 1, ii) = CNST(1.0)
+            evec(1:iter - 1, 1, ii) = M_ZERO
+            evec(iter, 1, ii) = M_ONE
             cycle
           else
             failed(ii) = .false.
@@ -527,7 +527,7 @@ subroutine X(eigensolver_rmmdiis_min) (namespace, mesh, st, hm, pre, niter, conv
         cc = R_REAL(me1(1, ii))*R_REAL(me2(2, ii)) - R_REAL(me2(4, ii))*R_REAL(me1(2, ii))
 
         !This is - the solution of ca*x^2+cb*x+cc
-        lambda(ist) = CNST(2.0)*cc/(cb + sqrt(cb**2 - CNST(4.0)*ca*cc))
+        lambda(ist) = M_TWO*cc/(cb + sqrt(cb**2 - M_FOUR*ca*cc))
       end do
 
       call batch_axpy(mesh%np, lambda, kresb, st%group%psib(ib, ik))

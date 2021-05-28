@@ -84,8 +84,8 @@ subroutine X(mesh_interpolation_evaluate_vec)(this, npoints, values, positions, 
 
     xd(1:mesh%sb%dim) = posrel(1:mesh%sb%dim) - nm(1:mesh%sb%dim)
 
-    ASSERT(all(xd(1:mesh%sb%dim) >= CNST(0.0)))
-    ASSERT(all(xd(1:mesh%sb%dim) <= CNST(1.0)))
+    ASSERT(all(xd(1:mesh%sb%dim) >= M_ZERO))
+    ASSERT(all(xd(1:mesh%sb%dim) <= M_ONE))
 
     npt = 2**mesh%sb%dim
 
@@ -117,25 +117,25 @@ subroutine X(mesh_interpolation_evaluate_vec)(this, npoints, values, positions, 
     case(3)
 
       ! trilinear interpolation : http://en.wikipedia.org/wiki/Trilinear_interpolation
-      c00 = lvalues(i000)*(CNST(1.0) - xd(1)) + lvalues(i100)*xd(1)
-      c10 = lvalues(i010)*(CNST(1.0) - xd(1)) + lvalues(i110)*xd(1)
-      c01 = lvalues(i001)*(CNST(1.0) - xd(1)) + lvalues(i101)*xd(1)
-      c11 = lvalues(i011)*(CNST(1.0) - xd(1)) + lvalues(i111)*xd(1)
-      c0 = c00*(CNST(1.0) - xd(2)) + c10*xd(2)
-      c1 = c01*(CNST(1.0) - xd(2)) + c11*xd(2)
-      interpolated_values(ipoint) = c0*(CNST(1.0) - xd(3)) + c1*xd(3)
+      c00 = lvalues(i000)*(M_ONE - xd(1)) + lvalues(i100)*xd(1)
+      c10 = lvalues(i010)*(M_ONE - xd(1)) + lvalues(i110)*xd(1)
+      c01 = lvalues(i001)*(M_ONE - xd(1)) + lvalues(i101)*xd(1)
+      c11 = lvalues(i011)*(M_ONE - xd(1)) + lvalues(i111)*xd(1)
+      c0 = c00*(M_ONE - xd(2)) + c10*xd(2)
+      c1 = c01*(M_ONE - xd(2)) + c11*xd(2)
+      interpolated_values(ipoint) = c0*(M_ONE - xd(3)) + c1*xd(3)
 
     case(2)
       
       ! bilinear interpolation: http://en.wikipedia.org/wiki/Bilinear_interpolation
-      c0 = lvalues(i000)*(CNST(1.0) - xd(1)) + lvalues(i100)*xd(1)
-      c1 = lvalues(i010)*(CNST(1.0) - xd(1)) + lvalues(i110)*xd(1)
-      interpolated_values(ipoint) = c0*(CNST(1.0) - xd(2)) + c1*xd(2)
+      c0 = lvalues(i000)*(M_ONE - xd(1)) + lvalues(i100)*xd(1)
+      c1 = lvalues(i010)*(M_ONE - xd(1)) + lvalues(i110)*xd(1)
+      interpolated_values(ipoint) = c0*(M_ONE - xd(2)) + c1*xd(2)
 
     case(1)
       
       ! linear interpolation
-      interpolated_values(ipoint) = lvalues(i000)*(CNST(1.0) - xd(1)) + lvalues(i100)*xd(1)
+      interpolated_values(ipoint) = lvalues(i000)*(M_ONE - xd(1)) + lvalues(i100)*xd(1)
 
     case default
 
@@ -196,9 +196,9 @@ subroutine X(mesh_interpolation_test)(mesh)
   ! generate the points
   if(mesh%mpi_grp%rank == 0) then
     do itest = 1, ntest_points
-      ip = 1 + nint(loct_ran_flat(random_gen_pointer, CNST(0.0), CNST(1.0))*(mesh%np - 1))
+      ip = 1 + nint(loct_ran_flat(random_gen_pointer, M_ZERO, M_ONE)*(mesh%np - 1))
       do idir = 1, mesh%sb%dim
-        xx(idir, itest) = mesh%x(ip, idir) + mesh%spacing(idir)*loct_ran_flat(random_gen_pointer, CNST(-1.0), CNST(1.0))
+        xx(idir, itest) = mesh%x(ip, idir) + mesh%spacing(idir)*loct_ran_flat(random_gen_pointer, CNST(-1.0), M_ONE)
       end do
       call messages_write('Point')
       call messages_write(itest)

@@ -609,7 +609,7 @@ contains
     !% (printed by the code in the file pcm/pcm_info.out) even, if polarization charges are renormalized, 
     !% the calculated results might be inaccurate or erroneous.
     !%End
-    call parse_variable(namespace, 'PCMQtotTol', CNST(0.5), pcm%q_tot_tol)
+    call parse_variable(namespace, 'PCMQtotTol', M_HALF, pcm%q_tot_tol)
 
     if (pcm%renorm_charges) then
       message(1) = "Info: Polarization charges will be renormalized"

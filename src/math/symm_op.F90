@@ -220,9 +220,9 @@ contains
 
     is_identity = .true.
     is_identity = is_identity .and. all(abs(this%trans_red) < CNST(1.0e-5))
-    is_identity = is_identity .and. all(abs(this%rot_red(:, 1) - (/ CNST(1.0), CNST(0.0), CNST(0.0)/)) < CNST(1.0e-5))
-    is_identity = is_identity .and. all(abs(this%rot_red(:, 2) - (/ CNST(0.0), CNST(1.0), CNST(0.0)/)) < CNST(1.0e-5))
-    is_identity = is_identity .and. all(abs(this%rot_red(:, 3) - (/ CNST(0.0), CNST(0.0), CNST(1.0)/)) < CNST(1.0e-5))
+    is_identity = is_identity .and. all(abs(this%rot_red(:, 1) - (/ M_ONE, M_ZERO, M_ZERO/)) < CNST(1.0e-5))
+    is_identity = is_identity .and. all(abs(this%rot_red(:, 2) - (/ M_ZERO, M_ONE, M_ZERO/)) < CNST(1.0e-5))
+    is_identity = is_identity .and. all(abs(this%rot_red(:, 3) - (/ M_ZERO, M_ZERO, M_ONE/)) < CNST(1.0e-5))
 
   end function symm_op_is_identity
 

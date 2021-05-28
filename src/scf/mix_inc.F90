@@ -353,7 +353,7 @@ subroutine X(mixing_diis)(this, vin, vout, vnew, iter)
 
   if(iter == 1 .or. mod(iter, this%interval) /= 0) then
 
-    vnew(1:d1, 1:d2, 1:d3) = (CNST(1.0) - this%coeff)*vin(1:d1, 1:d2, 1:d3) &
+    vnew(1:d1, 1:d2, 1:d3) = (M_ONE - this%coeff)*vin(1:d1, 1:d2, 1:d3) &
       + this%coeff*vout(1:d1, 1:d2, 1:d3)
 
     POP_SUB(X(mixing_diis))
@@ -368,7 +368,7 @@ subroutine X(mixing_diis)(this, vin, vout, vnew, iter)
   do ii = 1, size
     do jj = ii, size
 
-      aa(ii, jj) = CNST(0.0)
+      aa(ii, jj) = M_ZERO
       do kk = 1, d2
         do ll = 1, d3
           aa(ii, jj) = aa(ii, jj) + X(mix_dotp)(this, this%mixfield%X(df)(:, kk, ll, jj), &
@@ -380,19 +380,19 @@ subroutine X(mixing_diis)(this, vin, vout, vnew, iter)
   end do
   if(this%der%mesh%parallel_in_domains) call this%der%mesh%allreduce(aa)
 
-  aa(1:size, size + 1) = CNST(-1.0)
-  aa(size + 1, 1:size) = CNST(-1.0)
-  aa(size + 1, size + 1) = CNST(0.0)
+  aa(1:size, size + 1) = -M_ONE
+  aa(size + 1, 1:size) = -M_ONE
+  aa(size + 1, size + 1) = M_ZERO
   
-  rhs(1:size) = CNST(0.0)
-  rhs(size + 1) = CNST(-1.0)
+  rhs(1:size) = M_ZERO
+  rhs(size + 1) = -M_ONE
 
   call lalg_least_squares(size + 1, aa, rhs, alpha, preserve_mat=.false.)
 
   sumalpha = sum(alpha(1:size))
   alpha = alpha/sumalpha
   
-  vnew(1:d1, 1:d2, 1:d3) = CNST(0.0)
+  vnew(1:d1, 1:d2, 1:d3) = M_ZERO
   
   do ii = 1, size
     vnew(1:d1, 1:d2, 1:d3) = vnew(1:d1, 1:d2, 1:d3) &
@@ -403,7 +403,7 @@ subroutine X(mixing_diis)(this, vin, vout, vnew, iter)
   POP_SUB(X(mixing_diis))
 end subroutine X(mixing_diis)
 
-! ---------------------------------------------------------
+! --------------------------------------------------------
 ! Guaranteed-reduction Pulay
 ! ---------------------------------------------------------
 subroutine X(mixing_grpulay)(smix, vin, vout, vnew, iter)

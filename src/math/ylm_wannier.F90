@@ -46,7 +46,7 @@ contains
   integer :: ir
   FLOAT :: bs2, bs3, bs6, bs12
   bs2  = M_ONE / sqrt(M_TWO)
-  bs3  = M_ONE / sqrt(CNST(3.0))
+  bs3  = M_ONE / sqrt(M_THREE)
   bs6  = M_ONE / sqrt(6.d0)
   bs12 = M_ONE / sqrt(CNST(12.0))
   
@@ -150,28 +150,28 @@ contains
     !======== l = 1 =====================================================================
     function p_z(cost)
        FLOAT ::p_z, cost
-       p_z =  sqrt(CNST(3.0) / (M_FOUR * M_PI)) * cost
+       p_z =  sqrt(M_THREE / (M_FOUR * M_PI)) * cost
        return
     end function p_z
 
     function px(cost, phi)
        FLOAT ::px, cost, phi, sint
        sint = sqrt(abs(M_ONE - cost * cost))
-       px =  sqrt(CNST(3.0) / (M_FOUR * M_PI)) * sint * cos(phi)
+       px =  sqrt(M_THREE / (M_FOUR * M_PI)) * sint * cos(phi)
        return
     end function px
 
     function py(cost, phi)
        FLOAT ::py, cost, phi, sint
        sint = sqrt(abs(M_ONE - cost * cost))
-       py =  sqrt(CNST(3.0) / (M_FOUR * M_PI)) * sint * sin(phi)
+       py =  sqrt(M_THREE / (M_FOUR * M_PI)) * sint * sin(phi)
        return
     end function py
 
     !======== l = 2 =====================================================================
     function dz2(cost)
        FLOAT ::dz2, cost
-       dz2 =  sqrt(CNST(1.25) / (M_FOUR * M_PI)) * (CNST(3.0)* cost * cost - M_ONE)
+       dz2 =  sqrt(CNST(1.25) / (M_FOUR * M_PI)) * (M_THREE* cost * cost - M_ONE)
        return
     end function dz2
 
@@ -206,7 +206,7 @@ contains
     !======== l = 3 =====================================================================
     function fz3(cost)
        FLOAT ::fz3, cost
-       fz3 =  CNST(0.25) * sqrt(CNST(7.0) / M_PI) * ( CNST(5.0) * cost * cost - CNST(3.0) ) * cost
+       fz3 =  CNST(0.25) * sqrt(CNST(7.0) / M_PI) * ( CNST(5.0) * cost * cost - M_THREE ) * cost
        return
     end function fz3
 
@@ -241,14 +241,14 @@ contains
     function fxx2m3y2(cost, phi)
        FLOAT ::fxx2m3y2, cost, phi, sint
        sint = sqrt(abs(M_ONE - cost * cost))
-       fxx2m3y2 =  CNST(0.25) * sqrt(CNST(17.5) / M_PI) * sint * sint * sint * cos(CNST(3.0) * phi)
+       fxx2m3y2 =  CNST(0.25) * sqrt(CNST(17.5) / M_PI) * sint * sint * sint * cos(M_THREE * phi)
        return
     end function fxx2m3y2
 
     function fy3x2my2(cost, phi)
        FLOAT ::fy3x2my2, cost, phi, sint
        sint = sqrt(abs(M_ONE - cost * cost))
-       fy3x2my2 =  CNST(0.25) * sqrt(CNST(17.5) / M_PI) * sint * sint * sint * sin(CNST(3.0) * phi)
+       fy3x2my2 =  CNST(0.25) * sqrt(CNST(17.5) / M_PI) * sint * sint * sint * sin(M_THREE * phi)
        return
     end function fy3x2my2
 

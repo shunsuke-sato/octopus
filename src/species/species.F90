@@ -761,7 +761,7 @@ contains
         end if
         call messages_info(2)
       end if
-      spec%niwfs = int(max(2*spec%z_val, CNST(1.0)))
+      spec%niwfs = int(max(2*spec%z_val, M_ONE))
 
       xx    = M_ZERO
       xx(1) = CNST(0.01)
@@ -816,7 +816,7 @@ contains
       spec%omega = spec%z_val
 
     case(SPECIES_CHARGE_DENSITY, SPECIES_JELLIUM_CHARGE_DENSITY)
-      spec%niwfs = int(max(2*spec%z_val, CNST(1.0)))
+      spec%niwfs = int(max(2*spec%z_val, M_ONE))
       spec%omega = spec%z_val
       spec%has_density = .true.
       if(print_info_) then
@@ -1706,7 +1706,7 @@ contains
     case(SPECIES_FROM_FILE)
 
     case(SPECIES_JELLIUM)
-      spec%jradius = CNST(0.5)
+      spec%jradius = M_HALF
         
     case(SPECIES_JELLIUM_SLAB)
 
@@ -1723,11 +1723,11 @@ contains
       call messages_input_error(namespace, 'Species', "Unknown type for species '"//trim(spec%label)//"'", row=row, column=1)
     end select
 
-    spec%mass = -CNST(1.0)
-    spec%vdw_radius = -CNST(1.0)
-    spec%z_val = -CNST(1.0)
-    spec%sc_alpha = -CNST(1.0)
-    spec%jthick = -CNST(1.0)
+    spec%mass = -M_ONE
+    spec%vdw_radius = -M_ONE
+    spec%z_val = -M_ONE
+    spec%sc_alpha = -M_ONE
+    spec%jthick = -M_ONE
     
     call iihash_init(read_parameters)
     
@@ -2000,7 +2000,7 @@ contains
         spec%z_val = spec%z
       end if
         
-      if(spec%mass < CNST(0.0)) then
+      if(spec%mass < M_ZERO) then
         spec%mass = element_mass(element)
         call messages_write('Info: default mass for species '//trim(spec%label)//':')
         call messages_write(spec%mass)
@@ -2008,10 +2008,10 @@ contains
         call messages_info()
       end if
         
-      if(spec%vdw_radius < CNST(0.0)) then
+      if(spec%vdw_radius < M_ZERO) then
         spec%vdw_radius = element_vdw_radius(element)
-        if(spec%vdw_radius < CNST(0.0)) then
-          spec%vdw_radius = CNST(0.0)
+        if(spec%vdw_radius < M_ZERO) then
+          spec%vdw_radius = M_ZERO
           call messages_write("The default vdW radius for species '"//trim(spec%label)//"' is not defined.", &
                               new_line = .true.)
           call messages_write("You can specify the vdW radius in %Species block.")
@@ -2045,7 +2045,7 @@ contains
       if(.not. parameter_defined(OPTION__SPECIES__VALENCE)) then
         if(spec%type == SPECIES_USDEF .or. spec%type == SPECIES_CHARGE_DENSITY .or. &
           spec%type == SPECIES_FROM_FILE) then
-          spec%z_val = CNST(0.0)
+          spec%z_val = M_ZERO
         else
           call messages_input_error(namespace, 'Species', &
             "The 'valence' parameter is missing for species '"//trim(spec%label)//"'")

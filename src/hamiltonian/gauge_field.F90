@@ -442,7 +442,7 @@ contains
         this%force(idir) = M_ZERO
         do ispin = 1, st%d%spin_channels
           this%force(idir) = this%force(idir) - &
-           CNST(4.0)*M_PI*P_c/gr%sb%latt%rcell_volume*dmf_integrate(gr%mesh, st%current(:, idir, ispin))
+           M_FOUR*M_PI*P_c/gr%sb%latt%rcell_volume*dmf_integrate(gr%mesh, st%current(:, idir, ispin))
         end do
       end do
 

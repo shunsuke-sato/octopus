@@ -198,7 +198,7 @@ contains
     !% so you will always use the optimal electronic time step
     !% (<a href=http://arxiv.org/abs/0710.3321>more details</a>).
     !%End
-    call parse_variable(namespace, 'TDIonicTimeScale', CNST(1.0), td%mu)
+    call parse_variable(namespace, 'TDIonicTimeScale', M_ONE, td%mu)
 
     if (td%mu <= M_ZERO) then
       write(message(1),'(a)') 'Input: TDIonicTimeScale must be positive.'
@@ -268,10 +268,10 @@ contains
     !% cannot use this variable together with <tt>TDPropagationTime</tt>.
     !%End
     default = 1500
-    if (propagation_time > CNST(0.0)) default = nint(propagation_time/td%dt)
+    if (propagation_time > M_ZERO) default = nint(propagation_time/td%dt)
     call parse_variable(namespace, 'TDMaxSteps', default, td%max_iter)
 
-    if (propagation_time <= CNST(0.0)) propagation_time = td%dt*td%max_iter
+    if (propagation_time <= M_ZERO) propagation_time = td%dt*td%max_iter
 
     call messages_print_var_value(stdout, 'TDPropagationTime', propagation_time, unit = units_out%time)
     call messages_print_var_value(stdout, 'TDMaxSteps', td%max_iter)
@@ -339,7 +339,7 @@ contains
     !% Hamiltonian, shifting the excitation energies by the amount
     !% specified. By default, it is not applied.
     !%End
-    call parse_variable(namespace, 'TDScissor', CNST(0.0), td%scissor)
+    call parse_variable(namespace, 'TDScissor', M_ZERO, td%scissor)
     td%scissor = units_to_atomic(units_inp%energy, td%scissor)
     call messages_print_var_value(stdout, 'TDScissor', td%scissor)
 

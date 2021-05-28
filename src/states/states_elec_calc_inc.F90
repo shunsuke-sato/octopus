@@ -454,7 +454,7 @@ subroutine X(states_elec_trsm)(st, namespace, mesh, ik, ss)
 
   end if
 
-  call profiling_count_operations(mesh%np*TOFLOAT(st%nst*(st%nst + 1))*st%d%dim*CNST(0.5)*(R_ADD + R_MUL))
+  call profiling_count_operations(mesh%np*TOFLOAT(st%nst*(st%nst + 1))*st%d%dim*M_HALF*(R_ADD + R_MUL))
 
 
   call profiling_out(prof)
@@ -1464,7 +1464,7 @@ subroutine X(states_elec_rotate)(st, namespace, mesh, uu, ik)
 
     end do
 
-    call profiling_count_operations((R_ADD + R_MUL)*st%nst*st%d%dim*(st%nst - CNST(1.0))*mesh%np)
+    call profiling_count_operations((R_ADD + R_MUL)*st%nst*st%d%dim*(st%nst - M_ONE)*mesh%np)
 
     SAFE_DEALLOCATE_A(psinew)
     SAFE_DEALLOCATE_A(psicopy)
@@ -1510,7 +1510,7 @@ subroutine X(states_elec_rotate)(st, namespace, mesh, uu, ik)
       end do
     end do
 
-    call profiling_count_operations((R_ADD + R_MUL)*st%nst*(st%nst - CNST(1.0))*mesh%np)
+    call profiling_count_operations((R_ADD + R_MUL)*st%nst*(st%nst - M_ONE)*mesh%np)
    
     call accel_release_buffer(uu_buffer)
     call accel_release_buffer(psicopy_buffer)
@@ -1579,7 +1579,7 @@ subroutine X(states_elec_calc_overlap)(st, mesh, ik, overlap)
         n = st%nst, k = size*st%d%dim,                     &
         alpha = mesh%volume_element,                       &
         a = psi(1, 1, 1), lda = ubound(psi, dim = 1),      &
-        beta = CNST(1.0),                                  & 
+        beta = M_ONE,                                  & 
         c = overlap(1, 1), ldc = ubound(overlap, dim = 1))
 
     end do
@@ -1592,7 +1592,7 @@ subroutine X(states_elec_calc_overlap)(st, mesh, ik, overlap)
     end do
 #endif
 
-    call profiling_count_operations((R_ADD + R_MUL)*CNST(0.5)*st%nst*st%d%dim*(st%nst - CNST(1.0))*mesh%np)
+    call profiling_count_operations((R_ADD + R_MUL)*M_HALF*st%nst*st%d%dim*(st%nst - M_ONE)*mesh%np)
 
     if(mesh%parallel_in_domains) call mesh%allreduce(overlap, dim = (/st%nst, st%nst/))
 
@@ -1646,7 +1646,7 @@ subroutine X(states_elec_calc_overlap)(st, mesh, ik, overlap)
 
     call accel_release_buffer(psi_buffer)
 
-    call profiling_count_operations((R_ADD + R_MUL)*CNST(0.5)*st%nst*st%d%dim*(st%nst - CNST(1.0))*mesh%np)
+    call profiling_count_operations((R_ADD + R_MUL)*M_HALF*st%nst*st%d%dim*(st%nst - M_ONE)*mesh%np)
 
     call accel_read_buffer(overlap_buffer, st%nst*st%nst, overlap)
 
@@ -1733,7 +1733,7 @@ subroutine X(states_elec_calc_projections)(st, gs_st, namespace, mesh, ik, proj,
    gs_nst_ = gs_st%nst
    if(present(gs_nst)) gs_nst_ = gs_nst
 
-    proj(1:gs_nst_, 1:st%nst) = CNST(0.0)
+    proj(1:gs_nst_, 1:st%nst) = M_ZERO
     
     SAFE_ALLOCATE(psi(1:st%nst, 1:st%d%dim, 1:block_size))
     SAFE_ALLOCATE(gspsi(1:max(gs_nst_, st%nst), 1:gs_st%d%dim, 1:block_size))
@@ -1763,13 +1763,13 @@ subroutine X(states_elec_calc_projections)(st, gs_st, namespace, mesh, ik, proj,
         alpha = R_TOTYPE(mesh%volume_element),      &
         a = gspsi(1, 1, 1), lda = ubound(gspsi, dim = 1),   &
         b = psi(1, 1, 1), ldb = ubound(psi, dim = 1), &
-        beta = R_TOTYPE(CNST(1.0)),                     & 
+        beta = R_TOTYPE(M_ONE),                     & 
         c = proj(1, 1), ldc = ubound(proj, dim = 1))
     end do
 
   end if
   
-  call profiling_count_operations((R_ADD + R_MUL)*gs_nst_*st%d%dim*(st%nst - CNST(1.0))*mesh%np)
+  call profiling_count_operations((R_ADD + R_MUL)*gs_nst_*st%d%dim*(st%nst - M_ONE)*mesh%np)
   
   if(mesh%parallel_in_domains) call mesh%allreduce(proj, dim = (/gs_nst_, st%nst/))
   

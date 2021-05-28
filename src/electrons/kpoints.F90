@@ -1062,7 +1062,7 @@ contains
           !A default shift of +0.5 is including in case if(mod(naxis(idir), 2) /= 0 )
 
           !bring back point to first Brillouin zone, except for points at 1/2
-          if ( abs(kpoints(idir, ik) - CNST(0.5)) > CNST(1e-14) )  then
+          if ( abs(kpoints(idir, ik) - M_HALF) > CNST(1e-14) )  then
             kpoints(idir, ik) = mod(kpoints(idir, ik) + M_HALF, M_ONE) - M_HALF
           end if
 
@@ -1084,8 +1084,8 @@ contains
       shell(ik) = sum((kpoints(:, ik)/dx)**2)
       do idir = 1, dim
         coords(idir, ik) = kpoints(idir, ik)
-        if(coords(idir, ik) < CNST(0.0)) coords(idir, ik) = coords(idir, ik) + CNST(1.0)
-        coords(idir, ik) = coords(idir, ik)/(dx(idir)*CNST(2.0))
+        if(coords(idir, ik) < M_ZERO) coords(idir, ik) = coords(idir, ik) + M_ONE
+        coords(idir, ik) = coords(idir, ik)/(dx(idir)*M_TWO)
       end do
     end do
 

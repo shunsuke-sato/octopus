@@ -207,9 +207,9 @@ contains
     
     do ik = stphi%d%kpt%start, stphi%d%kpt%end
       do ib = stphi%group%block_start, stphi%group%block_end
-        call batch_axpy(gr%mesh%np, -CNST(0.5)*M_zI*dt, hst%group%psib(ib, ik), stphi%group%psib(ib, ik))
+        call batch_axpy(gr%mesh%np, -M_HALF*M_zI*dt, hst%group%psib(ib, ik), stphi%group%psib(ib, ik))
         if(propagate_chi) then
-          call batch_axpy(gr%mesh%np, -CNST(0.5)*M_zI*dt, hchi%group%psib(ib, ik), stchi%group%psib(ib, ik))
+          call batch_axpy(gr%mesh%np, -M_HALF*M_zI*dt, hchi%group%psib(ib, ik), stchi%group%psib(ib, ik))
         end if
       end do
     end do
@@ -238,9 +238,9 @@ contains
     
     do ik = stphi%d%kpt%start, stphi%d%kpt%end
       do ib = stphi%group%block_start, stphi%group%block_end
-        call batch_axpy(gr%mesh%np, -CNST(0.5)*M_zI*dt, hst%group%psib(ib, ik), stphi%group%psib(ib, ik))
+        call batch_axpy(gr%mesh%np, -M_HALF*M_zI*dt, hst%group%psib(ib, ik), stphi%group%psib(ib, ik))
         if(propagate_chi) then
-          call batch_axpy(gr%mesh%np, -CNST(0.5)*M_zI*dt, hchi%group%psib(ib, ik), stchi%group%psib(ib, ik))
+          call batch_axpy(gr%mesh%np, -M_HALF*M_zI*dt, hchi%group%psib(ib, ik), stchi%group%psib(ib, ik))
         end if
       end do
     end do

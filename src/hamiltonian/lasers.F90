@@ -286,7 +286,7 @@ contains
             xx(1:mesh%sb%dim) = mesh%x(ip, 1:mesh%sb%dim)
             select case(mesh%sb%dim)
             case(2)
-              this%lasers(il)%a(ip, :) = (/xx(2), -xx(1)/) * sign(CNST(1.0), real(this%lasers(il)%pol(3)))
+              this%lasers(il)%a(ip, :) = (/xx(2), -xx(1)/) * sign(M_ONE, real(this%lasers(il)%pol(3)))
             case(3)
               this%lasers(il)%a(ip, :) = (/ xx(2)*real(this%lasers(il)%pol(3)) - xx(3)*real(this%lasers(il)%pol(2)), &
                           xx(3)*real(this%lasers(il)%pol(1)) - xx(1)*real(this%lasers(il)%pol(3)), &

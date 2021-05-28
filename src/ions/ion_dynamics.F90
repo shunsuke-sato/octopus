@@ -274,7 +274,7 @@ contains
         !%End
         call messages_obsolete_variable(namespace, 'NHMass', 'ThermostatMass')
 
-        call parse_variable(namespace, 'ThermostatMass', CNST(1.0), this%nh(1)%mass)
+        call parse_variable(namespace, 'ThermostatMass', M_ONE, this%nh(1)%mass)
         this%nh(2)%mass = this%nh(1)%mass
 
         this%nh(1:2)%pos = M_ZERO
@@ -508,7 +508,7 @@ contains
         call messages_fatal(1, namespace=namespace)
       end if
     else
-      this%current_temperature = CNST(0.0)
+      this%current_temperature = M_ZERO
     end if
 
     if(this%thermostat /= THERMO_NH) then
@@ -580,28 +580,28 @@ contains
     temp = this%current_temperature
     
     g2 = (this%nh(1)%mass*this%nh(1)%vel**2 - temp)/this%nh(2)%mass
-    this%nh(2)%vel = this%nh(2)%vel + g2*dt/CNST(4.0)
+    this%nh(2)%vel = this%nh(2)%vel + g2*dt/M_FOUR
     this%nh(1)%vel = this%nh(1)%vel*exp(-this%nh(2)%vel*dt/CNST(8.0))
 
-    g1 = (CNST(2.0)*uk - M_THREE*ions%natoms*temp)/this%nh(1)%mass
-    this%nh(1)%vel = this%nh(1)%vel + g1*dt/CNST(4.0)
+    g1 = (M_TWO*uk - M_THREE*ions%natoms*temp)/this%nh(1)%mass
+    this%nh(1)%vel = this%nh(1)%vel + g1*dt/M_FOUR
     this%nh(1)%vel = this%nh(1)%vel*exp(-this%nh(2)%vel*dt/CNST(8.0))
-    this%nh(1)%pos = this%nh(1)%pos + this%nh(1)%vel*dt/CNST(2.0)
-    this%nh(2)%pos = this%nh(2)%pos + this%nh(2)%vel*dt/CNST(2.0)
+    this%nh(1)%pos = this%nh(1)%pos + this%nh(1)%vel*dt/M_TWO
+    this%nh(2)%pos = this%nh(2)%pos + this%nh(2)%vel*dt/M_TWO
 
-    ss = exp(-this%nh(1)%vel*dt/CNST(2.0))
+    ss = exp(-this%nh(1)%vel*dt/M_TWO)
     
     ions%vel = ss*ions%vel
     
     uk = uk*ss**2
 
     this%nh(1)%vel = this%nh(1)%vel*exp(-this%nh(2)%vel*dt/CNST(8.0))
-    g1 = (CNST(2.0)*uk - M_THREE*ions%natoms*temp)/this%nh(1)%mass
-    this%nh(1)%vel = this%nh(1)%vel + g1*dt/CNST(4.0)
+    g1 = (M_TWO*uk - M_THREE*ions%natoms*temp)/this%nh(1)%mass
+    this%nh(1)%vel = this%nh(1)%vel + g1*dt/M_FOUR
     this%nh(1)%vel = this%nh(1)%vel*exp(-this%nh(2)%vel*dt/CNST(8.0))
 
     g2 = (this%nh(1)%mass*this%nh(1)%vel**2 - temp)/this%nh(2)%mass
-    this%nh(2)%vel = this%nh(2)%vel + g2*dt/CNST(4.0)
+    this%nh(2)%vel = this%nh(2)%vel + g2*dt/M_FOUR
     
     POP_SUB(nh_chain)
   end subroutine nh_chain
@@ -808,7 +808,7 @@ contains
   FLOAT pure function ion_dynamics_temperature(ions) result(temperature)
     type(ions_t),          intent(in) :: ions
 
-    temperature = CNST(2.0)/CNST(3.0)*ion_dynamics_kinetic_energy(ions)/ions%natoms
+    temperature = M_TWO/M_THREE*ion_dynamics_kinetic_energy(ions)/ions%natoms
     
   end function ion_dynamics_temperature
 
