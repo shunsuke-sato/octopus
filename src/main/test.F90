@@ -726,6 +726,7 @@ contains
     type(electrons_t), pointer :: sys
     integer :: itime
     type(subspace_t) :: sdiag
+    FLOAT, allocatable :: diff(:)
 
     PUSH_SUB(test_subspace_diagonalization)
 
@@ -747,15 +748,19 @@ contains
     call density_calc(sys%st, sys%gr, sys%st%rho)
     call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%ions)
 
-    call subspace_init(sdiag, sys%namespace, sys%st, no_sd = .false.)
+    call subspace_init(sdiag, sys%namespace, sys%st)
+
+    SAFE_ALLOCATE(diff(1:sys%st%nst))
 
     do itime = 1, param%repetitions
       if(states_are_real(sys%st)) then
-        call dsubspace_diag(sdiag, sys%namespace, sys%gr%mesh, sys%st, sys%hm, 1, sys%st%eigenval(:, 1))
+        call dsubspace_diag(sdiag, sys%namespace, sys%gr%mesh, sys%st, sys%hm, 1, sys%st%eigenval(:, 1), diff)
       else
-        call zsubspace_diag(sdiag, sys%namespace, sys%gr%mesh, sys%st, sys%hm, 1, sys%st%eigenval(:, 1))
+        call zsubspace_diag(sdiag, sys%namespace, sys%gr%mesh, sys%st, sys%hm, 1, sys%st%eigenval(:, 1), diff)
       end if
     end do
+
+    SAFE_DEALLOCATE_A(diff)
 
     call test_prints_info_batch(sys%st, sys%gr, sys%st%group%psib(1, 1))
 
