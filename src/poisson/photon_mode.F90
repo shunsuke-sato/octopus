@@ -56,6 +56,10 @@ type photon_mode_t
     FLOAT, allocatable    :: number(:)          !< Number of photons in mode
     FLOAT, allocatable    :: correlator(:,:)    !< Correlation function <n(r)(ad+a)>
     FLOAT                 :: n_electrons        !< Number of electrons
+    FLOAT, pointer        :: pt_coord_q0(:)     !< Photon coordinates, initial value or gs result
+    FLOAT, pointer        :: pt_momen_p0(:)     !< Photon momenta, initial value or gs result
+    FLOAT                 :: mu
+    logical               :: has_q0_p0
   end type photon_mode_t
 
 contains
@@ -79,6 +83,7 @@ contains
     PUSH_SUB(photon_mode_init)
 
     this%dim = dim
+    this%has_q0_p0 = .false.
     this%n_electrons = n_electrons
 
     !%Variable PhotonmodesFilename
@@ -139,6 +144,11 @@ contains
       call MPI_Bcast(this%lambda(1), this%nmodes, MPI_FLOAT, 0, mpi_world%comm, ierr)
       call MPI_Bcast(this%pol(1,1), this%nmodes*3, MPI_FLOAT, 0, mpi_world%comm, ierr)
 #endif
+    else
+        if(.not.parse_is_defined(namespace, 'PhotonModes')) then
+          call messages_write('You need to specify the correct external photon modes file or define the PhotonModes variable!')
+          call messages_fatal(namespace=namespace)
+        end if
     end if
 
     !%Variable PhotonModes
@@ -185,6 +195,14 @@ contains
             call parse_block_float(blk, ii-1, idir + 1, this%pol(ii, idir)) ! polarization vector components
           end do
 
+          if (ncols > 5) then
+            this%has_q0_p0 = .true.
+            SAFE_ALLOCATE(this%pt_coord_q0(1:this%nmodes))
+            SAFE_ALLOCATE(this%pt_momen_p0(1:this%nmodes))
+            call parse_block_float(blk, ii-1, 5, this%pt_coord_q0(ii))   !row, column
+            call parse_block_float(blk, ii-1, 6, this%pt_momen_p0(ii))   !row, column
+          end if
+
           ! Normalize polarization vector
           this%pol = this%pol/sqrt(dot_product(this%pol(ii,:), this%pol(ii,:)))
 
@@ -199,6 +217,30 @@ contains
       call messages_write('You need to specify the photon modes!')
       call messages_fatal(namespace=namespace)
     end if
+
+    !%Variable TDPhotonicTimeScale
+    !%Type float
+    !%Default 1.0
+    !%Section Time-Dependent::Propagation
+    !%Description
+    !% This variable defines the factor between the timescale of photonic
+    !% and electronic movement.
+    !% for more details see the documentation of TDIonicTimeScale
+    !% If you also use TDIonicTimeScale, we advise to set
+    !% TDPhotonicTimeScale = TDIonicTimeScale, in the case the
+    !% photon frequency is in a vibrational energy range.
+    !% Important: The electronic time step will be the value of
+    !% <tt>TDTimeStep</tt> divided by this variable, so if you have determined an
+    !% optimal electronic time step (that we can call <i>dte</i>), it is
+    !% recommended that you define your time step as:
+    !%
+    !% <tt>TDTimeStep</tt> = <i>dte</i> * <tt>TDPhotonicTimeScale</tt>
+    !%
+    !% so you will always use the optimal electronic time step
+    !% (<a href=http://arxiv.org/abs/0710.3321>more details</a>).
+    !%End
+
+    call parse_variable(namespace, 'TDPhotonicTimeScale', CNST(1.0), this%mu)
 
     this%ex = M_ZERO
     SAFE_ALLOCATE(this%number(1:this%nmodes))
@@ -224,6 +266,11 @@ contains
 
     SAFE_DEALLOCATE_A(this%pol)
     SAFE_DEALLOCATE_A(this%pol_dipole)
+
+    if (this%has_q0_p0) then
+      SAFE_DEALLOCATE_P(this%pt_coord_q0)
+      SAFE_DEALLOCATE_P(this%pt_momen_p0)
+    end if
 
     POP_SUB(photon_mode_end)
   end subroutine photon_mode_end

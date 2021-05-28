@@ -51,6 +51,8 @@ module td_oct_m
   use output_oct_m
   use parser_oct_m
   use pes_oct_m
+  use photon_mode_mf_oct_m
+  use photon_mode_oct_m
   use poisson_oct_m
   use potential_interpolation_oct_m
   use profiling_oct_m
@@ -577,7 +579,7 @@ contains
         call pes_calc(td%pesv, namespace, space, gr%mesh, st, td%dt, iter, gr, hm, stopping)
       end if
 
-      call td_write_iter(td%write_handler, namespace, space, outp, gr, st, hm, geo, hm%ep%kick, td%dt, iter)
+      call td_write_iter(td%write_handler, namespace, space, outp, gr, st, hm, geo, hm%ep%kick, ks, td%dt, iter)
 
       ! write down data
       call td_check_point(td, namespace, mc, gr, geo, st, ks, hm, outp, space, iter, scsteps, etime, stopping, fromScratch)
@@ -645,7 +647,7 @@ contains
     if (mod(iter, outp%restart_write_interval) == 0 .or. iter == td%max_iter .or. stopping) then ! restart
       !if(iter == td%max_iter) outp%iter = ii - 1
       call td_write_data(td%write_handler)
-      call td_dump(td%restart_dump, namespace, gr, st, hm, td, iter, ierr)
+      call td_dump(td%restart_dump, namespace, gr, st, hm, td, ks, iter, ierr)
       if (ierr /= 0) then
         message(1) = "Unable to write time-dependent restart information."
         call messages_warning(1, namespace=namespace)
@@ -659,7 +661,7 @@ contains
         call states_elec_deallocate_wfns(st)
         call electrons_ground_state_run(namespace, mc, gr, geo, st, ks, hm, outp, space, from_scratch)
         call states_elec_allocate_wfns(st, gr%mesh, packed=.true.)
-        call td_load(td%restart_load, namespace, gr, st, hm, td, ierr)
+        call td_load(td%restart_load, namespace, gr, st, hm, td, ks, ierr)
         if (ierr /= 0) then
           message(1) = "Unable to load TD states."
           call messages_fatal(1, namespace=namespace)
@@ -734,7 +736,7 @@ contains
 
       call restart_init(restart, namespace, RESTART_TD, RESTART_TYPE_LOAD, mc, ierr, mesh=gr%mesh)
       if(ierr == 0) &
-        call td_load(restart, namespace, gr, st, hm, td, ierr)
+        call td_load(restart, namespace, gr, st, hm, td, ks, ierr)
       if(ierr /= 0) then
         from_scratch = .true.
         td%iter = 0
@@ -940,7 +942,7 @@ contains
 
     PUSH_SUB(td_run_zero_iter)
 
-    call td_write_iter(td%write_handler, namespace, space, outp, gr, st, hm, geo, hm%ep%kick, td%dt, 0)
+    call td_write_iter(td%write_handler, namespace, space, outp, gr, st, hm, geo, hm%ep%kick, ks, td%dt, 0)
 
     ! I apply the delta electric field *after* td_write_iter, otherwise the
     ! dipole matrix elements in write_proj are wrong
@@ -1015,13 +1017,14 @@ contains
   end subroutine td_read_coordinates
 
   ! ---------------------------------------------------------
-  subroutine td_dump(restart, namespace, gr, st, hm, td, iter, ierr)
+  subroutine td_dump(restart, namespace, gr, st, hm, td, ks, iter, ierr)
     type(restart_t),          intent(in)  :: restart
     type(namespace_t),        intent(in)  :: namespace
     type(grid_t),             intent(in)  :: gr
     type(states_elec_t),      intent(in)  :: st
     type(hamiltonian_elec_t), intent(in)  :: hm
     type(td_t),               intent(in)  :: td
+    type(v_ks_t),             intent(in)  :: ks
     integer,                  intent(in)  :: iter
     integer,                  intent(out) :: ierr
 
@@ -1069,6 +1072,11 @@ contains
       if(err /= 0) ierr = ierr + 8
     end if
 
+    if(ks%has_photons) then
+      call mf_photons_dump(restart, ks%pt_mx, gr, td%dt, ks%pt, err)
+    end if
+    if(err /= 0) ierr = ierr + 16
+
     if (allocated(st%frozen_rho)) then
       call states_elec_dump_frozen(restart, st, gr, ierr)
     end if
@@ -1082,13 +1090,14 @@ contains
   end subroutine td_dump
 
   ! ---------------------------------------------------------
-  subroutine td_load(restart, namespace, gr, st, hm, td, ierr)
+  subroutine td_load(restart, namespace, gr, st, hm, td, ks, ierr)
     type(restart_t),     intent(in)    :: restart
     type(namespace_t),   intent(in)    :: namespace
     type(grid_t),        intent(in)    :: gr
     type(states_elec_t), intent(inout) :: st
     type(hamiltonian_elec_t), intent(inout) :: hm
     type(td_t),          intent(inout) :: td
+    type(v_ks_t),        intent(inout) :: ks
     integer,             intent(out)   :: ierr
 
     integer :: err, err2
@@ -1133,6 +1142,12 @@ contains
         call hamiltonian_elec_update(hm, gr%mesh, namespace, time = td%dt*td%iter)
       end if
     end if
+
+    ! add photon restart
+    if (ks%has_photons) then
+      call mf_photons_load(restart, ks%pt_mx, gr, err)
+    end if
+    if (err /= 0) ierr = ierr + 16
 
     if(gr%der%boundaries%spiralBC) then
       call states_elec_load_spin(restart, st, err)

@@ -465,7 +465,7 @@ contains
     etime = loct_clock()
 
     call td_write_iter(this%td%write_handler, this%namespace, this%space, this%outp, this%gr, &
-      this%st, this%hm, this%geo, this%hm%ep%kick, this%td%dt, iter)
+      this%st, this%hm, this%geo, this%hm%ep%kick, this%ks, this%td%dt, iter)
 
     ! write down data
     call td_check_point(this%td, this%namespace, this%mc, this%gr, this%geo, &

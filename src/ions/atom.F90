@@ -45,6 +45,7 @@ module atom_oct_m
     FLOAT, dimension(MAX_DIM) :: f_u      = M_ZERO !< Hubbard forces
     FLOAT, dimension(MAX_DIM) :: f_scf    = M_ZERO !< SCF forces
     FLOAT, dimension(MAX_DIM) :: f_nlcc   = M_ZERO !< NLCC forces
+    FLOAT, dimension(MAX_DIM) :: f_photons= M_ZERO !< Photons forces
   end type atom_t
 
   type, public :: atom_classical_t
@@ -86,6 +87,7 @@ contains
     this%f_nl      = M_ZERO
     this%f_fields  = M_ZERO
     this%f_u       = M_ZERO
+    this%f_photons = M_ZERO
 
     this%move  = .true.
     if(present(move))this%move=move
@@ -109,6 +111,7 @@ contains
     this%f_nl      = M_ZERO
     this%f_fields  = M_ZERO    
     this%f_u       = M_ZERO
+    this%f_photons = M_ZERO
 
     this%move  = .true.
 

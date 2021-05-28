@@ -290,6 +290,7 @@ contains
       geo%atom(iatom)%f_fields(1:geo%space%dim) = M_ZERO
       geo%atom(iatom)%f_nlcc(1:geo%space%dim) = M_ZERO
       geo%atom(iatom)%f_scf(1:geo%space%dim) = M_ZERO
+      geo%atom(iatom)%f_photons(1:gr%sb%dim) = M_ZERO
     end do
 
     ! the ion-ion and vdw terms are already calculated
@@ -300,8 +301,14 @@ contains
 
     do iatom = 1, geo%natoms
       geo%atom(iatom)%f(1:geo%space%dim) = hm%ep%fii(1:geo%space%dim, iatom) + hm%ep%vdw_forces(1:geo%space%dim, iatom)
+      if (ks%has_photons) then
+        geo%atom(iatom)%f(1:geo%space%dim) = geo%atom(iatom)%f(1:geo%space%dim) &
+          - P_PROTON_CHARGE*species_zval(geo%atom(iatom)%species)*hm%ep%photon_forces(1:gr%sb%dim)
+      end if
       geo%atom(iatom)%f_ii(1:geo%space%dim) = hm%ep%fii(1:geo%space%dim, iatom)
       geo%atom(iatom)%f_vdw(1:geo%space%dim) = hm%ep%vdw_forces(1:geo%space%dim, iatom)
+      geo%atom(iatom)%f_photons(1:gr%sb%dim) = - P_PROTON_CHARGE*species_zval(geo%atom(iatom)%species)* &
+        hm%ep%photon_forces(1:gr%sb%dim)
     end do
 
     if(present(t)) then
@@ -503,9 +510,9 @@ contains
     iunit2 = io_open(trim(dir)//'/forces', namespace, action='write', position='asis')
     write(iunit2,'(a)') &
       ' # Total force (x,y,z) Ion-Ion (x,y,z) VdW (x,y,z) Local (x,y,z) NL (x,y,z)' // &
-      ' Fields (x,y,z) Hubbard(x,y,z) SCF(x,y,z) NLCC(x,y,z)'
+      ' Fields (x,y,z) Hubbard(x,y,z) SCF(x,y,z) NLCC(x,y,z) Phot (x,y,z)'
     do iatom = 1, geo%natoms
-       write(iunit2,'(i4,a10,27e15.6)') iatom, trim(species_label(geo%atom(iatom)%species)), &
+       write(iunit2,'(i4,a10,30e15.6)') iatom, trim(species_label(geo%atom(iatom)%species)), &
            (units_from_atomic(units_out%force, geo%atom(iatom)%f(idir)), idir=1, geo%space%dim), &
            (units_from_atomic(units_out%force, geo%atom(iatom)%f_ii(idir)), idir=1, geo%space%dim), &
            (units_from_atomic(units_out%force, geo%atom(iatom)%f_vdw(idir)), idir=1, geo%space%dim), &
@@ -514,7 +521,8 @@ contains
            (units_from_atomic(units_out%force, geo%atom(iatom)%f_fields(idir)), idir=1, geo%space%dim), &
            (units_from_atomic(units_out%force, geo%atom(iatom)%f_u(idir)), idir=1, geo%space%dim), &
            (units_from_atomic(units_out%force, geo%atom(iatom)%f_scf(idir)), idir=1, geo%space%dim), &
-           (units_from_atomic(units_out%force, geo%atom(iatom)%f_nlcc(idir)), idir=1, geo%space%dim)
+           (units_from_atomic(units_out%force, geo%atom(iatom)%f_nlcc(idir)), idir=1, geo%space%dim), &
+           (units_from_atomic(units_out%force, geo%atom(iatom)%f_photons(idir)), idir=1, geo%space%dim)
     end do
     call io_close(iunit2) 
 

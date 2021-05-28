@@ -113,6 +113,7 @@ module epot_oct_m
     FLOAT              :: eii
     FLOAT, allocatable :: fii(:, :)
     FLOAT, allocatable :: vdw_forces(:, :)
+    FLOAT, allocatable :: photon_forces(:)
     
     FLOAT, allocatable, private :: local_potential(:,:)
     logical,            private :: local_potential_precalculated
@@ -287,6 +288,9 @@ contains
     SAFE_ALLOCATE(ep%vdw_forces(1:geo%space%dim, 1:geo%natoms))
     ep%vdw_forces = M_ZERO
 
+    SAFE_ALLOCATE(ep%photon_forces(1:gr%sb%dim))
+    ep%photon_forces = M_ZERO
+
     ep%local_potential_precalculated = .false.
     
 
@@ -329,6 +333,7 @@ contains
     SAFE_DEALLOCATE_A(ep%fii)
     SAFE_DEALLOCATE_A(ep%vdw_forces)
     SAFE_DEALLOCATE_A(ep%vpsl)
+    SAFE_DEALLOCATE_A(ep%photon_forces)
 
     if(ep%classical_pot > 0) then
       ep%classical_pot = 0

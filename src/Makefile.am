@@ -351,6 +351,7 @@ noinst_HEADERS +=                             \
 # Sources in poisson
 poisson_f_srcs =                                 \
 	poisson/photon_mode.F90                  \
+	poisson/photon_mode_mf.F90               \
 	poisson/poisson_cg.F90                   \
 	poisson/poisson_corrections.F90          \
 	poisson/poisson_cutoff.F90               \
