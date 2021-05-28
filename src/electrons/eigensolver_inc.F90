@@ -57,10 +57,7 @@
 
     ! Do subspace diagonalization always after the eigensolver
     ! Tests have shown that this leads to better convergence
-    if(st%calc_eigenval) then
-      call X(subspace_diag)(eigens%sdiag, namespace, mesh, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
-    end if
-
+    call X(subspace_diag)(eigens%sdiag, namespace, mesh, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
 
     eigens%matvec = eigens%matvec + maxiter
 
