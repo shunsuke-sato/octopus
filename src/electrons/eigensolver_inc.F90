@@ -57,7 +57,12 @@
 
     ! Do subspace diagonalization always after the eigensolver
     ! Tests have shown that this leads to better convergence
-    call X(subspace_diag)(eigens%sdiag, namespace, mesh, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
+    ! 
+    ! In case of the evolution eigensolver, this makes no sense to use subspace diagonalization
+    ! as orthogonalization is done internally at each time-step
+    if(eigens%es_type /= RS_EVO) then
+      call X(subspace_diag)(eigens%sdiag, namespace, mesh, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
+    end if
 
     eigens%matvec = eigens%matvec + maxiter
 

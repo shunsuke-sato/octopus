@@ -345,13 +345,7 @@ contains
     eigens%converged(1:st%d%nik) = 0
     eigens%matvec = 0
 
-    ! In case of the evolution eigensolver, this makes no sense to use subspace diagonalization
-    ! as orthogonalization is done internally at each time-step
-    if(eigens%es_type == RS_EVO) then
-      call subspace_init(eigens%sdiag, namespace, st, no_sd = .true.)
-    else
-      call subspace_init(eigens%sdiag, namespace, st, no_sd = .false.)
-    end if
+    call subspace_init(eigens%sdiag, namespace, st)
 
     ! print memory requirements
     select case(eigens%es_type)
