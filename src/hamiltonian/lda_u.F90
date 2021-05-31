@@ -27,10 +27,10 @@ module lda_u_oct_m
   use derivatives_oct_m
   use distributed_oct_m
   use energy_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use hamiltonian_elec_base_oct_m
+  use ions_oct_m
   use kpoints_oct_m
   use lalg_basic_oct_m
   use loct_oct_m
@@ -154,13 +154,13 @@ module lda_u_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine lda_u_init(this, namespace, space, level, gr, geo, st, psolver, kpoints)
+  subroutine lda_u_init(this, namespace, space, level, gr, ions, st, psolver, kpoints)
     type(lda_u_t),     target, intent(inout) :: this
     type(namespace_t),         intent(in)    :: namespace
     type(space_t),             intent(in)    :: space
     integer,                   intent(in)    :: level
     type(grid_t),              intent(in)    :: gr
-    type(geometry_t),  target, intent(in)    :: geo
+    type(ions_t),      target, intent(in)    :: ions
     type(states_elec_t),       intent(in)    :: st
     type(poisson_t),           intent(in)    :: psolver
     type(kpoints_t),           intent(in)    :: kpoints
@@ -176,8 +176,6 @@ contains
     call messages_print_stress(stdout, "DFT+U", namespace=namespace)
     if(gr%mesh%parallel_in_domains) call messages_experimental("dft+u parallel in domains")
     this%level = level
-
-    call lda_u_write_info(this, stdout)
 
     !%Variable DFTUBasisFromStates
     !%Type logical
@@ -213,12 +211,14 @@ contains
 
     !%Variable DFTUPoissonSolver
     !%Type integer
-    !%Default dft_u_poisson_direct
     !%Section Hamiltonian::DFT+U
     !%Description
     !% This variable selects which Poisson solver
     !% is used to compute the Coulomb integrals over a submesh.
     !% These are non-periodic Poisson solvers.
+    !% If the domain parallelization is activated, the default is the direct sum.
+    !% Otherwise, the FFT Poisson solver is used by default.
+    !%
     !%Option dft_u_poisson_direct 0
     !% (Default) Direct Poisson solver. Slow.
     !%Option dft_u_poisson_isf 1
@@ -229,21 +229,25 @@ contains
     !% This does not work for non-orthogonal cells nor domain parallelization.
     !% Requires the PSolver external library.
     !%Option dft_u_poisson_fft 3
-    !% (Experimental) FFT Poisson solver on a submesh.
+    !% FFT Poisson solver on a submesh.
     !% This uses the 0D periodic version of the FFT kernels.
-    !% This does not work for domain parallelization.
+    !% This is not implemented for domain parallelization.
     !%End
-    call parse_variable(namespace, 'DFTUPoissonSolver', SM_POISSON_DIRECT, this%sm_poisson)
+    if(gr%mesh%parallel_in_domains) then
+      call parse_variable(namespace, 'DFTUPoissonSolver', SM_POISSON_DIRECT, this%sm_poisson)
+    else
+      call parse_variable(namespace, 'DFTUPoissonSolver', SM_POISSON_FFT, this%sm_poisson)
+    end if
     call messages_print_var_option(stdout,  'DFTUPoissonSolver', this%sm_poisson)
-    if(this%sm_poisson /= SM_POISSON_DIRECT) then
-      call messages_experimental("DFTUPoissonSolver different from dft_u_poisson_direct")
+    if(this%sm_poisson /= SM_POISSON_DIRECT .and. this%sm_poisson /= SM_POISSON_FFT) then
+      call messages_experimental("DFTUPoissonSolver different from dft_u_poisson_direct and dft_u_poisson_fft")
     end if
     if(this%sm_poisson == SM_POISSON_ISF) then
       if(gr%mesh%parallel_in_domains) then
-        call messages_not_implemented("ISF DFT+U Poisson solver with domain parallelization.")
+        call messages_not_implemented("DFTUPoissonSolver=dft_u_poisson_isf with domain parallelization")
       end if
-      if (geo%latt%nonorthogonal) then
-        call messages_not_implemented("ISF DFT+U Poisson solver with non-orthogonal cells.")
+      if (ions%latt%nonorthogonal) then
+        call messages_not_implemented("DFTUPoissonSolver=dft_u_poisson_isf with non-orthogonal cells")
       end if
     end if
     if(this%sm_poisson == SM_POISSON_PSOLVER) then
@@ -252,15 +256,15 @@ contains
       call messages_fatal(1)
 #endif
       if(gr%mesh%parallel_in_domains) then
-        call messages_not_implemented("PSolver DFT+U Poisson solver with domain parallelization.")
+        call messages_not_implemented("DFTUPoissonSolver=dft_u_poisson_psolver with domain parallelization")
       end if
-      if (geo%latt%nonorthogonal) then
-        call messages_not_implemented("Psolver DFT+U Poisson solver with non-orthogonal cells.")
+      if (ions%latt%nonorthogonal) then
+        call messages_not_implemented("DFTUPoissonSolver=dft_u_poisson_psolver with non-orthogonal cells")
       end if
     end if
     if(this%sm_poisson == SM_POISSON_FFT) then
       if(gr%mesh%parallel_in_domains) then
-        call messages_not_implemented("FFT DFT+U Poisson solver with domain parallelization.")
+        call messages_not_implemented("DFTUPoissonSolver=dft_u_poisson_fft with domain parallelization.")
       end if
     end if
 
@@ -324,8 +328,8 @@ contains
       !% It is strongly recommended to set AOLoewdin=yes when using the option.
       !%End
       call parse_variable(namespace, 'ACBN0IntersiteInteraction', .false., this%intersite)
-      if(this%intersite) call messages_experimental("ACBN0IntersiteInteraction")
       call messages_print_var_value(stdout, 'ACBN0IntersiteInteraction', this%intersite)
+      if(this%intersite) call messages_experimental("ACBN0IntersiteInteraction")
 
       if(this%intersite) then
 
@@ -351,16 +355,18 @@ contains
       end if
 
     end if
+    
+    call lda_u_write_info(this, stdout)
 
     if(.not.this%basisfromstates) then
 
       call orbitalbasis_init(this%basis, namespace, space%periodic_dim)
 
       if (states_are_real(st)) then
-        call dorbitalbasis_build(this%basis, geo, gr%mesh, st%d%kpt, st%d%dim, &
+        call dorbitalbasis_build(this%basis, ions, gr%mesh, st%d%kpt, st%d%dim, &
           this%skipSOrbitals, this%useAllOrbitals)
       else
-        call zorbitalbasis_build(this%basis, geo, gr%mesh, st%d%kpt, st%d%dim, &
+        call zorbitalbasis_build(this%basis, ions, gr%mesh, st%d%kpt, st%d%dim, &
           this%skipSOrbitals, this%useAllOrbitals)
       end if
       this%orbsets => this%basis%orbsets
@@ -369,7 +375,7 @@ contains
       this%max_np = this%basis%max_np
       this%nspins = st%d%nspin
       this%spin_channels = st%d%spin_channels
-      this%nspecies = geo%nspecies
+      this%nspecies = ions%nspecies
 
       !We allocate the necessary ressources
       if (states_are_real(st)) then
@@ -393,9 +399,9 @@ contains
           if(this%orbsets(ios)%ndim  > 1) complex_coulomb_integrals = .true.
         end do
 
-        call messages_info(1)
         if(.not. complex_coulomb_integrals) then
           write(message(1),'(a)')    'Computing the Coulomb integrals of the localized basis.'
+          call messages_info(1)
           if (states_are_real(st)) then
             call dcompute_coulomb_integrals(this, namespace, space, gr%mesh, gr%der, psolver)
           else
@@ -404,8 +410,9 @@ contains
         else
           ASSERT(.not.states_are_real(st))
           write(message(1),'(a)')    'Computing complex Coulomb integrals of the localized basis.'
+          call messages_info(1)
           call compute_complex_coulomb_integrals(this, gr%mesh, gr%der, st, psolver, namespace, space)
-        end if
+        end if 
       end if
 
     else
@@ -506,10 +513,11 @@ contains
   end subroutine lda_u_end
 
   ! When moving the ions, the basis must be reconstructed
-  subroutine lda_u_update_basis(this, gr, geo, st, psolver, namespace, kpoints, has_phase)
+  subroutine lda_u_update_basis(this, space, gr, ions, st, psolver, namespace, kpoints, has_phase)
     type(lda_u_t),     target, intent(inout) :: this
+    type(space_t),             intent(in)    :: space
     type(grid_t),              intent(in)    :: gr
-    type(geometry_t),  target, intent(in)    :: geo
+    type(ions_t),      target, intent(in)    :: ions
     type(states_elec_t),       intent(in)    :: st
     type(poisson_t),           intent(in)    :: psolver
     type(namespace_t),         intent(in)    :: namespace
@@ -530,10 +538,10 @@ contains
 
     !We now reconstruct the basis
     if (states_are_real(st)) then
-      call dorbitalbasis_build(this%basis, geo, gr%mesh, st%d%kpt, st%d%dim, &
+      call dorbitalbasis_build(this%basis, ions, gr%mesh, st%d%kpt, st%d%dim, &
         this%skipSOrbitals, this%useAllOrbitals, verbose = .false.)
     else
-      call zorbitalbasis_build(this%basis, geo, gr%mesh, st%d%kpt, st%d%dim, &
+      call zorbitalbasis_build(this%basis, ions, gr%mesh, st%d%kpt, st%d%dim, &
         this%skipSOrbitals, this%useAllOrbitals, verbose = .false.)
     end if
     this%orbsets => this%basis%orbsets
@@ -542,7 +550,7 @@ contains
     if(this%intersite) then
       this%maxneighbors = 0
       do ios = 1, this%norbsets
-        call orbitalset_init_intersite(this%orbsets(ios), namespace, ios, gr%sb, geo, gr%der, psolver, &
+        call orbitalset_init_intersite(this%orbsets(ios), namespace, ios, ions, gr%der, psolver, &
           this%orbsets, this%norbsets, this%maxnorbs, this%intersite_radius, st%d%kpt, has_phase, this%sm_poisson)
         this%maxneighbors = max(this%maxneighbors, this%orbsets(ios)%nneighbors)
       end do
@@ -576,13 +584,13 @@ contains
     ! We rebuild the phase for the orbital projection, similarly to the one of the pseudopotentials
     ! In case of a laser field, the phase is recomputed in hamiltonian_elec_update
     if(has_phase) then
-      call lda_u_build_phase_correction(this, gr%sb%dim, gr%sb%periodic_dim, st%d, gr%der%boundaries, namespace, kpoints)
+      call lda_u_build_phase_correction(this, space, st%d, gr%der%boundaries, namespace, kpoints)
     else
       !In case there is no phase, we perform the orthogonalization here
       if(this%basis%orthogonalization) then
         call dloewdin_orthogonalize(this%basis, st%d%kpt, namespace)
       else
-        if(debug%info .and. gr%sb%periodic_dim > 0) then
+        if(debug%info .and. space%is_periodic()) then
           call dloewdin_info(this%basis, st%d%kpt, namespace)
         end if
       end if
@@ -619,16 +627,15 @@ contains
 
 
   !> Build the phase correction to the global phase for all orbitals
-  subroutine lda_u_build_phase_correction(this, dim, periodic_dim, std, boundaries, namespace, kpoints, vec_pot, vec_pot_var)
+  subroutine lda_u_build_phase_correction(this, space, std, boundaries, namespace, kpoints, vec_pot, vec_pot_var)
     type(lda_u_t),                 intent(inout) :: this
-    integer,                       intent(in)    :: dim
-    integer,                       intent(in)    :: periodic_dim
+    type(space_t),                 intent(in)    :: space
     type(states_elec_dim_t),       intent(in)    :: std
     type(boundaries_t),            intent(in)    :: boundaries
     type(namespace_t),             intent(in)    :: namespace
     type(kpoints_t),               intent(in)    :: kpoints
-    FLOAT, optional,  allocatable, intent(in)    :: vec_pot(:) !< (sb%dim)
-    FLOAT, optional,  allocatable, intent(in)    :: vec_pot_var(:, :) !< (1:sb%dim, 1:ns)
+    FLOAT, optional,  allocatable, intent(in)    :: vec_pot(:) !< (space%dim)
+    FLOAT, optional,  allocatable, intent(in)    :: vec_pot_var(:, :) !< (1:space%dim, 1:ns)
 
     integer :: ios
 
@@ -642,14 +649,14 @@ contains
     PUSH_SUB(lda_u_build_phase_correction)
 
     do ios = 1, this%norbsets
-      call orbitalset_update_phase(this%orbsets(ios), dim, std%kpt, kpoints, (std%ispin==SPIN_POLARIZED), &
+      call orbitalset_update_phase(this%orbsets(ios), space%dim, std%kpt, kpoints, (std%ispin==SPIN_POLARIZED), &
         vec_pot, vec_pot_var)
     end do
 
     if(this%basis%orthogonalization) then
       call zloewdin_orthogonalize(this%basis, std%kpt, namespace)
     else
-      if(debug%info .and. periodic_dim > 0) call zloewdin_info(this%basis, std%kpt, namespace)
+      if(debug%info .and. space%is_periodic()) call zloewdin_info(this%basis, std%kpt, namespace)
     end if
 
     POP_SUB(lda_u_build_phase_correction)
@@ -817,9 +824,15 @@ contains
       write(message(2), '(a)') "  [1] Dudarev et al., Phys. Rev. B 57, 1505 (1998)"
       call messages_info(2, iunit)
     else
-      write(message(1), '(a)') "Method:"
-      write(message(2), '(a)') "  [1] Agapito et al., Phys. Rev. X 5, 011006 (2015)"
-      call messages_info(2, iunit)
+      if(.not. this%intersite) then
+        write(message(1), '(a)') "Method:"
+        write(message(2), '(a)') "  [1] Agapito et al., Phys. Rev. X 5, 011006 (2015)"
+        call messages_info(2, iunit)
+      else
+        write(message(1), '(a)') "Method:"
+        write(message(2), '(a)') "  [1] Tancogne-Dejean, and Rubio, Phys. Rev. B 102, 155117 (2020)"
+        call messages_info(2, iunit)    
+      end if
     end if
     write(message(1), '(a)') "Implementation:"
     write(message(2), '(a)') "  [1] Tancogne-Dejean, Oliveira, and Rubio, Phys. Rev. B 69, 245133 (2017)"

@@ -136,7 +136,7 @@ contains
     case(PRE_FILTER)
       ! the smoothing is performed uing the same stencil as the Laplacian
       name = "Preconditioner"
-      call derivatives_get_lapl(gr%der, this%op_array, name, 1)
+      call derivatives_get_lapl(gr%der, this%op_array, space, name, 1)
 
       !%Variable PreconditionerFilterFactor
       !%Type float
@@ -156,7 +156,7 @@ contains
       !% The allowed range for this parameter is between 0.5 and 1.0.
       !% For other values, the SCF may converge to wrong results.
       !%End
-      default_alpha = CNST(0.5)
+      default_alpha = M_HALF
       if(space%is_periodic()) default_alpha = CNST(0.6)
 
       call parse_variable(namespace, 'PreconditionerFilterFactor', default_alpha, alpha)
@@ -164,7 +164,7 @@ contains
       call messages_print_var_value(stdout, 'PreconditionerFilterFactor', alpha)
 
       ! check for correct interval of alpha
-      if (alpha < CNST(0.5) .or. alpha > CNST(1.0)) then
+      if (alpha < M_HALF .or. alpha > M_ONE) then
         call messages_input_error(namespace, 'PreconditionerFilterFactor')
       end if
 
@@ -247,7 +247,7 @@ contains
       !%End
       call parse_variable(namespace, 'PreconditionerIterationsPost', 2, this%npost)
 
-      call multigrid_init(this%mgrid, namespace, space, gr%cv, gr%mesh, gr%der, gr%stencil, mc, used_for_preconditioner = .true.)
+      call multigrid_init(this%mgrid, namespace, space, gr%mesh, gr%der, gr%stencil, mc, used_for_preconditioner = .true.)
     end if
 
     POP_SUB(preconditioner_init)

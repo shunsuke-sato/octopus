@@ -237,7 +237,8 @@ contains
       ! we always need complex response
       call restart_init(gs_restart, sys%namespace, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=sys%gr%mesh, exact=.true.)
       if(ierr == 0) then
-        call states_elec_look_and_load(gs_restart, sys%namespace, sys%st, sys%gr, sys%kpoints, is_complex = .true.)
+        call states_elec_look_and_load(gs_restart, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, &
+          is_complex = .true.)
         call restart_end(gs_restart)
       else
         message(1) = "Previous gs calculation required."
@@ -247,7 +248,7 @@ contains
       ! setup Hamiltonian
       message(1) = 'Info: Setting up Hamiltonian for linear response.'
       call messages_info(1)
-      call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm)
+      call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm)
 
       do dir = 1, ndir
         call lr_init(lr(dir,1))
@@ -261,8 +262,9 @@ contains
         do dir = 1, ndir
           write(dirname,'(a,i1,a)') "wfs_", dir, "_1_1"
           call restart_open_dir(restart_load, dirname, ierr)
-          if (ierr == 0) call states_elec_load(restart_load, sys%namespace, sys%st, sys%gr, sys%kpoints, &
-              ierr, lr=lr(dir,1))          
+          if (ierr == 0) then
+            call states_elec_load(restart_load, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, ierr, lr=lr(dir,1))
+          end if
           if(ierr /= 0) then
             message(1) = "Unable to read response wavefunctions from '"//trim(dirname)//"'."
             call messages_warning(1)
@@ -310,18 +312,18 @@ contains
 
       PUSH_SUB(vdw_run_legacy.get_pol)
 
-      call pert_init(perturbation, sys%namespace, PERTURBATION_ELECTRIC, sys%gr, sys%geo)
+      call pert_init(perturbation, sys%namespace, PERTURBATION_ELECTRIC, sys%gr, sys%ions)
       do dir = 1, ndir
         write(message(1), '(3a,f7.3)') 'Info: Calculating response for the ', index2axis(dir), &
           '-direction and imaginary frequency ', units_from_atomic(units_out%energy, aimag(omega))
         call messages_info(1)   
 
         call pert_setup_dir(perturbation, dir)
-        call zsternheimer_solve(sh, sys%namespace, sys%gr, sys%kpoints, sys%st, sys%hm, sys%ks%xc, sys%mc, sys%geo, lr(dir, :), &
-          1, omega, perturbation, restart_dump, em_rho_tag(TOFLOAT(omega),dir), em_wfs_tag(dir,1))
+        call zsternheimer_solve(sh, sys%namespace, sys%space, sys%gr, sys%kpoints, sys%st, sys%hm, sys%ks%xc, sys%mc, sys%ions, &
+          lr(dir, :), 1, omega, perturbation, restart_dump, em_rho_tag(TOFLOAT(omega),dir), em_wfs_tag(dir,1))
       end do
 
-      call zcalc_polarizability_finite(sys%namespace, sys%space, sys%gr, sys%st, sys%hm, sys%geo, lr(:,:), 1, perturbation, &
+      call zcalc_polarizability_finite(sys%namespace, sys%space, sys%gr, sys%st, sys%hm, sys%ions, lr(:,:), 1, perturbation, &
         alpha(:,:), ndir = ndir)
 
       get_pol = M_ZERO

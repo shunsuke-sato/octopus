@@ -441,12 +441,12 @@ subroutine X(derivatives_test)(this, namespace, repetitions, min_blocksize, max_
     end if
 
     if(repetitions > 1) then
-      call X(derivatives_batch_perform)(this%lapl, this, ffb, opffb, set_bc = .false., factor = CNST(0.5))
+      call X(derivatives_batch_perform)(this%lapl, this, ffb, opffb, set_bc = .false., factor = M_HALF)
     end if
 
     stime = loct_clock()
     do itime = 1, repetitions
-      call X(derivatives_batch_perform)(this%lapl, this, ffb, opffb, set_bc = .false., factor = CNST(0.5))
+      call X(derivatives_batch_perform)(this%lapl, this, ffb, opffb, set_bc = .false., factor = M_HALF)
     end do
     etime = (loct_clock() - stime)/TOFLOAT(repetitions)
 
@@ -456,7 +456,7 @@ subroutine X(derivatives_test)(this, namespace, repetitions, min_blocksize, max_
     call opffb%end()
 
     do ip = 1, this%mesh%np
-      res(ip) = CNST(2.0)*res(ip) - &
+      res(ip) = M_TWO*res(ip) - &
         (M_FOUR*aa**2*bb*sum(this%mesh%x(ip, :)**2)*exp(-aa*sum(this%mesh%x(ip, :)**2)) &
         - this%mesh%sb%dim*M_TWO*aa*bb*exp(-aa*sum(this%mesh%x(ip, :)**2)))
     end do
@@ -467,9 +467,9 @@ subroutine X(derivatives_test)(this, namespace, repetitions, min_blocksize, max_
       ' , error = ', X(mf_nrm2)(this%mesh, res), &
       ' , Gflops = ',  &
 #ifdef R_TREAL
-      blocksize*this%mesh%np*CNST(2.0)*this%lapl%stencil%size/(etime*CNST(1.0e9))
+      blocksize*this%mesh%np*M_TWO*this%lapl%stencil%size/(etime*CNST(1.0e9))
 #else
-      blocksize*this%mesh%np*CNST(4.0)*this%lapl%stencil%size/(etime*CNST(1.0e9))
+      blocksize*this%mesh%np*M_FOUR*this%lapl%stencil%size/(etime*CNST(1.0e9))
 #endif
 
     call messages_info(1)
@@ -531,9 +531,9 @@ subroutine X(derivatives_test)(this, namespace, repetitions, min_blocksize, max_
       ' , error (x direction) = ', X(mf_nrm2)(this%mesh, resgrad(:, 1)), &
       ' , Gflops = ',  &
 #ifdef R_TREAL
-      blocksize*this%mesh%np*CNST(2.0)*this%grad(1)%stencil%size*this%mesh%sb%dim/(etime*CNST(1.0e9))
+      blocksize*this%mesh%np*M_TWO*this%grad(1)%stencil%size*this%mesh%sb%dim/(etime*CNST(1.0e9))
 #else
-      blocksize*this%mesh%np*CNST(4.0)*this%grad(1)%stencil%size*this%mesh%sb%dim/(etime*CNST(1.0e9))
+      blocksize*this%mesh%np*M_FOUR*this%grad(1)%stencil%size*this%mesh%sb%dim/(etime*CNST(1.0e9))
 #endif
     call messages_info(1)
 

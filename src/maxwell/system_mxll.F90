@@ -24,15 +24,16 @@ module system_mxll_oct_m
   use clock_oct_m
   use distributed_oct_m
   use external_densities_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use hamiltonian_mxll_oct_m
   use index_oct_m
   use interaction_oct_m
   use interactions_factory_oct_m
+  use ions_oct_m
   use iso_c_binding
   use lattice_vectors_oct_m
+  use linear_medium_em_field_oct_m
   use loct_oct_m
   use lorentz_force_oct_m
   use maxwell_boundary_op_oct_m
@@ -77,7 +78,7 @@ module system_mxll_oct_m
   type, extends(system_t) :: system_mxll_t
     type(states_mxll_t)          :: st    !< the states
     type(hamiltonian_mxll_t)     :: hm
-    type(geometry_t)             :: geo
+    type(ions_t)             :: ions
     type(grid_t)                 :: gr    !< the mesh
     type(output_t)               :: outp  !< the output
     type(multicomm_t)            :: mc    !< index and domain communicators
@@ -105,10 +106,13 @@ module system_mxll_oct_m
     procedure :: is_tolerance_reached => system_mxll_is_tolerance_reached
     procedure :: update_quantity => system_mxll_update_quantity
     procedure :: update_exposed_quantity => system_mxll_update_exposed_quantity
+    procedure :: init_interaction_as_partner => system_mxll_init_interaction_as_partner
     procedure :: copy_quantities_to_interaction => system_mxll_copy_quantities_to_interaction
     procedure :: output_start => system_mxll_output_start
     procedure :: output_write => system_mxll_output_write
     procedure :: output_finish => system_mxll_output_finish
+    procedure :: update_interactions_start => system_mxll_update_interactions_start
+    procedure :: update_interactions_finish => system_mxll_update_interactions_finish
     final :: system_mxll_finalize
   end type system_mxll_t
 
@@ -135,8 +139,8 @@ contains
 
   ! ---------------------------------------------------------
   subroutine system_mxll_init(this, namespace)
-    class(system_mxll_t), target, intent(inout) :: this
-    type(namespace_t),            intent(in)    :: namespace
+    class(system_mxll_t), intent(inout) :: this
+    type(namespace_t),    intent(in)    :: namespace
 
     type(profile_t), save :: prof
 
@@ -154,16 +158,16 @@ contains
 
     ! The geometry needs to be nullified in order to be able to call grid_init_stage_*
 
-    nullify(this%geo%space)
-    this%geo%space => this%space
-    this%geo%natoms = 0
-    this%geo%ncatoms = 0
-    this%geo%nspecies = 0
-    this%geo%only_user_def = .false.
-    this%geo%kinetic_energy = M_ZERO
-    this%geo%latt = lattice_vectors_t(this%namespace, this%space)
+    this%ions%space = this%space
+    this%ions%natoms = 0
+    this%ions%ncatoms = 0
+    this%ions%nspecies = 0
+    allocate(this%ions%pos(1:this%ions%natoms, 1:this%space%dim))
+    this%ions%only_user_def = .false.
+    this%ions%kinetic_energy = M_ZERO
+    this%ions%latt = lattice_vectors_t(this%namespace, this%space)
 
-    call grid_init_stage_1(this%gr, this%namespace, this%geo, this%space)
+    call grid_init_stage_1(this%gr, this%namespace, this%ions, this%space)
     call states_mxll_init(this%st, this%namespace, this%gr)
 
     this%quantities(E_FIELD)%required = .true.
@@ -174,6 +178,7 @@ contains
     call mesh_interpolation_init(this%mesh_interpolate, this%gr%mesh)
 
     call this%supported_interactions_as_partner%add(LORENTZ_FORCE)
+    call this%supported_interactions%add(LINEAR_MEDIUM_EM_FIELD)
 
     call profiling_out(prof)
 
@@ -188,8 +193,9 @@ contains
     PUSH_SUB(system_mxll_init_interaction)
 
     select type (interaction)
+    type is (linear_medium_em_field_t)
+      call interaction%init(this%gr)
     class default
-      ! Currently Maxwell system does not know any type of interaction
       message(1) = "Trying to initialize an unsupported interaction by Maxwell."
       call messages_fatal(1)
     end select
@@ -220,7 +226,7 @@ contains
          &calc_mode_par_default_parallel_mask(),mpi_world%size, index_range, (/ 5000, 1, 1, 1 /))
 
     call grid_init_stage_2(this%gr, this%namespace, this%space, this%mc)
-    call output_mxll_init(this%outp, this%namespace, this%gr%sb)
+    call output_mxll_init(this%outp, this%namespace, this%space)
     call hamiltonian_mxll_init(this%hm, this%namespace, this%gr, this%st)
 
     POP_SUB(system_mxll_init_parallelization)
@@ -331,7 +337,7 @@ contains
 
     this%hm%plane_waves_apply = .true.
     this%hm%spatial_constant_apply = .true.
-    call bc_mxll_init(this%hm%bc, this%namespace, this%gr, this%st, this%gr%sb, this%geo, this%prop%dt/this%tr_mxll%inter_steps)
+    call bc_mxll_init(this%hm%bc, this%namespace, this%space, this%gr, this%st, this%gr%sb, this%prop%dt/this%tr_mxll%inter_steps)
     this%bc_bounds(:,1:3) = this%hm%bc%bc_bounds(:,1:3)
     call inner_and_outer_points_mapping(this%gr%mesh, this%st, this%bc_bounds)
     this%dt_bounds(2, 1:3) = this%bc_bounds(1, 1:3)
@@ -339,7 +345,7 @@ contains
     call surface_grid_points_mapping(this%gr%mesh, this%st, this%dt_bounds)
 
     if (parse_is_defined(this%namespace, 'UserDefinedInitialMaxwellStates')) then
-      call states_mxll_read_user_def(this%gr%mesh, this%st, this%rs_state_init, this%namespace)
+      call states_mxll_read_user_def(this%namespace, this%space, this%gr%mesh, this%st, this%rs_state_init)
       call messages_print_stress(stdout, "Setting initial EM field inside box")
       ! TODO: add consistency check that initial state fulfills Gauss laws
       this%st%rs_state(:,:) = this%st%rs_state + this%rs_state_init
@@ -542,6 +548,24 @@ contains
   end subroutine system_mxll_update_exposed_quantity
 
   ! ---------------------------------------------------------
+  subroutine system_mxll_init_interaction_as_partner(partner, interaction)
+    class(system_mxll_t),       intent(in)    :: partner
+    class(interaction_t),       intent(inout) :: interaction
+
+    PUSH_SUB(system_mxll_init_interaction_as_partner)
+
+    select type (interaction)
+    type is (lorentz_force_t)
+      ! Nothing to be initialized for the Lorentz force.
+    class default
+      message(1) = "Unsupported interaction."
+      call messages_fatal(1)
+    end select
+
+    POP_SUB(system_mxll_init_interaction_as_partner)
+  end subroutine system_mxll_init_interaction_as_partner
+
+  ! ---------------------------------------------------------
   subroutine system_mxll_copy_quantities_to_interaction(partner, interaction)
     class(system_mxll_t),       intent(inout) :: partner
     class(interaction_t),       intent(inout) :: interaction
@@ -589,7 +613,8 @@ contains
 
     call td_write_mxll_init(this%write_handler, this%namespace, 0, this%prop%dt)
     call td_write_mxll_iter(this%write_handler, this%gr, this%st, this%hm, this%prop%dt, 0)
-    call td_write_mxll_free_data(this%write_handler, this%namespace, this%gr, this%st, this%hm, this%geo, this%outp, this%clock)
+    call td_write_mxll_free_data(this%write_handler, this%namespace, this%space, this%gr, this%st, this%hm, this%ions, &
+      this%outp, this%clock)
 
     ! Currently we print this header here, but this needs to be changed.
     write(message(1), '(a10,1x,a10,1x,a20,1x,a18)') 'Iter ', 'Time ',  'Maxwell energy', 'Elapsed Time'
@@ -605,8 +630,10 @@ contains
   subroutine system_mxll_output_write(this)
     class(system_mxll_t), intent(inout) :: this
 
-    logical :: stopping
+    logical :: stopping, reached_output_interval
     type(profile_t), save :: prof
+
+    integer :: iout
 
     PUSH_SUB(system_mxll_output_write)
 
@@ -616,8 +643,19 @@ contains
 
     call td_write_mxll_iter(this%write_handler, this%gr, this%st, this%hm, this%prop%dt, this%clock%get_tick())
 
-    if ((this%outp%output_interval > 0 .and. mod(this%clock%get_tick(), this%outp%output_interval) == 0) .or. stopping) then
-      call td_write_mxll_free_data(this%write_handler, this%namespace, this%gr, this%st, this%hm, this%geo, this%outp, this%clock)
+    reached_output_interval = .false.
+    do iout = 1, OUT_MAXWELL_MAX
+      if (this%outp%output_interval(iout) > 0) then
+        if (mod(this%clock%get_tick(), this%outp%output_interval(iout)) == 0) then
+          reached_output_interval = .true.
+          exit
+        end if
+      end if
+    end do
+
+    if (reached_output_interval .or. stopping) then
+      call td_write_mxll_free_data(this%write_handler, this%namespace, this%space, this%gr, this%st, this%hm, this%ions, &
+        this%outp, this%clock)
     end if
 
     call profiling_out(prof)
@@ -643,6 +681,61 @@ contains
   end subroutine system_mxll_output_finish
 
   ! ---------------------------------------------------------
+  subroutine system_mxll_update_interactions_start(this)
+    class(system_mxll_t), intent(inout) :: this
+
+    type(interaction_iterator_t) :: iter
+    integer :: int_counter
+
+    PUSH_SUB(system_mxll_update_interactions_start)
+
+    int_counter = 0
+    call iter%start(this%interactions)
+    do while (iter%has_next())
+      select type (interaction => iter%get_next())
+      class is (linear_medium_em_field_t)
+        int_counter = int_counter + 1
+      end select
+    end do
+
+    if (int_counter /= 0 .and. .not. allocated(this%hm%medium_boxes)) then
+       SAFE_ALLOCATE(this%hm%medium_boxes(int_counter))
+       this%hm%calc_medium_box = .true.
+    end if
+
+    POP_SUB(system_mxll_update_interactions_start)
+  end subroutine system_mxll_update_interactions_start
+
+  ! ---------------------------------------------------------
+  subroutine system_mxll_update_interactions_finish(this)
+    class(system_mxll_t), intent(inout) :: this
+
+    type(interaction_iterator_t) :: iter
+    integer :: iint
+    
+    PUSH_SUB(system_mxll_update_interactions_finish)
+
+    iint = 0
+    call iter%start(this%interactions)
+    do while (iter%has_next())
+      select type (interaction => iter%get_next())
+      class is (linear_medium_em_field_t)
+        if (allocated(this%hm%medium_boxes) .and. .not. this%hm%medium_boxes_initialized) then
+          iint = iint + 1
+          this%hm%medium_boxes(iint) = interaction%medium_box
+        end if
+      end select
+    end do
+
+    if (allocated(this%hm%medium_boxes) .and. .not. this%hm%medium_boxes_initialized) then
+       call set_medium_rs_state(this%st, this%gr, this%hm)
+      this%hm%medium_boxes_initialized = .true.
+    end if
+
+    POP_SUB(system_mxll_update_interactions_finish)
+  end subroutine system_mxll_update_interactions_finish
+
+  ! ---------------------------------------------------------
   subroutine system_mxll_finalize(this)
     type(system_mxll_t), intent(inout) :: this
 
@@ -665,6 +758,8 @@ contains
 
     call simul_box_end(this%gr%sb)
     call grid_end(this%gr)
+
+    deallocate(this%ions%pos)
 
     call profiling_out(prof)
 

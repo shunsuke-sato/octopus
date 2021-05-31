@@ -25,10 +25,10 @@ module opt_control_oct_m
   use controlfunction_oct_m
   use exponential_oct_m
   use filter_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use initst_oct_m
+  use ions_oct_m
   use iso_c_binding
   use output_oct_m
   use hamiltonian_elec_oct_m
@@ -130,7 +130,7 @@ contains
 
     ! Initializes the time propagator. Then, it forces the propagation to be self consistent, in case
     ! the theory level is not "independent particles".
-    call td_init(td, sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, sys%outp)
+    call td_init(td, sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, sys%outp)
     if(sys%hm%theory_level /= INDEPENDENT_PARTICLES ) call propagator_elec_set_scf_prop(td%tr, threshold = CNST(1.0e-14))
 
     ! Read general information about how the OCT run will be made, from inp file. "oct_read_inp" is
@@ -138,8 +138,7 @@ contains
     call oct_read_inp(oct, sys%namespace)
 
     ! Read info about, and prepare, the control functions
-    call controlfunction_mod_init(sys%hm%ep, sys%hm%ext_lasers, sys%namespace, td%dt, &
-                                     td%max_iter, oct%mode_fixed_fluence)
+    call controlfunction_mod_init(sys%hm%ext_lasers, sys%namespace, td%dt, td%max_iter, oct%mode_fixed_fluence)
     call controlfunction_init(par, td%dt, td%max_iter)
     call controlfunction_set(par, sys%hm%ext_lasers)
       ! This prints the initial control parameters, exactly as described in the inp file,
@@ -172,7 +171,7 @@ contains
 
     ! Figure out the starting wavefunction(s), and the target.
     call initial_state_init(sys, initial_st)
-    call target_init(sys%gr, sys%kpoints, sys%namespace, sys%geo, initial_st, td, &
+    call target_init(sys%gr, sys%kpoints, sys%namespace, sys%space, sys%ions, initial_st, td, &
                controlfunction_w0(par), oct_target, oct, sys%hm%ep, sys%mc)
 
     ! Sanity checks.
@@ -181,8 +180,8 @@ contains
 
     ! Informative output.
     call opt_control_get_qs(psi, initial_st)
-    call output_states(sys%outp, sys%namespace, OCT_DIR//'initial', psi, sys%gr, sys%geo, sys%hm)
-    call target_output(oct_target, sys%namespace, sys%gr, OCT_DIR//'target', sys%geo, sys%hm, sys%outp)
+    call output_states(sys%outp, sys%namespace, sys%space, OCT_DIR//'initial', psi, sys%gr, sys%ions, sys%hm, -1)
+    call target_output(oct_target, sys%namespace, sys%space, sys%gr, OCT_DIR//'target', sys%ions, sys%hm, sys%outp)
     call states_elec_end(psi)
 
 
@@ -280,8 +279,8 @@ contains
 
       call opt_control_state_null(psi)
       call opt_control_state_copy(psi, initial_st)
-      call oct_prop_init(prop_chi, sys%namespace, "chi", sys%gr, sys%mc)
-      call oct_prop_init(prop_psi, sys%namespace, "psi", sys%gr, sys%mc)
+      call oct_prop_init(prop_chi, sys%namespace, "chi", sys%gr%mesh, sys%mc)
+      call oct_prop_init(prop_psi, sys%namespace, "psi", sys%gr%mesh, sys%mc)
 
       call controlfunction_copy(par_new, par)
       ctr_loop: do
@@ -306,8 +305,8 @@ contains
       type(opt_control_state_t) :: psi
       PUSH_SUB(opt_control_run_legacy.scheme_wg05)
 
-      call oct_prop_init(prop_chi, sys%namespace, "chi", sys%gr, sys%mc)
-      call oct_prop_init(prop_psi, sys%namespace, "psi", sys%gr, sys%mc)
+      call oct_prop_init(prop_chi, sys%namespace, "chi", sys%gr%mesh, sys%mc)
+      call oct_prop_init(prop_psi, sys%namespace, "psi", sys%gr%mesh, sys%mc)
 
       if (oct%mode_fixed_fluence) then
         call controlfunction_set_alpha(par, sqrt( controlfunction_fluence(par) / controlfunction_targetfluence()))
@@ -340,8 +339,8 @@ contains
 
       call opt_control_state_null(qcpsi)
       call opt_control_state_copy(qcpsi, initial_st)
-      call oct_prop_init(prop_chi, sys%namespace, "chi", sys%gr, sys%mc)
-      call oct_prop_init(prop_psi, sys%namespace, "psi", sys%gr, sys%mc)
+      call oct_prop_init(prop_chi, sys%namespace, "chi", sys%gr%mesh, sys%mc)
+      call oct_prop_init(prop_psi, sys%namespace, "psi", sys%gr%mesh, sys%mc)
 
       call controlfunction_copy(par_prev, par)
       call propagate_forward(sys, td, par, oct_target, qcpsi, prop_psi)
@@ -389,7 +388,7 @@ contains
       call opt_control_state_null(qcpsi)
       call opt_control_state_copy(qcpsi, initial_st)
       call propagate_forward(sys, td, par, oct_target, qcpsi)
-      f = - target_j1(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, sys%geo) - controlfunction_j2(par)
+      f = - target_j1(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, sys%ions) - controlfunction_j2(par)
       call opt_control_state_end(qcpsi)
       call iteration_manager_direct(-f, par, iterator, sys)
       if(oct_iterator_maxiter(iterator) == 0) then
@@ -464,7 +463,7 @@ contains
       call opt_control_state_null(qcpsi)
       call opt_control_state_copy(qcpsi, initial_st)
       call propagate_forward(sys, td, par, oct_target, qcpsi)
-      f = - target_j1(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, sys%geo) - controlfunction_j2(par)
+      f = - target_j1(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, sys%ions) - controlfunction_j2(par)
       call opt_control_state_end(qcpsi)
       call iteration_manager_direct(-f, par, iterator, sys)
       if(oct_iterator_maxiter(iterator) == 0) then
@@ -529,7 +528,7 @@ contains
       call opt_control_state_null(qcpsi)
       call opt_control_state_copy(qcpsi, initial_st)
       call propagate_forward(sys, td, par, oct_target, qcpsi)
-      f = - target_j1(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, sys%geo) - controlfunction_j2(par)
+      f = - target_j1(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, sys%ions) - controlfunction_j2(par)
       call opt_control_state_end(qcpsi)
       call iteration_manager_direct(-f, par, iterator, sys)      
       if(oct_iterator_maxiter(iterator) == 0) then
@@ -604,7 +603,7 @@ contains
     call controlfunction_copy(par_chi, par)
 
     call target_get_state(oct_target, chi)
-    call opt_control_state_init(qcchi, chi, sys%geo)
+    call opt_control_state_init(qcchi, chi, sys%ions)
     call bwd_step(sys, td, oct_target, par, par_chi, qcchi, prop_chi, prop_psi)
     call opt_control_state_copy(qcpsi, initial_st)
     call fwd_step(sys, td, oct_target, par, par_chi, qcpsi, prop_chi, prop_psi)
@@ -644,7 +643,7 @@ contains
 
     call opt_control_state_null(qcchi)
     call opt_control_state_copy(qcchi, qcpsi)
-    call target_chi(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, qcchi, sys%geo)
+    call target_chi(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, qcchi, sys%ions)
     call bwd_step(sys, td, oct_target, par, parp, qcchi, prop_chi, prop_psi)
 
     call controlfunction_filter(parp, filter)
@@ -685,8 +684,8 @@ contains
 
     PUSH_SUB(f_striter)
 
-    call oct_prop_init(prop_chi, sys%namespace, "chi", sys%gr, sys%mc)
-    call oct_prop_init(prop_psi, sys%namespace, "psi", sys%gr, sys%mc)
+    call oct_prop_init(prop_chi, sys%namespace, "chi", sys%gr%mesh, sys%mc)
+    call oct_prop_init(prop_psi, sys%namespace, "psi", sys%gr%mesh, sys%mc)
 
     call controlfunction_to_realtime(par)
 
@@ -698,12 +697,12 @@ contains
     call propagate_forward(sys, td, par, oct_target, qcpsi, prop_psi)
 
     ! Check the performance.
-    j1 = target_j1(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, sys%geo)
+    j1 = target_j1(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, sys%ions)
 
     ! Set the boundary condition for the backward propagation.
     call opt_control_state_null(qcchi)
     call opt_control_state_copy(qcchi, qcpsi)
-    call target_chi(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, qcchi, sys%geo)
+    call target_chi(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, qcchi, sys%ions)
 
     ! Backward propagation, while at the same time finding the output field, 
     ! which is placed at par_chi
@@ -751,7 +750,7 @@ contains
 
     call opt_control_state_null(qcchi)
     call opt_control_state_copy(qcchi, qcpsi)
-    call target_chi(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, qcchi, sys%geo)
+    call target_chi(oct_target, sys%namespace, sys%gr, sys%kpoints, qcpsi, qcchi, sys%ions)
     call bwd_step(sys, td, oct_target, par, par_chi, qcchi, prop_chi, prop_psi)
 
     call opt_control_state_copy(qcpsi, initial_st)

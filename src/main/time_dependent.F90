@@ -19,10 +19,12 @@
 #include "global.h"
 
 module time_dependent_oct_m
+  use debug_oct_m
   use electrons_oct_m
   use global_oct_m
   use messages_oct_m
   use multisystem_basic_oct_m
+  use multisystem_debug_oct_m
   use namespace_oct_m
   use parser_oct_m
   use profiling_oct_m
@@ -64,6 +66,8 @@ contains
 
     PUSH_SUB(time_dependent_run_multisystem)
 
+    call multisystem_debug_init("debug/multisystem_propagation.log", global_namespace, systems%grp)
+
     call messages_write('Info: Running Multi-System time evolution')
     call messages_new_line()
     call messages_new_line()
@@ -88,6 +92,8 @@ contains
 
     call systems%propagation_start()
 
+    call multisystem_debug_write_marker(systems%namespace, event_marker_t("propagation_start"))
+
     ! The full TD loop
     do while (.not. systems%has_reached_final_propagation_time(final_time))
       internal_loop = 1
@@ -103,10 +109,15 @@ contains
 
       write (message(1), '(a)') repeat ('-', 71)
       call messages_info(1)
+
     end do
+
+    call multisystem_debug_write_marker(systems%namespace, event_marker_t("propagation_finish"))
 
     call systems%propagation_finish()
 
+    call multisystem_debug_end()
+    
     POP_SUB(time_dependent_run_multisystem)
   end subroutine time_dependent_run_multisystem
 
@@ -117,11 +128,11 @@ contains
 
     PUSH_SUB(time_dependent_run_legacy)
 
-    call td_init(electrons%td, electrons%namespace, electrons%space, electrons%gr, electrons%geo, electrons%st, electrons%ks, &
+    call td_init(electrons%td, electrons%namespace, electrons%space, electrons%gr, electrons%ions, electrons%st, electrons%ks, &
       electrons%hm, electrons%outp)
-    call td_init_run(electrons%td, electrons%namespace, electrons%mc, electrons%gr, electrons%geo, electrons%st, electrons%ks, &
+    call td_init_run(electrons%td, electrons%namespace, electrons%mc, electrons%gr, electrons%ions, electrons%st, electrons%ks, &
       electrons%hm, electrons%outp, electrons%space, from_scratch)
-    call td_run(electrons%td, electrons%namespace, electrons%mc, electrons%gr, electrons%geo, electrons%st, electrons%ks, &
+    call td_run(electrons%td, electrons%namespace, electrons%mc, electrons%gr, electrons%ions, electrons%st, electrons%ks, &
       electrons%hm, electrons%outp, electrons%space, from_scratch)
     call td_end_run(electrons%td, electrons%st, electrons%hm)
     call td_end(electrons%td)

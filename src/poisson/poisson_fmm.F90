@@ -24,6 +24,7 @@
 
 module poisson_fmm_oct_m
   use boundaries_oct_m
+  use box_parallelepiped_oct_m
   use cube_oct_m
   use derivatives_oct_m
   use fft_oct_m
@@ -45,6 +46,7 @@ module poisson_fmm_oct_m
   use parser_oct_m
   use profiling_oct_m
   use simul_box_oct_m
+  use space_oct_m
   use stencil_star_oct_m
 
 #ifdef HAVE_LIBFM
@@ -87,8 +89,9 @@ contains
   ! ---------------------------------------------------------
   !> Initialises the FMM parameters and vectors. Also it calls to 
   !! the library initialisation.
-  subroutine poisson_fmm_init(this, der, all_nodes_comm)
+  subroutine poisson_fmm_init(this, space, der, all_nodes_comm)
     type(poisson_fmm_t),         intent(out)   :: this
+    type(space_t),               intent(in)    :: space
     type(derivatives_t), target, intent(in)    :: der
     integer,                     intent(in)    :: all_nodes_comm
 
@@ -227,12 +230,15 @@ contains
 
     mesh => der%mesh
 
-    if(mesh%sb%periodic_dim /= 0) then
-      if (.not.((mesh%sb%box_shape == PARALLELEPIPED) .and. ((mesh%sb%lsize(1) == mesh%sb%lsize(2)) .and. &
-        (mesh%sb%lsize(1) == mesh%sb%lsize(3)) .and. &
-        (mesh%sb%lsize(2) == mesh%sb%lsize(3))))) then
+    if (space%is_periodic()) then
+      select type (box => mesh%sb%box)
+      type is (box_parallelepiped_t)
+        if (.not. all(box%half_length == box%half_length(1))) then
+          call messages_not_implemented("FMM Poisson solver with non-cubic boxes.")
+        end if
+      class default
         call messages_not_implemented("FMM Poisson solver with non-cubic boxes.")
-      end if
+      end select
     end if
 
     total_particles = mesh%np_global
@@ -256,7 +262,7 @@ contains
       select case(sum(abs(this%corrector%stencil%points(1:der%dim, is))))
       case(0)
         this%corrector%w_re(is, 1) = CNST(27.0)/CNST(32.0) + &
-          (M_ONE - this%alpha_fmm)*M_TWO*M_PI*(CNST(3.0)/(M_PI*CNST(4.0)))**(CNST(2.0)/CNST(3.0))
+          (M_ONE - this%alpha_fmm)*M_TWO*M_PI*(M_THREE/(M_PI*M_FOUR))**(M_TWO/M_THREE)
       case(1)
         this%corrector%w_re(is, 1) = CNST(0.0625)
       case(2)
@@ -415,7 +421,7 @@ contains
 
       else ! Not common mesh; we add the self-interaction of the cell
         do ii = 1, mesh%np 
-          aux = M_TWO*M_PI*(CNST(3.0)*mesh%vol_pp(ii)/(M_PI*CNST(4.0)))**(CNST(2.0)/CNST(3.0))
+          aux = M_TWO*M_PI*(M_THREE*mesh%vol_pp(ii)/(M_PI*M_FOUR))**(M_TWO/M_THREE)
           pot(ii) = pot(ii) + aux*rho_tmp(ii)
         end do
       end if

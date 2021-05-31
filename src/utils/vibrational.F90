@@ -21,14 +21,13 @@
   program vibrational
     use batch_oct_m
     use command_line_oct_m
-    use geometry_oct_m
     use global_oct_m
     use io_oct_m
+    use ions_oct_m
     use messages_oct_m
     use namespace_oct_m
     use parser_oct_m
     use profiling_oct_m
-    use space_oct_m
     use spectrum_oct_m
     use unit_oct_m
     use unit_system_oct_m
@@ -37,8 +36,7 @@
 
     integer :: iunit, ierr, ii, jj, iter, read_iter, ntime, nvaf, nvel, ivel
     FLOAT, allocatable :: vaf(:), time(:), velocities(:, :), ftvaf(:)
-    type(geometry_t), pointer :: geo 
-    type(space_t)     :: space
+    type(ions_t),     pointer :: ions 
     type(spectrum_t) :: spectrum
     type(batch_t) :: vafb, ftvafb
     FLOAT :: ww, curtime, vaftime, deltat
@@ -82,8 +80,7 @@
 
     if (spectrum%end_time < M_ZERO) spectrum%end_time = huge(spectrum%end_time)
 
-    call space_init(space, global_namespace)
-    geo => geometry_t(global_namespace, space)
+    ions => ions_t(global_namespace)
 
     ! Opens the coordinates files.
     iunit = io_open('td.general/coordinates', global_namespace, action='read')
@@ -96,8 +93,8 @@
     ! check the number of time steps we will read
     do
       read(unit = iunit, iostat = ierr, fmt = *) read_iter, curtime, &
-        ((geo%atom(ii)%x(jj), jj = 1, 3), ii = 1, geo%natoms), &
-        ((geo%atom(ii)%v(jj), jj = 1, 3), ii = 1, geo%natoms)
+        ((ions%pos(jj, ii), jj = 1, 3), ii = 1, ions%natoms), &
+        ((ions%vel(jj, ii), jj = 1, 3), ii = 1, ions%natoms)
 
       curtime = units_to_atomic(units_out%time, curtime)
 
@@ -125,7 +122,7 @@
 
     call io_close(iunit)
 
-    nvel = geo%natoms*space%dim
+    nvel = ions%natoms*ions%space%dim
 
     SAFE_ALLOCATE(time(1:ntime))
     SAFE_ALLOCATE(velocities(1:nvel, 1:ntime))
@@ -140,8 +137,8 @@
 
     do
       read(unit = iunit, iostat = ierr, fmt = *) read_iter, curtime, &
-        ((geo%atom(ii)%x(jj), jj = 1, 3), ii = 1, geo%natoms), &
-        ((geo%atom(ii)%v(jj), jj = 1, 3), ii = 1, geo%natoms)
+        ((ions%pos(jj, ii), jj = 1, 3), ii = 1, ions%natoms), &
+        ((ions%vel(jj, ii), jj = 1, 3), ii = 1, ions%natoms)
 
       curtime = units_to_atomic(units_out%time, curtime)
 
@@ -157,9 +154,9 @@
 
         time(ntime) = curtime
         ivel = 1
-        do ii = 1, geo%natoms
-          do jj = 1, space%dim
-            velocities(ivel, ntime) = units_to_atomic(units_out%velocity, geo%atom(ii)%v(jj))
+        do ii = 1, ions%natoms
+          do jj = 1, ions%space%dim
+            velocities(ivel, ntime) = units_to_atomic(units_out%velocity, ions%vel(jj, ii))
             ivel = ivel + 1
           end do
         end do
@@ -251,7 +248,7 @@
 
     SAFE_DEALLOCATE_A(ftvaf)
 
-    SAFE_DEALLOCATE_P(geo)
+    SAFE_DEALLOCATE_P(ions)
 
     SAFE_DEALLOCATE_A(time)
 

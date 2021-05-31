@@ -761,7 +761,7 @@ contains
         end if
         call messages_info(2)
       end if
-      spec%niwfs = int(max(2*spec%z_val, CNST(1.0)))
+      spec%niwfs = int(max(2*spec%z_val, M_ONE))
 
       xx    = M_ZERO
       xx(1) = CNST(0.01)
@@ -816,7 +816,7 @@ contains
       spec%omega = spec%z_val
 
     case(SPECIES_CHARGE_DENSITY, SPECIES_JELLIUM_CHARGE_DENSITY)
-      spec%niwfs = int(max(2*spec%z_val, CNST(1.0)))
+      spec%niwfs = int(max(2*spec%z_val, M_ONE))
       spec%omega = spec%z_val
       spec%has_density = .true.
       if(print_info_) then
@@ -1320,21 +1320,20 @@ contains
   ! ---------------------------------------------------------
   !> This routine returns the non-local projector and its
   !! derivative, built using real spherical harmonics
-  subroutine species_real_nl_projector(spec, x, l, lm, i, uV, duV)
+  subroutine species_real_nl_projector(spec, x, r, l, lm, i, uV, duV)
     type(species_t),   intent(in)  :: spec
     FLOAT,             intent(in)  :: x(:)
+    FLOAT,             intent(in)  :: r
     integer,           intent(in)  :: l, lm, i
     FLOAT,             intent(out) :: uV
     FLOAT, optional,   intent(out) :: duV(:)
 
-    FLOAT :: r, uVr0, duvr0, ylm, gylm(1:3)
+    FLOAT :: uVr0, duvr0, ylm, gylm(1:3)
     FLOAT, parameter :: ylmconst = CNST(0.488602511902920) !  = sqrt(3/(4*pi))
 
     ! no push_sub because this function is called very frequently
 
     ASSERT(species_is_ps(spec))
-
-    r = sqrt(sum(x(1:3)**2))
 
     uVr0  = spline_eval(spec%ps%kb(l, i), r)
 
@@ -1371,10 +1370,11 @@ contains
   ! ---------------------------------------------------------
   !> This routine returns the non-local projector, built using
   !! spherical harmonics
-  subroutine species_nl_projector(spec, np, x, l, lm, i, uV)
+  subroutine species_nl_projector(spec, np, x, r, l, lm, i, uV)
     type(species_t),   intent(in)  :: spec
     integer,           intent(in)  :: np
-    FLOAT,             intent(in)  :: x(:,0:) !< (np_part, 3)
+    FLOAT,             intent(in)  :: x(:,:) !< (np_part, 3)
+    FLOAT,             intent(in)  :: r(:) !< (np_part)
     integer,           intent(in)  :: l, lm, i
     CMPLX,             intent(out) :: uV(:) !< (np)
 
@@ -1384,7 +1384,7 @@ contains
     PUSH_SUB(species_nl_projector)
 
     if(np > 0) then
-      uv(1:np) = x(1:np, 0)
+      uv(1:np) = r(1:np)
       call spline_eval_vec(spec%ps%kb(l, i), np, uv)
 
       do ip = 1, np
@@ -1706,7 +1706,7 @@ contains
     case(SPECIES_FROM_FILE)
 
     case(SPECIES_JELLIUM)
-      spec%jradius = CNST(0.5)
+      spec%jradius = M_HALF
         
     case(SPECIES_JELLIUM_SLAB)
 
@@ -1723,11 +1723,11 @@ contains
       call messages_input_error(namespace, 'Species', "Unknown type for species '"//trim(spec%label)//"'", row=row, column=1)
     end select
 
-    spec%mass = -CNST(1.0)
-    spec%vdw_radius = -CNST(1.0)
-    spec%z_val = -CNST(1.0)
-    spec%sc_alpha = -CNST(1.0)
-    spec%jthick = -CNST(1.0)
+    spec%mass = -M_ONE
+    spec%vdw_radius = -M_ONE
+    spec%z_val = -M_ONE
+    spec%sc_alpha = -M_ONE
+    spec%jthick = -M_ONE
     
     call iihash_init(read_parameters)
     
@@ -2000,7 +2000,7 @@ contains
         spec%z_val = spec%z
       end if
         
-      if(spec%mass < CNST(0.0)) then
+      if(spec%mass < M_ZERO) then
         spec%mass = element_mass(element)
         call messages_write('Info: default mass for species '//trim(spec%label)//':')
         call messages_write(spec%mass)
@@ -2008,10 +2008,10 @@ contains
         call messages_info()
       end if
         
-      if(spec%vdw_radius < CNST(0.0)) then
+      if(spec%vdw_radius < M_ZERO) then
         spec%vdw_radius = element_vdw_radius(element)
-        if(spec%vdw_radius < CNST(0.0)) then
-          spec%vdw_radius = CNST(0.0)
+        if(spec%vdw_radius < M_ZERO) then
+          spec%vdw_radius = M_ZERO
           call messages_write("The default vdW radius for species '"//trim(spec%label)//"' is not defined.", &
                               new_line = .true.)
           call messages_write("You can specify the vdW radius in %Species block.")
@@ -2045,7 +2045,7 @@ contains
       if(.not. parameter_defined(OPTION__SPECIES__VALENCE)) then
         if(spec%type == SPECIES_USDEF .or. spec%type == SPECIES_CHARGE_DENSITY .or. &
           spec%type == SPECIES_FROM_FILE) then
-          spec%z_val = CNST(0.0)
+          spec%z_val = M_ZERO
         else
           call messages_input_error(namespace, 'Species', &
             "The 'valence' parameter is missing for species '"//trim(spec%label)//"'")

@@ -26,6 +26,7 @@ module derivatives_oct_m
   use global_oct_m
   use iso_c_binding
   use lalg_adv_oct_m
+  use lattice_vectors_oct_m
   use loct_oct_m
   use math_oct_m
   use mesh_oct_m
@@ -156,11 +157,11 @@ module derivatives_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine derivatives_init(der, namespace, space, sb, use_curvilinear, order)
+  subroutine derivatives_init(der, namespace, space, latt, use_curvilinear, order)
     type(derivatives_t), target, intent(inout) :: der
     type(namespace_t),           intent(in)    :: namespace
     type(space_t),               intent(in)    :: space
-    type(simul_box_t),           intent(in)    :: sb
+    type(lattice_vectors_t),     intent(in)    :: latt
     logical,                     intent(in)    :: use_curvilinear
     integer, optional,           intent(in)    :: order
 
@@ -198,7 +199,7 @@ contains
     !%End
     default_stencil = DER_STAR
     if(use_curvilinear) default_stencil = DER_STARPLUS
-    if(sb%latt%nonorthogonal) default_stencil = DER_STARGENERAL
+    if (latt%nonorthogonal) default_stencil = DER_STARGENERAL
 
     call parse_variable(namespace, 'DerivativesStencil', default_stencil, der%stencil_type)
     
@@ -267,7 +268,7 @@ contains
     der%grad => der%op
     der%lapl => der%op(der%dim + 1)
 
-    call derivatives_get_stencil_lapl(der, sb)
+    call derivatives_get_stencil_lapl(der, space, latt)
     call derivatives_get_stencil_grad(der)
 
     ! find out how many ghost points we need in each dimension
@@ -321,9 +322,10 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine derivatives_get_stencil_lapl(der, sb)
-    type(derivatives_t), intent(inout) :: der
-    type(simul_box_t),   intent(in)    :: sb
+  subroutine derivatives_get_stencil_lapl(der, space, latt)
+    type(derivatives_t),     intent(inout) :: der
+    type(space_t),           intent(in)    :: space
+    type(lattice_vectors_t), intent(in)    :: latt
 
     PUSH_SUB(derivatives_get_stencil_lapl)
 
@@ -341,12 +343,11 @@ contains
     case(DER_STARPLUS)
       call stencil_starplus_get_lapl(der%lapl%stencil, der%dim, der%order)
     case(DER_STARGENERAL)
-      call stencil_stargeneral_get_arms(der%lapl%stencil, sb)
+      call stencil_stargeneral_get_arms(der%lapl%stencil, space, latt)
       call stencil_stargeneral_get_lapl(der%lapl%stencil, der%dim, der%order)
     end select
 
     POP_SUB(derivatives_get_stencil_lapl)
-
   end subroutine derivatives_get_stencil_lapl
 
 
@@ -439,7 +440,7 @@ contains
 
     ! build operators
     do i = 1, der%dim+1
-      call nl_operator_build(mesh, der%op(i), der%mesh%np, const_w = const_w_)
+      call nl_operator_build(space, mesh, der%op(i), der%mesh%np, const_w = const_w_)
       np_zero_bc = max(np_zero_bc, nl_operator_np_zero_bc(der%op(i)))
     end do
 
@@ -745,9 +746,10 @@ contains
 #endif
 
   ! ---------------------------------------------------------
-  subroutine derivatives_get_lapl(this, op, name, order) 
+  subroutine derivatives_get_lapl(this, op, space, name, order) 
     type(derivatives_t),         intent(in)    :: this
     type(nl_operator_t),         intent(inout) :: op(:) 
+    type(space_t),               intent(in)    :: space
     character(len=32),           intent(in)    :: name
     integer,                     intent(in)    :: order
 
@@ -760,12 +762,12 @@ contains
 
     call nl_operator_init(op(1), name)
     if(this%mesh%sb%latt%nonorthogonal) then
-      call stencil_stargeneral_get_arms(op(1)%stencil, this%mesh%sb)
+      call stencil_stargeneral_get_arms(op(1)%stencil, space, this%mesh%sb%latt)
       call stencil_stargeneral_get_lapl(op(1)%stencil, this%dim, order)
     else
       call stencil_star_get_lapl(op(1)%stencil, this%dim, order)
     end if
-    call nl_operator_build(this%mesh, op(1), this%mesh%np, const_w = .not. this%mesh%use_curvilinear)
+    call nl_operator_build(space, this%mesh, op(1), this%mesh%np, const_w = .not. this%mesh%use_curvilinear)
 
     !At the moment this code is almost copy-pasted from derivatives_build.
     if(this%mesh%sb%latt%nonorthogonal) then
@@ -792,7 +794,7 @@ contains
       end do
     end do
     call derivatives_make_discretization(this%dim, this%mesh, this%masses, &
-             polynomials, rhs, 1, op(1:1), name, force_orthogonal = .true.)
+             polynomials, rhs, 1, op(1:1), name)
     SAFE_DEALLOCATE_A(polynomials)
     SAFE_DEALLOCATE_A(rhs)
 

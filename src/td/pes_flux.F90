@@ -20,6 +20,8 @@
 
 module pes_flux_oct_m
   use boundary_op_oct_m
+  use box_parallelepiped_oct_m
+  use box_sphere_oct_m
   use comm_oct_m
   use derivatives_oct_m
   use global_oct_m
@@ -201,7 +203,7 @@ contains
     kptst  = st%d%kpt%start
     kptend = st%d%kpt%end
     sdim   = st%d%dim
-    mdim   = mesh%sb%dim
+    mdim   = space%dim
     pdim   = space%periodic_dim
 
     this%surf_interp = .false.
@@ -237,9 +239,18 @@ contains
     !% Constructs a plane perpendicular to the non-periodic dimension 
     !% at <tt>PES_Flux_Lsize</tt>.
     !%End
+
     default_shape = PES_SPHERICAL
-    if (mesh%sb%box_shape == PARALLELEPIPED .or. mdim <= 2) default_shape = PES_CUBIC
-    if (space%is_periodic()) default_shape = PES_PLANE
+    if (space%is_periodic()) then
+      default_shape = PES_PLANE
+    else if (mdim <= 2) then
+      default_shape = PES_CUBIC
+    else
+      select type (box => mesh%sb%box)
+      type is (box_parallelepiped_t)
+        default_shape = PES_CUBIC
+      end select
+    end if
     
     call parse_variable(namespace, 'PES_Flux_Shape', default_shape, this%surf_shape)
     if(.not.varinfo_valid_option('PES_Flux_Shape', this%surf_shape, is_flag = .true.)) &
@@ -339,12 +350,12 @@ contains
           border(1:mdim)     = floor(border(1:mdim) / mesh%spacing(1:mdim)) * mesh%spacing(1:mdim)            
         end if
       else
-        select case(mesh%sb%box_shape)
-        case(PARALLELEPIPED)
-          border(1:mdim) = mesh%sb%lsize(1:mdim) * M_HALF
-        case(SPHERE)
-          border(1:mdim) = mesh%sb%rsize / sqrt(M_TWO) * M_HALF
-        case default
+        select type (box => mesh%sb%box)
+        type is (box_sphere_t)
+          border(1:mdim) = box%radius / sqrt(M_TWO) * M_HALF
+        type is (box_parallelepiped_t)
+          border(1:mdim) = box%half_length(1:mdim) * M_HALF
+        class default
           call messages_write('PES_Flux_Lsize not specified. No default values available for this box shape.')
           call messages_new_line()
           call messages_write('Specify the location of the parallelepiped with block PES_Flux_Lsize.')
@@ -384,12 +395,12 @@ contains
         if(this%radius <= M_ZERO) call messages_input_error(namespace, 'PES_Flux_Radius')
         call messages_print_var_value(stdout, 'PES_Flux_Radius', this%radius)
       else
-        select case(mesh%sb%box_shape)
-        case(PARALLELEPIPED)
-          this%radius = minval(mesh%sb%lsize(1:mdim))
-        case(SPHERE)
-          this%radius = mesh%sb%rsize
-        case default
+        select type (box => mesh%sb%box)
+        type is (box_sphere_t)
+          this%radius = box%radius
+        type is (box_parallelepiped_t)
+          this%radius = minval(box%half_length(1:mdim))
+        class default
           message(1) = 'PES_Flux_Radius not specified. No default values available for this box shape.'
           message(2) = 'Specify the radius of the sphere with variable PES_Flux_Radius.'
           call messages_fatal(2, namespace=namespace)
@@ -472,7 +483,7 @@ contains
                           + OPTION__PES_FLUX_PARALLELIZATION__PF_SURFACE
       else 
         this%par_strategy = OPTION__PES_FLUX_PARALLELIZATION__PF_SURFACE    
-        if(mesh%sb%dim == 1) this%par_strategy = OPTION__PES_FLUX_PARALLELIZATION__PF_TIME  
+        if (space%dim == 1) this%par_strategy = OPTION__PES_FLUX_PARALLELIZATION__PF_TIME  
       end if
       par_strategy = this%par_strategy
       call parse_variable(namespace, 'PES_Flux_Parallelization', par_strategy, this%par_strategy)
@@ -726,7 +737,7 @@ contains
 
     kptst  = st%d%kpt%start
     kptend = st%d%kpt%end
-    mdim   = sb%dim
+    mdim   = space%dim
     pdim   = space%periodic_dim
 
     this%dim  = mdim
@@ -1480,7 +1491,7 @@ contains
       call parse_block_end(blk)
       
       write(message(1),'(a)') 'Momentum grid transformation matrix :'
-      do idir = 1, sb%dim
+      do idir = 1, space%dim
         write(message(1 + idir),'(9f12.6)') ( this%ktransf(idim, idir), idim = 1, mdim) 
       end do
       call messages_info(1 + mdim)
@@ -1505,9 +1516,9 @@ contains
       
         do ikpt = kptst, kptend + 1
           if (ikpt == kptend + 1) then
-            kpoint(1:sb%dim) = M_ZERO
+            kpoint(1:space%dim) = M_ZERO
           else
-            kpoint(1:sb%dim) = kpoints%get_point(ikpt)
+            kpoint(1:space%dim) = kpoints%get_point(ikpt)
           end if
 
           do ikp = 1, this%nkpnts
@@ -1591,7 +1602,7 @@ contains
       kptst  = st%d%kpt%start
       kptend = st%d%kpt%end
       sdim   = st%d%dim
-      mdim   = mesh%sb%dim
+      mdim   = space%dim
 
       SAFE_ALLOCATE(psi(1:mesh%np_part))
       SAFE_ALLOCATE(gpsi(1:mesh%np_part, 1:mdim))
@@ -1723,7 +1734,7 @@ contains
       kptend    = 1
     end if
 
-    mdim = mesh%sb%dim
+    mdim = space%dim
     pdim = space%periodic_dim
 
     ikp_start = this%nkpnts_start

@@ -54,6 +54,10 @@ ExtraStatesToConverge = 1
 MaximumIter = 20
 
 AOTruncation = ao_box
-OutputLDA_U = occ_matrices
+%Output
+  occ_matrices
+%
+
+DFTUPoissonSolver = dft_u_poisson_direct
 
 StatesPack = yes

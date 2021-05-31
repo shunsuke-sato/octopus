@@ -85,6 +85,7 @@
           f_fine(ipf) = f_fine(ipf) + factor(ifactor)*f_coarse(ipc)
           ifactor = ifactor + 1
         end do
+        dd(idir) = -dd(idir)
       end do
 
     end do
@@ -168,7 +169,7 @@
       do dj = -1, 1
         do dk = -1, 1
           dd = abs(di) + abs(dj) + abs(dk)
-          weight(di, dj, dk) = CNST(0.5)**dd
+          weight(di, dj, dk) = M_HALF**dd
         end do
       end do
     end do
@@ -380,7 +381,7 @@
       do dj = -1, 1
         do dk = -1, 1
           dd = abs(di) + abs(dj) + abs(dk)
-          weight(di, dj, dk) = CNST(0.5)**dd
+          weight(di, dj, dk) = M_HALF**dd
         end do
       end do
     end do

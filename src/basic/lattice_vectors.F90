@@ -417,7 +417,7 @@ contains
 
         ! Sanity checks
         ASSERT(new_xx(idir) >= -CNST(1.0e-6))
-        ASSERT(new_xx(idir) < CNST(1.0))
+        ASSERT(new_xx(idir) < M_ONE)
 
         ! Change origin back
         new_xx(idir) = new_xx(idir) - M_HALF

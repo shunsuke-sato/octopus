@@ -62,10 +62,10 @@ contains
 
     if(present(fs)) then
       call spline_init(splw)
-      call spline_3dft(spl, splw, CNST(2.0)*fs(1))
+      call spline_3dft(spl, splw, M_TWO*fs(1))
       call spline_cut(splw, fs(1), fs(2))
       call spline_3dft(splw, spl)
-      call spline_times(TOFLOAT(CNST(1.0)/(CNST(2.0)*M_PI)**3), spl)
+      call spline_times(TOFLOAT(M_ONE/(M_TWO*M_PI)**3), spl)
       call spline_end(splw)
     end if
     if(present(rs)) then

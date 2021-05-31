@@ -23,10 +23,10 @@ module propagator_cn_oct_m
   use exponential_oct_m
   use gauge_field_oct_m
   use grid_oct_m
-  use geometry_oct_m
   use global_oct_m
   use hamiltonian_elec_oct_m
   use ion_dynamics_oct_m
+  use ions_oct_m
   use mesh_oct_m
   use mesh_function_oct_m
   use messages_oct_m
@@ -35,10 +35,11 @@ module propagator_cn_oct_m
   use potential_interpolation_oct_m
   use profiling_oct_m
   use propagator_base_oct_m
+  use propagation_ops_elec_oct_m
   use solvers_oct_m
+  use space_oct_m
   use sparskit_oct_m
   use states_elec_oct_m
-  use propagation_ops_elec_oct_m
   use xc_oct_m
 
   implicit none
@@ -59,16 +60,17 @@ contains
 
   ! ---------------------------------------------------------
   !> Crank-Nicolson propagator
-  subroutine td_crank_nicolson(hm, namespace, gr, st, tr, time, dt, ions, geo, use_sparskit)
+  subroutine td_crank_nicolson(hm, namespace, space, gr, st, tr, time, dt, ions_dyn, ions, use_sparskit)
     type(hamiltonian_elec_t), target, intent(inout) :: hm
     type(namespace_t),        target, intent(in)    :: namespace
+    type(space_t),                    intent(in)    :: space
     type(grid_t),             target, intent(inout) :: gr
     type(states_elec_t),      target, intent(inout) :: st
     type(propagator_base_t),  target, intent(inout) :: tr
     FLOAT,                            intent(in)    :: time
     FLOAT,                            intent(in)    :: dt
-    type(ion_dynamics_t),             intent(inout) :: ions
-    type(geometry_t),                 intent(inout) :: geo
+    type(ion_dynamics_t),             intent(inout) :: ions_dyn
+    type(ions_t),                     intent(inout) :: ions
     logical,                          intent(in) :: use_sparskit
 
     CMPLX, allocatable :: zpsi_rhs(:,:), zpsi(:), rhs(:), inhpsi(:)
@@ -111,7 +113,7 @@ contains
     SAFE_ALLOCATE(rhs(1:np*st%d%dim))
 
     !move the ions to time 'time - dt/2', and save the current status to return to it later.
-    call propagation_ops_elec_move_ions(tr%propagation_ops_elec, gr, hm, st, namespace, ions, geo, &
+    call propagation_ops_elec_move_ions(tr%propagation_ops_elec, gr, hm, st, namespace, space, ions_dyn, ions, &
                 time - M_HALF*dt, M_HALF*dt, save_pos = .true.)
 
     if (family_is_mgga_with_exc(hm%xc)) then
@@ -122,7 +124,7 @@ contains
         time, dt, time -dt/M_TWO, hm%vhxc)
     end if
 
-    call propagation_ops_elec_update_hamiltonian(namespace, st, gr%mesh, hm, time - dt*M_HALF)
+    call propagation_ops_elec_update_hamiltonian(namespace, space, st, gr%mesh, hm, time - dt*M_HALF)
 
     ! solve (1+i\delta t/2 H_n)\psi^{predictor}_{n+1} = (1-i\delta t/2 H_n)\psi^n
     do ik = st%d%kpt%start, st%d%kpt%end
@@ -176,7 +178,7 @@ contains
     call density_calc(st, gr, st%rho)
 
     !restore to time 'time - dt'
-    call propagation_ops_elec_restore_ions(tr%propagation_ops_elec, ions, geo)
+    call propagation_ops_elec_restore_ions(tr%propagation_ops_elec, ions_dyn, ions)
 
     SAFE_DEALLOCATE_A(zpsi_rhs)
     SAFE_DEALLOCATE_A(zpsi)

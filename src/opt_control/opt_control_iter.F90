@@ -93,7 +93,7 @@ contains
     !% necessarily a maximum, and not necessarily the global maximum). 
     !%End
     call parse_variable(namespace, 'OCTEps', CNST(1.0e-6), iterator%eps)
-    if(iterator%eps < M_ZERO) iterator%eps = tiny(CNST(1.0))
+    if(iterator%eps < M_ZERO) iterator%eps = tiny(M_ONE)
 
     !%Variable OCTMaxIter
     !%Type integer
@@ -400,7 +400,7 @@ contains
 
     PUSH_SUB(velocities_write)
 
-    n_atoms = sys%geo%natoms
+    n_atoms = sys%ions%natoms
     dim = sys%space%dim
 
     ! write header of the velocities output file
@@ -423,8 +423,7 @@ contains
     write(iterator%velocities_iunit,'(i7)',advance='no') iterator%ctr_iter
     do i = 1, n_atoms
        do j = 1, dim
-          write(iterator%velocities_iunit,'(4(" "),(f12.10))',advance='no') &
-               sys%geo%atom(i)%v(j)
+          write(iterator%velocities_iunit,'(4(" "),(f12.10))',advance='no') sys%ions%vel(j, i)
        end do
     end do
     write(iterator%velocities_iunit,'("")')

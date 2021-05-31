@@ -34,6 +34,7 @@ module external_potential_oct_m
   use parser_oct_m
   use poisson_oct_m
   use profiling_oct_m
+  use space_oct_m
   use string_oct_m
   use unit_oct_m
   use unit_system_oct_m
@@ -71,6 +72,7 @@ module external_potential_oct_m
     procedure :: deallocate_memory => external_potential_deallocate
     procedure :: update_exposed_quantities => external_potential_update_exposed_quantities
     procedure :: update_exposed_quantity => external_potential_update_exposed_quantity
+    procedure :: init_interaction_as_partner => external_potential_init_interaction_as_partner
     procedure :: copy_quantities_to_interaction => external_potential_copy_quantities_to_interaction
     final :: external_potential_finalize
   end type external_potential_t
@@ -98,6 +100,7 @@ contains
     SAFE_ALLOCATE(this)
 
     this%namespace = namespace_t("ExternalPotential", parent=namespace)
+    call space_init(this%space, this%namespace)
 
     this%type = -1
 
@@ -116,7 +119,6 @@ contains
     call this%deallocate_memory()
 
     POP_SUB(external_potential_finalize)
-
   end subroutine external_potential_finalize
 
   ! ---------------------------------------------------------
@@ -130,16 +132,15 @@ contains
     case(EXTERNAL_POT_USDEF, EXTERNAL_POT_FROM_FILE, EXTERNAL_POT_CHARGE_DENSITY)
       SAFE_ALLOCATE(this%pot(1:mesh%np))
     case(EXTERNAL_POT_STATIC_BFIELD)
-      SAFE_ALLOCATE(this%A_static(1:mesh%np, 1:mesh%sb%dim))
+      SAFE_ALLOCATE(this%A_static(1:mesh%np, 1:this%space%dim))
     case(EXTERNAL_POT_STATIC_EFIELD)
-      if(mesh%sb%periodic_dim < mesh%sb%dim) then
+      if (this%space%periodic_dim < this%space%dim) then
         SAFE_ALLOCATE(this%pot(1:mesh%np))
         SAFE_ALLOCATE(this%v_ext(1:mesh%np_part))
       end if
     end select
 
     POP_SUB(external_potential_allocate)
-
   end subroutine external_potential_allocate
 
   ! ---------------------------------------------------------
@@ -204,6 +205,24 @@ contains
   end subroutine external_potential_update_exposed_quantity
 
   ! ---------------------------------------------------------
+  subroutine external_potential_init_interaction_as_partner(partner, interaction)
+    class(external_potential_t),     intent(in)    :: partner
+    class(interaction_t),            intent(inout) :: interaction
+
+    PUSH_SUB(external_potential_init_interaction_as_partner)
+
+    select type (interaction)
+    type is (lorentz_force_t)
+      ! Nothing to be initialized for the Lorentz force.
+    class default
+      message(1) = "Unsupported interaction."
+      call messages_fatal(1)
+    end select
+
+    POP_SUB(external_potential_init_interaction_as_partner)
+  end subroutine external_potential_init_interaction_as_partner
+
+    ! ---------------------------------------------------------
   subroutine external_potential_copy_quantities_to_interaction(partner, interaction)
     class(external_potential_t),     intent(inout) :: partner
     class(interaction_t),            intent(inout) :: interaction
@@ -257,14 +276,14 @@ contains
 
       do ip = 1, mesh%np
         call mesh_r(mesh, ip, r, coords = xx)
-        call parse_expression(pot_re, pot_im, mesh%sb%dim, xx, r, M_ZERO, this%potential_formula)
+        call parse_expression(pot_re, pot_im, this%space%dim, xx, r, M_ZERO, this%potential_formula)
         this%pot(ip) = pot_re
       end do 
 
     case(EXTERNAL_POT_FROM_FILE)
       ASSERT(allocated(this%pot))
 
-      call dio_function_input(trim(this%filename), namespace, mesh, this%pot, err)
+      call dio_function_input(trim(this%filename), namespace, this%space, mesh, this%pot, err)
       if(err /= 0) then
         write(message(1), '(a)')    'Error loading file '//trim(this%filename)//'.'
         write(message(2), '(a,i4)') 'Error code returned = ', err      
@@ -278,7 +297,7 @@ contains
 
       do ip = 1, mesh%np
         call mesh_r(mesh, ip, r, coords = xx)
-        call parse_expression(pot_re, pot_im, mesh%sb%dim, xx, r, M_ZERO, this%potential_formula)
+        call parse_expression(pot_re, pot_im, this%space%dim, xx, r, M_ZERO, this%potential_formula)
         den(ip) = pot_re
       end do
 
@@ -295,30 +314,30 @@ contains
       ASSERT(allocated(this%B_field))
 
       ! Compute the vector potential
-      SAFE_ALLOCATE(grx(1:mesh%sb%dim))
+      SAFE_ALLOCATE(grx(1:this%space%dim))
 
-      select case(mesh%sb%dim)
+      select case(this%space%dim)
       case(2)
         select case(this%gauge_2d)
         case(0) ! linear_xy
-          if(mesh%sb%periodic_dim == 1) then
+          if (this%space%periodic_dim == 1) then
             message(1) = "For 2D system, 1D-periodic, StaticMagneticField can only be "
             message(2) = "applied for StaticMagneticField2DGauge = linear_y."
             call messages_fatal(2, namespace=namespace)
           end if
           do ip = 1, mesh%np
-            grx(1:mesh%sb%dim) = mesh%x(ip, 1:mesh%sb%dim)
+            grx(1:this%space%dim) = mesh%x(ip, 1:this%space%dim)
             this%A_static(ip, :) = M_HALF/P_C*(/grx(2), -grx(1)/) * this%B_field(3)
           end do
         case(1) ! linear y
           do ip = 1, mesh%np
-            grx(1:mesh%sb%dim) = mesh%x(ip, 1:mesh%sb%dim)
+            grx(1:this%space%dim) = mesh%x(ip, 1:this%space%dim)
             this%A_static(ip, :) = M_ONE/P_C*(/grx(2), M_ZERO/) * this%B_field(3)
           end do
       end select
     case(3)
       do ip = 1, mesh%np
-        grx(1:mesh%sb%dim) = mesh%x(ip, 1:mesh%sb%dim)
+        grx(1:this%space%dim) = mesh%x(ip, 1:this%space%dim)
         this%A_static(ip, :) = M_HALF/P_C*(/grx(2) * this%B_field(3) - grx(3) * this%B_field(2), &
                                grx(3) * this%B_field(1) - grx(1) * this%B_field(3), &
                                grx(1) * this%B_field(2) - grx(2) * this%B_field(1)/)
@@ -330,7 +349,7 @@ contains
     case(EXTERNAL_POT_STATIC_EFIELD)
       ASSERT(allocated(this%E_field))
 
-      if(mesh%sb%periodic_dim < mesh%sb%dim) then
+      if (this%space%periodic_dim < this%space%dim) then
         ! Compute the scalar potential
         !
         ! Note that the -1 sign is missing. This is because we
@@ -341,15 +360,15 @@ contains
         ! NTD: This comment is very confusing and prone to error
         ! TODO: Fix this to have physically sound quantities and interactions
         do ip = 1, mesh%np
-          this%pot(ip) = sum(mesh%x(ip, mesh%sb%periodic_dim + 1:mesh%sb%dim) &
-                                    * this%E_field(mesh%sb%periodic_dim + 1:mesh%sb%dim))
+          this%pot(ip) = sum(mesh%x(ip, this%space%periodic_dim + 1:this%space%dim) &
+                                    * this%E_field(this%space%periodic_dim + 1:this%space%dim))
         end do
         ! The following is needed to make interpolations.
         ! It is used by PCM.
         this%v_ext(1:mesh%np) = this%pot(1:mesh%np)
         do ip = mesh%np+1, mesh%np_part
-          this%v_ext(ip) = sum(mesh%x(ip, mesh%sb%periodic_dim + 1:mesh%sb%dim) &
-                                 * this%E_field(mesh%sb%periodic_dim + 1:mesh%sb%dim))
+          this%v_ext(ip) = sum(mesh%x(ip, this%space%periodic_dim + 1:this%space%dim) &
+                                 * this%E_field(this%space%periodic_dim + 1:this%space%dim))
         end do
       end if
 
@@ -495,7 +514,7 @@ contains
           call messages_input_error(namespace, 'StaticMagneticField')
         end if
       case(3)
-        ! Consider cross-product below: if grx(1:sb%periodic_dim) is used, it is not ok.
+        ! Consider cross-product below: if grx(1:this%space%periodic_dim) is used, it is not ok.
         ! Therefore, if idir is periodic, B_field for all other directions must be zero.
         ! 1D-periodic: only Bx. 2D-periodic or 3D-periodic: not allowed. Other gauges could allow 2D-periodic case.
         if(periodic_dim >= 2) then

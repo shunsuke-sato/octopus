@@ -135,6 +135,7 @@ noinst_HEADERS +=                          \
 # Sources in math
 math_f_srcs =                                 \
 	math/accel_blas.F90                   \
+	math/basis_vectors.F90                \
 	math/blas.F90                         \
 	math/checksum_interface.F90           \
 	math/compressed_sensing.F90           \
@@ -254,7 +255,7 @@ ions_f_srcs =                                 \
 	ions/box_sphere.F90                   \
 	ions/box_union.F90                    \
 	ions/box_user_defined.F90             \
-	ions/geometry.F90                     \
+	ions/ions.F90                         \
 	ions/ion_dynamics.F90                 \
 	ions/multibox.F90                     \
 	ions/read_coords.F90                  \
@@ -271,17 +272,19 @@ ions_srcs = $(ions_f_srcs) $(ions_c_srcs)
 
 # Sources in grid
 grid_f_srcs =                                 \
+	grid/affine_coordinates.F90           \
 	grid/allocate_hardware_aware_f.F90    \
 	grid/basins.F90                       \
 	grid/basis_set_abst.F90               \
 	grid/batch.F90                        \
 	grid/batch_ops.F90                    \
 	grid/boundaries.F90                   \
+	grid/cartesian.F90                    \
+	grid/coordinate_system.F90            \
 	grid/cube.F90                         \
 	grid/cube_function.F90                \
 	grid/curv_briggs.F90                  \
 	grid/curv_gygi.F90                    \
-	grid/curvilinear.F90                  \
 	grid/curv_modine.F90                  \
 	grid/derivatives.F90                  \
 	grid/fourier_shell.F90                \
@@ -480,9 +483,11 @@ multisystem_f_srcs =                                 \
 	multisystem/interactions_factory_abst.F90    \
 	multisystem/multisystem.F90                  \
 	multisystem/multisystem_basic.F90            \
+	multisystem/multisystem_debug.F90            \
 	multisystem/propagator.F90                   \
 	multisystem/propagator_beeman.F90            \
 	multisystem/propagator_exp_mid.F90           \
+	multisystem/propagator_static.F90            \
 	multisystem/propagator_verlet.F90            \
 	multisystem/quantity.F90                     \
 	multisystem/system.F90                       \
@@ -500,6 +505,7 @@ interactions_f_srcs =                                 \
 	interactions/gravity.F90                      \
         interactions/ion_electron_local_potential.F90 \
 	interactions/interactions_factory.F90         \
+	interactions/linear_medium_em_field.F90       \
 	interactions/lorentz_force.F90                \
         interactions/nlcc.F90                         \
         interactions/potential_interaction.F90 
@@ -585,8 +591,8 @@ maxwell_f_srcs =                                 \
 	maxwell/energy_mxll.F90                  \
         maxwell/external_densities.F90           \
 	maxwell/hamiltonian_mxll.F90             \
-	maxwell/medium_mxll.F90                  \
 	maxwell/propagator_mxll.F90              \
+	maxwell/system_linear_medium.F90         \
 	maxwell/system_mxll.F90
 
 maxwell_srcs = $(maxwell_f_srcs)

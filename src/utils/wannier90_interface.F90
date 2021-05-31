@@ -26,16 +26,17 @@ program wannier90_interface
   use cube_oct_m
   use cube_function_oct_m
   use fft_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use io_binary_oct_m
   use io_function_oct_m
   use io_oct_m
+  use ions_oct_m
   use iso_fortran_env
   use kpoints_oct_m
   use lalg_adv_oct_m
   use lalg_basic_oct_m
+  use lattice_vectors_oct_m
   use loct_oct_m
   use loct_math_oct_m
   use mesh_oct_m
@@ -48,7 +49,6 @@ program wannier90_interface
   use parser_oct_m
   use profiling_oct_m
   use restart_oct_m
-  use simul_box_oct_m
   use states_elec_calc_oct_m
   use electrons_oct_m
   use space_oct_m
@@ -245,7 +245,7 @@ program wannier90_interface
   ! create setup files
   select case(w90_mode) 
   case(OPTION__WANNIER90MODE__W90_SETUP)
-    call wannier90_setup(sys%geo, sys%kpoints)
+    call wannier90_setup(sys%ions, sys%kpoints)
 
   ! load states and calculate interface files
   case(OPTION__WANNIER90MODE__W90_OUTPUT)
@@ -267,7 +267,7 @@ program wannier90_interface
     if(ierr == 0) then
       call states_elec_look(restart, nik, dim, nst, ierr)
       if(dim == sys%st%d%dim .and. nik == sys%kpoints%reduced%npoints .and. nst == sys%st%nst) then
-        call states_elec_load(restart, global_namespace, sys%st, sys%gr, sys%kpoints, &
+        call states_elec_load(restart, global_namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, &
                                  ierr, iter, label = ": wannier90", skip=exclude_list)
       else
          write(message(1),'(a)') 'Restart structure not commensurate.'
@@ -276,7 +276,7 @@ program wannier90_interface
     end if
     call restart_end(restart)
 
-    call generate_wannier_states(sys%gr%mesh, sys%gr%sb, sys%geo, sys%st, sys%kpoints)
+    call generate_wannier_states(sys%space, sys%gr%mesh, sys%ions, sys%st, sys%kpoints)
   case default
     message(1) = "Wannier90Mode is set to an unsupported value."
     call messages_fatal(1)
@@ -296,8 +296,8 @@ program wannier90_interface
 
 contains
 
-  subroutine wannier90_setup(geo, kpoints)
-    type(geometry_t),  intent(in) :: geo
+  subroutine wannier90_setup(ions, kpoints)
+    type(ions_t),      intent(in) :: ions
     type(kpoints_t),   intent(in) :: kpoints
 
     character(len=80) :: filename
@@ -316,14 +316,14 @@ contains
     write(w90_win,'(a)') 'begin unit_cell_cart'
     write(w90_win,'(a)') 'Ang'
     do idim = 1,3
-      write(w90_win,'(f13.8,f13.8,f13.8)') units_from_atomic(unit_angstrom, geo%latt%rlattice(1:3,idim))
+      write(w90_win,'(f13.8,f13.8,f13.8)') units_from_atomic(unit_angstrom, ions%latt%rlattice(1:3,idim))
     end do
     write(w90_win,'(a)') 'end unit_cell_cart'
     write(w90_win,'(a)') ' '
 
     write(w90_win,'(a)') 'begin atoms_frac'
-    do ia = 1, geo%natoms
-       write(w90_win,'(a,2x,f13.8,f13.8,f13.8)') trim(geo%atom(ia)%label), geo%latt%cart_to_red(geo%atom(ia)%x(1:3))
+    do ia = 1, ions%natoms
+       write(w90_win,'(a,2x,f13.8,f13.8,f13.8)') trim(ions%atom(ia)%label), ions%latt%cart_to_red(ions%pos(:, ia))
     end do
     write(w90_win,'(a)') 'end atoms_frac'
     write(w90_win,'(a)') ' '
@@ -404,7 +404,7 @@ contains
         nik = nik / 2
       end if
       if(dim == sys%st%d%dim .and. nik == sys%kpoints%reduced%npoints .and. nst == sys%st%nst) then
-         call states_elec_load(restart, global_namespace, sys%st, sys%gr, sys%kpoints, &
+         call states_elec_load(restart, global_namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, &
                     ierr, iter, label = ": wannier90", skip=exclude_list)
       else
          write(message(1),'(a)') 'Restart structure not commensurate.'
@@ -501,11 +501,11 @@ contains
     end if
 
     if(bitand(w90_what, OPTION__WANNIER90FILES__W90_UNK) /= 0) then
-      call write_unk(sys%gr%mesh, sys%st)
+      call write_unk(sys%space, sys%gr%mesh, sys%st)
     end if
 
     if(bitand(w90_what, OPTION__WANNIER90FILES__W90_AMN) /= 0) then
-      call create_wannier90_amn(sys%space, sys%gr%mesh, sys%gr%sb, sys%st, sys%kpoints)
+      call create_wannier90_amn(sys%space, sys%gr%mesh, sys%ions%latt, sys%st, sys%kpoints)
     end if
 
     if(bitand(w90_what, OPTION__WANNIER90FILES__W90_EIG) /= 0) then
@@ -838,7 +838,7 @@ contains
          iknn = (iknn-1)*2 + w90_spin_channel
        end if
 
-       Gr(1:3) = matmul(G(1:3), sys%geo%latt%klattice(1:3,1:3))
+       Gr(1:3) = matmul(G(1:3), sys%ions%latt%klattice(1:3,1:3))
 
        if(any(G(1:3) /= 0)) then
          do ip = 1, mesh%np
@@ -948,7 +948,8 @@ contains
     POP_SUB(create_wannier90_eig)
   end subroutine create_wannier90_eig
 
-  subroutine write_unk(mesh, st)
+  subroutine write_unk(space, mesh, st)
+    type(space_t),       intent(in) :: space
     type(mesh_t),        intent(in) :: mesh
     type(states_elec_t), intent(in) :: st
 
@@ -978,7 +979,7 @@ contains
 
     SAFE_ALLOCATE(psi(1:mesh%np))
 
-    call cube_init(cube, mesh%idx%ll, mesh%sb, global_namespace, need_partition=.not.mesh%parallel_in_domains)
+    call cube_init(cube, mesh%idx%ll, global_namespace, space, need_partition=.not.mesh%parallel_in_domains)
     call zcube_function_alloc_RS(cube, cf)
 
     do ik = 1, w90_num_kpts
@@ -1029,12 +1030,12 @@ contains
 
   end subroutine write_unk
 
-  subroutine create_wannier90_amn(space, mesh, sb, st, kpoints)
-    type(space_t),        intent(in) :: space
-    type(mesh_t),         intent(in) :: mesh
-    type(simul_box_t),    intent(in) :: sb 
-    type(states_elec_t),  intent(in) :: st
-    type(kpoints_t),      intent(in) :: kpoints
+  subroutine create_wannier90_amn(space, mesh, latt, st, kpoints)
+    type(space_t),           intent(in) :: space
+    type(mesh_t),            intent(in) :: mesh
+    type(lattice_vectors_t), intent(in) :: latt
+    type(states_elec_t),     intent(in) :: st
+    type(kpoints_t),         intent(in) :: kpoints
 
     integer ::  ist, ik, w90_amn, idim, iw, ip, ik_real
     FLOAT   ::  center(3),  kpoint(1:MAX_DIM), threshold
@@ -1100,8 +1101,8 @@ contains
         orbitals(iw)%submesh = .false.
       
         ! cartesian coordinate of orbital center
-        center(1:3) = sb%latt%red_to_cart(w90_proj_centers(iw,1:3))
-        call submesh_init(orbitals(iw)%sphere, space, sb, mesh, center, orbitals(iw)%radius)
+        center(1:3) = latt%red_to_cart(w90_proj_centers(iw,1:3))
+        call submesh_init(orbitals(iw)%sphere, space, mesh, latt, center, orbitals(iw)%radius)
       
         ! make transpose table of submesh points for use in pwscf routine
         SAFE_ALLOCATE(rr(1:3,orbitals(iw)%sphere%np))
@@ -1118,7 +1119,7 @@ contains
         if(w90_proj_lmr(iw,3) == 1) then
           ! apply radial function
           do ip = 1,orbitals(iw)%sphere%np
-            ylm(ip) = ylm(ip)*M_TWO*exp(-orbitals(iw)%sphere%x(ip,0))
+            ylm(ip) = ylm(ip)*M_TWO*exp(-orbitals(iw)%sphere%r(ip))
           end do
         else
           call messages_not_implemented("oct-wannier90: r/=1 for the radial part")
@@ -1132,7 +1133,7 @@ contains
         SAFE_ALLOCATE(orbitals(iw)%eorb_mesh(1:mesh%np, 1:1, 1:1, 1:w90_num_kpts))
         orbitals(iw)%eorb_mesh(:,:,:,:) = M_Z0
       
-        call orbitalset_update_phase(orbitals(iw), sb%dim, st%d%kpt, kpoints, st%d%ispin == SPIN_POLARIZED, &
+        call orbitalset_update_phase(orbitals(iw), space%dim, st%d%kpt, kpoints, st%d%ispin == SPIN_POLARIZED, &
                                         kpt_max = w90_num_kpts)
       
         SAFE_DEALLOCATE_A(rr)
@@ -1143,10 +1144,10 @@ contains
       SAFE_ALLOCATE(projection(1:w90_nproj))
       
       do ik = 1, w90_num_kpts
-        kpoint(1:sb%dim) = kpoints%get_point(ik)
+        kpoint(1:space%dim) = kpoints%get_point(ik)
       
         do ip = 1, mesh%np
-          phase(ip) = exp(-M_zI* sum(mesh%x(ip, 1:sb%dim) * kpoint(1:sb%dim)))
+          phase(ip) = exp(-M_zI* sum(mesh%x(ip, 1:space%dim) * kpoint(1:space%dim)))
         end do
 
         !For spin-polarized calculations, we select the right k-point
@@ -1210,16 +1211,18 @@ contains
 
   end subroutine create_wannier90_amn
 
-  subroutine generate_wannier_states(mesh, sb, geo, st, kpoints)
+  subroutine generate_wannier_states(space, mesh, ions, st, kpoints)
+    type(space_t),          intent(in) :: space
     type(mesh_t),           intent(in) :: mesh
-    type(simul_box_t),      intent(in) :: sb
-    type(geometry_t),       intent(in) :: geo
+    type(ions_t),           intent(in) :: ions
     type(states_elec_t),    intent(in) :: st
     type(kpoints_t),        intent(in) :: kpoints
 
     integer :: w90_u_mat, w90_xyz, nwann, nik
     integer :: ik, iw, iw2, ip, ipmax
-    integer(8) :: how
+    logical :: what(MAX_OUTPUT_TYPES)
+    integer(8) :: how(0:MAX_OUTPUT_TYPES)
+    integer :: output_interval(0:MAX_OUTPUT_TYPES) 
     FLOAT, allocatable :: centers(:,:), dwn(:)
     CMPLX, allocatable :: Umnk(:,:,:)
     CMPLX, allocatable :: zwn(:), psi(:,:)
@@ -1289,7 +1292,8 @@ contains
     call io_close(w90_u_mat)
 
     !We read the output format for the Wannier states
-    call io_function_read_how(sb, global_namespace, how)
+    what = .false.
+    call io_function_read_what_how_when(global_namespace, space, what, how, output_interval)
 
     call io_mkdir('wannier', global_namespace)
 
@@ -1304,7 +1308,7 @@ contains
       zwn(:) = M_Z0
 
       do ik = 1, w90_num_kpts
-        kpoint(1:sb%dim) = kpoints%get_point(ik, absolute_coordinates=.true.)
+        kpoint(1:space%dim) = kpoints%get_point(ik, absolute_coordinates=.true.)
 
         do iw2 = 1, st%nst
           if(exclude_list(iw2)) cycle
@@ -1318,7 +1322,7 @@ contains
           !The minus sign is here is for the wrong convention of Octopus
           do ip = 1, mesh%np
             zwn(ip) = zwn(ip) + Umnk(band_index(iw2), iw, ik)/w90_num_kpts * psi(ip, 1) * &
-                      exp(-M_zI* sum((mesh%x(ip, 1:sb%dim)-centers(1:sb%dim, iw)) * kpoint(1:sb%dim)))
+                      exp(-M_zI* sum((mesh%x(ip, 1:space%dim)-centers(1:space%dim, iw)) * kpoint(1:space%dim)))
           end do
         end do!ik   
       end do!iw2
@@ -1340,9 +1344,8 @@ contains
       do ip = 1, mesh%np
         dwn(ip) = TOFLOAT(zwn(ip))
       end do
-        
-      call dio_function_output(how, 'wannier', trim(fname), global_namespace, mesh, &
-          dwn,  unit_one, ierr, geo = geo, grp = st%dom_st_kpt_mpi_grp)
+      call dio_function_output(how(0), 'wannier', trim(fname), global_namespace, space, mesh, &
+          dwn, unit_one, ierr, ions = ions, grp = st%dom_st_kpt_mpi_grp)
     end do
 
     SAFE_DEALLOCATE_A(Umnk)
