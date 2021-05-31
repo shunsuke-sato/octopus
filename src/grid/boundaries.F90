@@ -40,6 +40,7 @@ module boundaries_oct_m
   use types_oct_m
   use unit_oct_m
   use unit_system_oct_m
+  use wfs_elec_oct_m
 
   implicit none
   
