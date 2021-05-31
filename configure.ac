@@ -19,11 +19,7 @@
 AC_PREREQ(2.59)
 # Note: the version string is written into ETSF_IO files, so when you update
 # this, update the results for test periodic_systems/09-etsf_io.test too.
-<<<<<<< HEAD
 AC_INIT([Octopus],[arborescens],[octopus-devel@tddft.org],[octopus])
-=======
-AC_INIT([Octopus],[arborescense],[octopus-devel@tddft.org],[octopus])
->>>>>>> hotfix-10.5
 AC_CONFIG_SRCDIR([src/basic/global.F90])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
