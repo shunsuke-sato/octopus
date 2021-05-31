@@ -7,6 +7,7 @@
 
 
 module libvdwxc_oct_m
+  use box_parallelepiped_oct_m
   use cube_oct_m
   use cube_function_oct_m
   use derivatives_oct_m
@@ -23,6 +24,7 @@ module libvdwxc_oct_m
   use pfft_oct_m
   use profiling_oct_m
   use simul_box_oct_m
+  use space_oct_m
   use unit_system_oct_m
 
   implicit none
@@ -129,9 +131,10 @@ contains
     POP_SUB(libvdwxc_write_info)
   end subroutine libvdwxc_write_info
 
-  subroutine libvdwxc_set_geometry(this, namespace, mesh)
+  subroutine libvdwxc_set_geometry(this, namespace, space, mesh)
     type(libvdwxc_t),  intent(inout) :: this
     type(namespace_t), intent(in)    :: namespace
+    type(space_t),     intent(in)    :: space
     type(mesh_t),      intent(inout) :: mesh
 
     integer :: blocksize
@@ -181,10 +184,10 @@ contains
     end if
 
     if(libvdwxc_mode == LIBVDWXC_MODE_SERIAL) then
-      call cube_init(this%cube, mesh%idx%ll, mesh%sb, namespace)
+      call cube_init(this%cube, mesh%idx%ll, namespace, space)
     else
 #ifdef HAVE_MPI
-      call cube_init(this%cube, mesh%idx%ll, mesh%sb, namespace, mpi_grp = mesh%mpi_grp, &
+      call cube_init(this%cube, mesh%idx%ll, namespace, space, mpi_grp = mesh%mpi_grp, &
         need_partition = .true., blocksize = blocksize)
       call mesh_cube_parallel_map_init(this%mesh_cube_map, mesh, this%cube)
 #endif
@@ -195,19 +198,20 @@ contains
     ! Therefore we cannot use the PFFT stuff without a frightful mess.
 
 #ifdef HAVE_LIBVDWXC
-    if(mesh%sb%box_shape == PARALLELEPIPED) then
+    select type (box => mesh%sb%box)
+    type is (box_parallelepiped_t)
       call vdwxc_set_unit_cell(this%libvdwxc_ptr, &
         this%cube%rs_n_global(3), this%cube%rs_n_global(2), this%cube%rs_n_global(1), &
         mesh%sb%latt%rlattice(3, 3), mesh%sb%latt%rlattice(2, 3), mesh%sb%latt%rlattice(1, 3), &
         mesh%sb%latt%rlattice(3, 2), mesh%sb%latt%rlattice(2, 2), mesh%sb%latt%rlattice(1, 2), &
         mesh%sb%latt%rlattice(3, 1), mesh%sb%latt%rlattice(2, 1), mesh%sb%latt%rlattice(1, 1))
-    else
+    class default
       call vdwxc_set_unit_cell(this%libvdwxc_ptr, &
         this%cube%rs_n_global(3), this%cube%rs_n_global(2), this%cube%rs_n_global(1), &
         mesh%spacing(3) * this%cube%rs_n_global(3), 0.0_8, 0.0_8, &
         0.0_8, mesh%spacing(2) * this%cube%rs_n_global(2), 0.0_8, &
         0.0_8, 0.0_8, mesh%spacing(1) * this%cube%rs_n_global(1))
-    end if
+    end select
 
     if(libvdwxc_mode == LIBVDWXC_MODE_SERIAL) then
       call vdwxc_init_serial(this%libvdwxc_ptr)
@@ -226,9 +230,10 @@ contains
     POP_SUB(libvdwxc_set_geometry)
   end subroutine libvdwxc_set_geometry
 
-  subroutine libvdwxc_calculate(this, namespace, rho, gradrho, dedd, dedgd)
+  subroutine libvdwxc_calculate(this, namespace, space, rho, gradrho, dedd, dedgd)
     type(libvdwxc_t),         intent(inout) :: this
     type(namespace_t),        intent(in)    :: namespace
+    type(space_t),            intent(in)    :: space
     FLOAT, dimension(:,:),    intent(inout) :: rho !!! data type
     FLOAT, dimension(:,:,:),  intent(in)    :: gradrho
     FLOAT, dimension(:,:),    intent(inout) :: dedd
@@ -387,7 +392,7 @@ contains
         integer :: ierr
 
         call dio_function_output(OPTION__OUTPUTFORMAT__DX,  'libvdwxc-debug', &
-          fname, namespace, this%mesh, arr, unit_one, ierr)
+          fname, namespace, space, this%mesh, arr, unit_one, ierr)
       end subroutine libvdwxc_write_array
 
     end subroutine libvdwxc_calculate

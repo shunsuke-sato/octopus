@@ -22,8 +22,8 @@ module magnetic_oct_m
   use boundaries_oct_m
   use comm_oct_m
   use derivatives_oct_m
-  use geometry_oct_m
   use global_oct_m
+  use ions_oct_m
   use kpoints_oct_m
   use mesh_function_oct_m
   use mesh_oct_m
@@ -111,11 +111,11 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine write_magnetic_moments(iunit, mesh, st, geo, boundaries, lmm_r)
+  subroutine write_magnetic_moments(iunit, mesh, st, ions, boundaries, lmm_r)
     integer,             intent(in) :: iunit
     type(mesh_t),        intent(in) :: mesh
     type(states_elec_t), intent(in) :: st
-    type(geometry_t),    intent(in) :: geo
+    type(ions_t),        intent(in) :: ions
     type(boundaries_t),  intent(in) :: boundaries
     FLOAT,               intent(in) :: lmm_r
     
@@ -126,8 +126,8 @@ contains
     PUSH_SUB(write_magnetic_moments)
     
     call magnetic_moment(mesh, st, st%rho, mm)
-    SAFE_ALLOCATE(lmm(1:max(mesh%sb%dim, 3), 1:geo%natoms))
-    call magnetic_local_moments(mesh, st, geo, boundaries, st%rho, lmm_r, lmm)
+    SAFE_ALLOCATE(lmm(1:max(mesh%sb%dim, 3), 1:ions%natoms))
+    call magnetic_local_moments(mesh, st, ions, boundaries, st%rho, lmm_r, lmm)
     
     if(mpi_grp_is_root(mpi_world)) then
       
@@ -142,13 +142,13 @@ contains
         trim(units_abbrev(units_out%length)),'] = ', units_from_atomic(units_out%length, lmm_r), '):'
       if(st%d%ispin == SPIN_POLARIZED) then ! collinear spin
         write(iunit,'(a,6x,14x,a)') ' Ion','mz'
-        do ia = 1, geo%natoms
-          write(iunit,'(i4,a10,f15.6)') ia, trim(species_label(geo%atom(ia)%species)), lmm(3, ia)
+        do ia = 1, ions%natoms
+          write(iunit,'(i4,a10,f15.6)') ia, trim(species_label(ions%atom(ia)%species)), lmm(3, ia)
         end do
       else if(st%d%ispin == SPINORS) then ! non-collinear
         write(iunit,'(a,8x,13x,a,13x,a,13x,a)') ' Ion','mx','my','mz'
-        do ia = 1, geo%natoms
-          write(iunit,'(i4,a10,9f15.6)') ia, trim(species_label(geo%atom(ia)%species)), lmm(:, ia)
+        do ia = 1, ions%natoms
+          write(iunit,'(i4,a10,9f15.6)') ia, trim(species_label(ions%atom(ia)%species)), lmm(:, ia)
         end do
       end if
       
@@ -160,14 +160,14 @@ contains
   end subroutine write_magnetic_moments
 
   ! ---------------------------------------------------------
-  subroutine magnetic_local_moments(mesh, st, geo, boundaries, rho, rr, lmm)
+  subroutine magnetic_local_moments(mesh, st, ions, boundaries, rho, rr, lmm)
     type(mesh_t),         intent(in)  :: mesh
     type(states_elec_t),  intent(in)  :: st
-    type(geometry_t),     intent(in)  :: geo
+    type(ions_t),         intent(in)  :: ions
     type(boundaries_t),   intent(in) :: boundaries
     FLOAT,                intent(in)  :: rho(:,:)
     FLOAT,                intent(in)  :: rr
-    FLOAT,                intent(out) :: lmm(max(mesh%sb%dim, 3), geo%natoms)
+    FLOAT,                intent(out) :: lmm(max(mesh%sb%dim, 3), ions%natoms)
 
     integer :: ia, idir, is
     FLOAT, allocatable :: md(:, :)
@@ -181,13 +181,13 @@ contains
     
     call magnetic_density(mesh, st, rho, md)
     lmm = M_ZERO
-    do ia = 1, geo%natoms
-      call submesh_init(sphere, geo%space, mesh%sb, mesh, geo%atom(ia)%x, rr)
+    do ia = 1, ions%natoms
+      call submesh_init(sphere, ions%space, mesh, ions%latt, ions%pos(:, ia), rr)
 
       if(boundaries%spiral) then 
         SAFE_ALLOCATE(phase_spiral(1:sphere%np))
         do is = 1, sphere%np
-          phase_spiral(is) = exp(+M_zI*sum((sphere%x(is,1:mesh%sb%dim)-mesh%x(sphere%map(is),1:mesh%sb%dim)) &
+          phase_spiral(is) = exp(+M_zI*sum((sphere%x(is,:) - mesh%x(sphere%map(is),:)) &
                                        *boundaries%spiral_q(1:mesh%sb%dim)))
         end do
 

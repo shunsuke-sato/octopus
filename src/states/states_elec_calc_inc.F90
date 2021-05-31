@@ -454,7 +454,7 @@ subroutine X(states_elec_trsm)(st, namespace, mesh, ik, ss)
 
   end if
 
-  call profiling_count_operations(mesh%np*TOFLOAT(st%nst*(st%nst + 1))*st%d%dim*CNST(0.5)*(R_ADD + R_MUL))
+  call profiling_count_operations(mesh%np*TOFLOAT(st%nst*(st%nst + 1))*st%d%dim*M_HALF*(R_ADD + R_MUL))
 
 
   call profiling_out(prof)
@@ -1006,8 +1006,9 @@ end function X(states_elec_residue)
 !! <p> = < phi*(ist, k) | -i \nabla | phi(ist, ik) >
 !!
 ! ---------------------------------------------------------
-subroutine X(states_elec_calc_momentum)(st, der, kpoints, momentum)
+subroutine X(states_elec_calc_momentum)(st, space, der, kpoints, momentum)
   type(states_elec_t),  intent(in)  :: st
+  type(space_t),        intent(in)  :: space
   type(derivatives_t),  intent(in)  :: der
   type(kpoints_t),      intent(in)  :: kpoints
   FLOAT,                intent(out) :: momentum(:,:,:)
@@ -1026,7 +1027,7 @@ subroutine X(states_elec_calc_momentum)(st, der, kpoints, momentum)
   PUSH_SUB(X(states_elec_calc_momentum))
 
   SAFE_ALLOCATE(psi(1:der%mesh%np_part, 1:st%d%dim))
-  SAFE_ALLOCATE(grad(1:der%mesh%np, 1:st%d%dim, 1:der%dim))
+  SAFE_ALLOCATE(grad(1:der%mesh%np, 1:st%d%dim, 1:space%dim))
 
   do ik = st%d%kpt%start, st%d%kpt%end
     do ist = st%st_start, st%st_end
@@ -1034,10 +1035,10 @@ subroutine X(states_elec_calc_momentum)(st, der, kpoints, momentum)
       call states_elec_get_state(st, der%mesh, ist, ik, psi)
 
       do idim = 1, st%d%dim
-        call X(derivatives_grad)(der, psi(:, idim), grad(:, idim, 1:der%dim))
+        call X(derivatives_grad)(der, psi(:, idim), grad(:, idim, 1:space%dim))
       end do
 
-      do idir = 1, der%dim
+      do idir = 1, space%dim
         ! since the expectation value of the momentum operator is real
         ! for square integrable wfns this integral should be purely imaginary 
         ! for complex wfns but real for real wfns (see case distinction below)
@@ -1055,8 +1056,8 @@ subroutine X(states_elec_calc_momentum)(st, der, kpoints, momentum)
       ! have to add the momentum vector in the case of periodic systems, 
       ! since psi contains only u_k
       kpoint = M_ZERO
-      kpoint(1:der%dim) = kpoints%get_point(st%d%get_kpoint_index(ik))
-      do idir = 1, der%mesh%sb%periodic_dim
+      kpoint(1:space%dim) = kpoints%get_point(st%d%get_kpoint_index(ik))
+      do idir = 1, space%periodic_dim
         momentum(idir, ist, ik) = momentum(idir, ist, ik) + kpoint(idir)
       end do
 
@@ -1463,7 +1464,7 @@ subroutine X(states_elec_rotate)(st, namespace, mesh, uu, ik)
 
     end do
 
-    call profiling_count_operations((R_ADD + R_MUL)*st%nst*st%d%dim*(st%nst - CNST(1.0))*mesh%np)
+    call profiling_count_operations((R_ADD + R_MUL)*st%nst*st%d%dim*(st%nst - M_ONE)*mesh%np)
 
     SAFE_DEALLOCATE_A(psinew)
     SAFE_DEALLOCATE_A(psicopy)
@@ -1509,7 +1510,7 @@ subroutine X(states_elec_rotate)(st, namespace, mesh, uu, ik)
       end do
     end do
 
-    call profiling_count_operations((R_ADD + R_MUL)*st%nst*(st%nst - CNST(1.0))*mesh%np)
+    call profiling_count_operations((R_ADD + R_MUL)*st%nst*(st%nst - M_ONE)*mesh%np)
    
     call accel_release_buffer(uu_buffer)
     call accel_release_buffer(psicopy_buffer)
@@ -1578,7 +1579,7 @@ subroutine X(states_elec_calc_overlap)(st, mesh, ik, overlap)
         n = st%nst, k = size*st%d%dim,                     &
         alpha = mesh%volume_element,                       &
         a = psi(1, 1, 1), lda = ubound(psi, dim = 1),      &
-        beta = CNST(1.0),                                  & 
+        beta = M_ONE,                                  & 
         c = overlap(1, 1), ldc = ubound(overlap, dim = 1))
 
     end do
@@ -1591,7 +1592,7 @@ subroutine X(states_elec_calc_overlap)(st, mesh, ik, overlap)
     end do
 #endif
 
-    call profiling_count_operations((R_ADD + R_MUL)*CNST(0.5)*st%nst*st%d%dim*(st%nst - CNST(1.0))*mesh%np)
+    call profiling_count_operations((R_ADD + R_MUL)*M_HALF*st%nst*st%d%dim*(st%nst - M_ONE)*mesh%np)
 
     if(mesh%parallel_in_domains) call mesh%allreduce(overlap, dim = (/st%nst, st%nst/))
 
@@ -1645,7 +1646,7 @@ subroutine X(states_elec_calc_overlap)(st, mesh, ik, overlap)
 
     call accel_release_buffer(psi_buffer)
 
-    call profiling_count_operations((R_ADD + R_MUL)*CNST(0.5)*st%nst*st%d%dim*(st%nst - CNST(1.0))*mesh%np)
+    call profiling_count_operations((R_ADD + R_MUL)*M_HALF*st%nst*st%d%dim*(st%nst - M_ONE)*mesh%np)
 
     call accel_read_buffer(overlap_buffer, st%nst*st%nst, overlap)
 
@@ -1732,7 +1733,7 @@ subroutine X(states_elec_calc_projections)(st, gs_st, namespace, mesh, ik, proj,
    gs_nst_ = gs_st%nst
    if(present(gs_nst)) gs_nst_ = gs_nst
 
-    proj(1:gs_nst_, 1:st%nst) = CNST(0.0)
+    proj(1:gs_nst_, 1:st%nst) = M_ZERO
     
     SAFE_ALLOCATE(psi(1:st%nst, 1:st%d%dim, 1:block_size))
     SAFE_ALLOCATE(gspsi(1:max(gs_nst_, st%nst), 1:gs_st%d%dim, 1:block_size))
@@ -1762,13 +1763,13 @@ subroutine X(states_elec_calc_projections)(st, gs_st, namespace, mesh, ik, proj,
         alpha = R_TOTYPE(mesh%volume_element),      &
         a = gspsi(1, 1, 1), lda = ubound(gspsi, dim = 1),   &
         b = psi(1, 1, 1), ldb = ubound(psi, dim = 1), &
-        beta = R_TOTYPE(CNST(1.0)),                     & 
+        beta = R_TOTYPE(M_ONE),                     & 
         c = proj(1, 1), ldc = ubound(proj, dim = 1))
     end do
 
   end if
   
-  call profiling_count_operations((R_ADD + R_MUL)*gs_nst_*st%d%dim*(st%nst - CNST(1.0))*mesh%np)
+  call profiling_count_operations((R_ADD + R_MUL)*gs_nst_*st%d%dim*(st%nst - M_ONE)*mesh%np)
   
   if(mesh%parallel_in_domains) call mesh%allreduce(proj, dim = (/gs_nst_, st%nst/))
   
@@ -1929,7 +1930,7 @@ subroutine X(states_elec_me_two_body) (st, namespace, space, gr, kpoints, psolve
         ! In case of k-points, the poisson solver must contains k-q 
         ! in the Coulomb potential, and must be changed for each q point
         call poisson_build_kernel(psolver, namespace, space, coulb, qq, M_ZERO, &
-                  -(kpoints%full%npoints-npath)*gr%sb%latt%rcell_volume*(singularity%Fk(jkpoint)-singularity%FF))
+                  -(kpoints%full%npoints-npath)*kpoints%latt%rcell_volume*(singularity%Fk(jkpoint)-singularity%FF))
       end if
 
 #ifndef R_TCOMPLEX

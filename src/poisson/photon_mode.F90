@@ -56,8 +56,8 @@ type photon_mode_t
     FLOAT, allocatable    :: number(:)          !< Number of photons in mode
     FLOAT, allocatable    :: correlator(:,:)    !< Correlation function <n(r)(ad+a)>
     FLOAT                 :: n_electrons        !< Number of electrons
-    FLOAT, pointer        :: pt_coord_q0(:)     !< Photon coordinates, initial value or gs result
-    FLOAT, pointer        :: pt_momen_p0(:)     !< Photon momenta, initial value or gs result
+    FLOAT, pointer        :: pt_coord_q0(:)=>null()   !< Photon coordinates, initial value or gs result
+    FLOAT, pointer        :: pt_momen_p0(:)=>null()   !< Photon momenta, initial value or gs result
     FLOAT                 :: mu
     logical               :: has_q0_p0
   end type photon_mode_t
@@ -77,10 +77,13 @@ contains
 #ifdef HAVE_MPI
     integer               :: ierr
 #endif
-    logical               :: file_exists
+    logical               :: file_exists, modes_from_file_exists
     character(MAX_PATH_LEN) :: filename
 
     PUSH_SUB(photon_mode_init)
+
+    this%nmodes = 0
+    modes_from_file_exists = .false.
 
     this%dim = dim
     this%has_q0_p0 = .false.
@@ -131,6 +134,7 @@ contains
         end do
         call io_close(iunit)
       end if
+      modes_from_file_exists = .true.
 #ifdef HAVE_MPI
       ! broadcast first array dimensions, then allocate and broadcast arrays
       call MPI_Bcast(this%nmodes, 1, MPI_INTEGER, 0, mpi_world%comm, ierr)
@@ -169,8 +173,7 @@ contains
     !% the code will normalize it.
     !%End
 
-    this%nmodes = 0
-    if(parse_block(namespace, 'PhotonModes', blk) == 0) then
+    if(parse_block(namespace, 'PhotonModes', blk) == 0 .and. .not. modes_from_file_exists) then
 
        this%nmodes = parse_block_n(blk)
        SAFE_ALLOCATE(this%omega(1:this%nmodes))

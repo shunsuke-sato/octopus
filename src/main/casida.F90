@@ -270,7 +270,7 @@ contains
 
     call restart_init(gs_restart, sys%namespace, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=sys%gr%mesh, exact=.true.)
     if(ierr == 0) then
-      call states_elec_look_and_load(gs_restart, sys%namespace, sys%st, sys%gr, sys%kpoints)
+      call states_elec_look_and_load(gs_restart, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints)
       call restart_end(gs_restart)
     else
       message(1) = "Previous gs calculation is required."
@@ -307,7 +307,7 @@ contains
     ! setup Hamiltonian, without recalculating eigenvalues (use the ones from the restart information)
     message(1) = 'Info: Setting up Hamiltonian.'
     call messages_info(1)
-    call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, calc_eigenval=.false.)
+    call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, calc_eigenval=.false.)
 
     !%Variable CasidaTheoryLevel
     !%Type flag
@@ -358,7 +358,7 @@ contains
     call parse_variable(sys%namespace, 'EnablePhotons', .false., cas%has_photons)
     cas%pt_nmodes = 0
     if (cas%has_photons) then
-      if(cas%has_photons) call messages_experimental('EnablePhotons = yes')
+      call messages_experimental('EnablePhotons = yes')
       call photon_mode_init(cas%pt, sys%namespace, sys%gr%mesh, sys%space%dim, sys%st%qtot)
       write(message(1), '(a,i7,a)') 'INFO: Solving Casida equation with ', &
         cas%pt%nmodes, ' photon modes.'
@@ -381,7 +381,10 @@ contains
     !%End
     call parse_variable(sys%namespace, 'CasidaTransitionDensities', "0", cas%trandens)
 
-    if(cas%trandens /= "0") call io_function_read_how(sys%gr%sb, sys%namespace, sys%outp%how)
+    if (cas%trandens /= "0") then 
+      call io_function_read_what_how_when(sys%namespace, sys%space, sys%outp%what,&
+        sys%outp%how, sys%outp%output_interval)
+    end if
 
     !%Variable CasidaMomentumTransfer
     !%Type block
@@ -607,10 +610,10 @@ contains
       end if
 
       if(cas%calc_forces) then
-        do iatom = 1, sys%geo%natoms
+        do iatom = 1, sys%ions%natoms
           do idir = 1, cas%space_dim
             write(restart_filename,'(a,i6.6,a,i1)') 'lr_kernel_', iatom, '_', idir
-            if(cas%triplet) restart_filename = trim(restart_filename)//'_triplet'
+            if (cas%triplet) restart_filename = trim(restart_filename)//'_triplet'
             call restart_rm(cas%restart_dump, restart_filename)
 
             write(restart_filename,'(a,i6.6,a,i1)') 'lr_hmat1_', iatom, '_', idir
@@ -785,7 +788,7 @@ contains
       else
         SAFE_ALLOCATE(cas%zmat_save(1:cas%n_pairs, 1:cas%n_pairs))
       end if
-      SAFE_ALLOCATE(cas%forces(1:sys%geo%natoms, 1:cas%space_dim, 1:cas%n_pairs))
+      SAFE_ALLOCATE(cas%forces(1:cas%space_dim, 1:sys%ions%natoms, 1:cas%n_pairs))
     end if
 
     if(cas%qcalc) then

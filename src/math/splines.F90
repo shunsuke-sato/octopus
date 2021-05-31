@@ -676,7 +676,7 @@ contains
 
     ! The first point, xw(1) = 0.0 and it has to be treated separately.
     do j = 1, npoints
-      y2(j) = CNST(4.0)*M_PI*y(j)*x(j)**2
+      y2(j) = M_FOUR*M_PI*y(j)*x(j)**2
     end do
     call spline_init(aux)
     call spline_fit(npoints, x, y2, aux)
@@ -685,7 +685,7 @@ contains
 
     do i = 2, np
       do j = 1, npoints
-        y2(j) = (CNST(4.0)*M_PI/xw(i))*y(j)*x(j)*sin(xw(i)*x(j))
+        y2(j) = (M_FOUR*M_PI/xw(i))*y(j)*x(j)*sin(xw(i)*x(j))
       end do
       call spline_init(aux)
       call spline_fit(npoints, x, y2, aux)
@@ -756,7 +756,7 @@ contains
       end do
       call spline_init(aux)
       call spline_fit(npoints, x, y2, aux)
-      yw(i) = sqrt(CNST(2.0)/M_PI)*oct_spline_eval_integ_full(aux%spl, aux%acc)
+      yw(i) = sqrt(M_TWO/M_PI)*oct_spline_eval_integ_full(aux%spl, aux%acc)
       
       call spline_end(aux)
     end do
@@ -799,7 +799,7 @@ contains
       end if
 
       !To avoid underflows
-      exp_arg = -beta*(x(i)/cutoff - CNST(1.0))**2 
+      exp_arg = -beta*(x(i)/cutoff - M_ONE)**2 
       if( exp_arg > CNST(-100)) then
         y(i) = y(i) * exp(exp_arg)
       else

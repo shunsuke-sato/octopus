@@ -268,6 +268,7 @@ subroutine X(preconditioner_apply_batch)(pre, namespace, mesh, hm, aa, bb, ik, o
   integer :: ii
   type(profile_t), save :: prof
   R_TYPE, allocatable :: psia(:, :), psib(:, :)
+  type(wfs_elec_t) :: eaa
 
   PUSH_SUB(X(preconditioner_apply_batch))
   call profiling_in(prof, TOSTRING(X(PRECONDITIONER_BATCH)))
@@ -276,7 +277,27 @@ subroutine X(preconditioner_apply_batch)(pre, namespace, mesh, hm, aa, bb, ik, o
 
   if(pre%which == PRE_FILTER) then
 
-    call X(derivatives_batch_perform)(pre%op, pre%der, aa, bb)
+    call boundaries_set(pre%der%boundaries, aa)
+    select type(aa)
+    type is(wfs_elec_t)
+      if (allocated(hm%hm_base%phase)) then
+        call aa%copy_to(eaa)
+        call hamiltonian_elec_base_phase(hm%hm_base, mesh, mesh%np_part, .false., eaa, src = aa)
+        select type(bb)
+        type is(wfs_elec_t)
+          bb%has_phase = .true.
+          call X(derivatives_batch_perform)(pre%op, pre%der, eaa, bb, set_bc = .false.)
+          call hamiltonian_elec_base_phase(hm%hm_base, mesh, mesh%np, .true., bb)
+        class default
+          ASSERT(.false.)
+        end select
+        call eaa%end()
+      else
+        call X(derivatives_batch_perform)(pre%op, pre%der, aa, bb, set_bc = .false.)
+      end if
+    class default
+      call X(derivatives_batch_perform)(pre%op, pre%der, aa, bb, set_bc = .false.)
+    end select
 
   else if(pre%which == PRE_NONE) then
 

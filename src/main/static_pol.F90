@@ -23,11 +23,11 @@ module static_pol_oct_m
   use born_charges_oct_m
   use elf_oct_m
   use em_resp_oct_m
-  use geometry_oct_m
   use global_oct_m
   use hamiltonian_elec_oct_m
   use io_oct_m
   use io_function_oct_m
+  use ions_oct_m
   use lcao_oct_m
   use mesh_function_oct_m
   use messages_oct_m
@@ -109,7 +109,9 @@ contains
 
     ! load wavefunctions
     call restart_init(gs_restart, sys%namespace, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=sys%gr%mesh, exact=.true.)
-    if(ierr == 0) call states_elec_load(gs_restart, sys%namespace, sys%st, sys%gr, sys%kpoints, ierr)
+    if(ierr == 0) then
+      call states_elec_load(gs_restart, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, ierr)
+    end if
     if (ierr /= 0) then
       message(1) = "Unable to read wavefunctions."
       call messages_fatal(1)
@@ -124,7 +126,7 @@ contains
     ! set up Hamiltonian
     message(1) = 'Info: Setting up Hamiltonian.'
     call messages_info(1)
-    call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, calc_eigenval = .false.) ! we read them from restart
+    call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, calc_eigenval = .false.) ! we read them from restart
 
     ! Allocate the dipole
     SAFE_ALLOCATE(dipole(1:sys%space%dim, 1:sys%space%dim, 1:2))
@@ -183,9 +185,9 @@ contains
       call messages_info(1)
     end if
 
-    if(bitand(sys%outp%what, OPTION__OUTPUT__DENSITY) /= 0 .or. &
-       bitand(sys%outp%what, OPTION__OUTPUT__POL_DENSITY) /= 0) then
-       if(i_start > 2 .and. calc_diagonal) then
+    if (sys%outp%what(OPTION__OUTPUT__DENSITY) .or. &
+       sys%outp%what(OPTION__OUTPUT__POL_DENSITY)) then
+       if (i_start > 2 .and. calc_diagonal) then
           i_start = 2
           diagonal_done = .false.
           !FIXME: take derivatives between yz and z (not y) so can restart from only last (z) calc
@@ -217,18 +219,18 @@ contains
     gs_rho = M_ZERO
 
     call output_init_()
-    call scf_init(scfv, sys%namespace, sys%gr, sys%geo, sys%st, sys%mc, sys%hm, sys%ks, sys%space)
-    call born_charges_init(Born_charges, sys%namespace, sys%geo, sys%st, sys%space%dim)
+    call scf_init(scfv, sys%namespace, sys%gr, sys%ions, sys%st, sys%mc, sys%hm, sys%ks, sys%space)
+    call born_charges_init(Born_charges, sys%namespace, sys%ions, sys%st, sys%space%dim)
 
     ! now calculate the dipole without field
 
     sys%hm%ep%vpsl(1:sys%gr%mesh%np) = vpsl_save(1:sys%gr%mesh%np)
-    call hamiltonian_elec_update(sys%hm, sys%gr%mesh, sys%namespace)
+    call hamiltonian_elec_update(sys%hm, sys%gr%mesh, sys%namespace, sys%space)
 
     write(message(1), '(a)')
     write(message(2), '(a)') 'Info: Calculating dipole moment for zero field.'
     call messages_info(2)
-    call scf_run(scfv, sys%namespace, sys%space, sys%mc, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, sys%outp, &
+    call scf_run(scfv, sys%namespace, sys%space, sys%mc, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, sys%outp, &
       gs_run=.false., verbosity = verbosity)
 
     gs_rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin) = sys%st%rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin)
@@ -255,7 +257,7 @@ contains
     end if
 
     if(mpi_grp_is_root(mpi_world)) then
-      ionic_dipole(1:sys%space%dim) = sys%geo%dipole()
+      ionic_dipole(1:sys%space%dim) = sys%ions%dipole()
       print_dipole(1:sys%space%dim) = center_dipole(1:sys%space%dim) + ionic_dipole(1:sys%space%dim)
       call output_dipole(stdout, print_dipole, sys%space%dim)
     end if
@@ -271,7 +273,7 @@ contains
         ! except that we treat electrons as positive
 
         sys%hm%ep%vpsl(1:sys%gr%mesh%np) = vpsl_save(1:sys%gr%mesh%np) + (-1)**isign * sys%gr%mesh%x(1:sys%gr%mesh%np, ii) * e_field
-        call hamiltonian_elec_update(sys%hm, sys%gr%mesh, sys%namespace)
+        call hamiltonian_elec_update(sys%hm, sys%gr%mesh, sys%namespace, sys%space)
 
         if(isign == 1) then
           sign_char = '+'
@@ -284,8 +286,10 @@ contains
 
         if(.not. fromScratch) then
           call restart_open_dir(restart_load, trim(dir_name), ierr)
-          if (ierr == 0) call states_elec_load(restart_load, sys%namespace, sys%st, sys%gr, sys%kpoints, ierr)
-          call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm)
+          if (ierr == 0) then
+            call states_elec_load(restart_load, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, ierr)
+          end if
+          call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm)
           if(ierr /= 0) fromScratch_local = .true.
           call restart_close_dir(restart_load)
         end if
@@ -293,14 +297,14 @@ contains
         if(fromScratch_local) then
           if(start_density_is_zero_field) then
             sys%st%rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin) = gs_rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin)
-            call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm)
+            call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm)
           else
-            call lcao_run(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, lmm_r = scfv%lmm_r)
+            call lcao_run(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, lmm_r = scfv%lmm_r)
           end if
         end if
 
         call scf_mix_clear(scfv)
-        call scf_run(scfv, sys%namespace, sys%space, sys%mc, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, sys%outp, &
+        call scf_run(scfv, sys%namespace, sys%space, sys%mc, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, sys%outp, &
           gs_run=.false., verbosity = verbosity)
 
         trrho = M_ZERO
@@ -322,7 +326,9 @@ contains
 
         if(write_restart_densities) then
           call restart_open_dir(restart_dump, trim(dir_name), ierr)
-          if (ierr == 0) call states_elec_dump(restart_dump, sys%st, sys%gr, sys%kpoints, ierr)
+          if (ierr == 0) then
+            call states_elec_dump(restart_dump, sys%space, sys%st, sys%gr%mesh, sys%kpoints, ierr)
+          end if
           call restart_close_dir(restart_dump)
           if(ierr /= 0) then
             message(1) = 'Unable to write states wavefunctions.'
@@ -353,7 +359,7 @@ contains
   
       sys%hm%ep%vpsl(1:sys%gr%mesh%np) = vpsl_save(1:sys%gr%mesh%np) &
         - (sys%gr%mesh%x(1:sys%gr%mesh%np, 2) + sys%gr%mesh%x(1:sys%gr%mesh%np, 3)) * e_field
-      call hamiltonian_elec_update(sys%hm, sys%gr%mesh, sys%namespace)
+      call hamiltonian_elec_update(sys%hm, sys%gr%mesh, sys%namespace, sys%space)
   
       if(isign == 1) then
         sign_char = '+'
@@ -365,8 +371,10 @@ contains
 
       if(.not. fromScratch) then
         call restart_open_dir(restart_load, "field_yz+", ierr)
-        if (ierr == 0) call states_elec_load(restart_load, sys%namespace, sys%st, sys%gr, sys%kpoints, ierr)
-        call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm)
+        if (ierr == 0) then
+          call states_elec_load(restart_load, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, ierr)
+        end if
+        call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm)
         if(ierr /= 0) fromScratch_local = .true.
         call restart_close_dir(restart_load)
       end if
@@ -374,14 +382,14 @@ contains
       if(fromScratch_local) then
         if(start_density_is_zero_field) then
           sys%st%rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin) = gs_rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin)
-          call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm)
+          call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm)
         else
-          call lcao_run(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, lmm_r = scfv%lmm_r)
+          call lcao_run(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, lmm_r = scfv%lmm_r)
         end if
       end if
 
       call scf_mix_clear(scfv)
-      call scf_run(scfv, sys%namespace, sys%space, sys%mc, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, sys%outp, &
+      call scf_run(scfv, sys%namespace, sys%space, sys%mc, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, sys%outp, &
         gs_run=.false., verbosity = verbosity)
   
       trrho = M_ZERO
@@ -394,7 +402,7 @@ contains
         diag_dipole(jj) = dmf_moment(sys%gr%mesh, trrho, jj, 1)
       end do
 
-      if(mpi_grp_is_root(mpi_world)) then
+      if (mpi_grp_is_root(mpi_world)) then
         print_dipole(1:sys%space%dim) = diag_dipole(1:sys%space%dim) + ionic_dipole(1:sys%space%dim)
         call output_dipole(stdout, print_dipole, sys%space%dim)
       end if
@@ -411,7 +419,9 @@ contains
 
       if(write_restart_densities) then
         call restart_open_dir(restart_dump, "field_yz+", ierr)
-        if (ierr == 0) call states_elec_dump(restart_dump, sys%st, sys%gr, sys%kpoints, ierr)
+        if (ierr == 0) then
+          call states_elec_dump(restart_dump, sys%space, sys%st, sys%gr%mesh, sys%kpoints, ierr)
+        end if
         call restart_close_dir(restart_dump)
         if(ierr /= 0) then
           message(1) = 'Unable to write states wavefunctions.'
@@ -531,13 +541,13 @@ contains
       PUSH_SUB(output_init_)
 
       !allocate memory for what we want to output
-      if(bitand(sys%outp%what, OPTION__OUTPUT__DENSITY) /= 0 .or. &
-         bitand(sys%outp%what, OPTION__OUTPUT__POL_DENSITY) /= 0 ) then 
+      if (sys%outp%what(OPTION__OUTPUT__DENSITY) .or. &
+         sys%outp%what(OPTION__OUTPUT__POL_DENSITY)) then 
         SAFE_ALLOCATE(lr_rho (1:sys%gr%mesh%np, 1:sys%st%d%nspin))
         SAFE_ALLOCATE(lr_rho2(1:sys%gr%mesh%np, 1:sys%st%d%nspin))
       end if
       
-      if(bitand(sys%outp%what, OPTION__OUTPUT__ELF) /= 0) then 
+      if (sys%outp%what(OPTION__OUTPUT__ELF)) then 
         SAFE_ALLOCATE(    elf(1:sys%gr%mesh%np, 1:sys%st%d%nspin))
         SAFE_ALLOCATE( lr_elf(1:sys%gr%mesh%np, 1:sys%st%d%nspin))
         SAFE_ALLOCATE(   elfd(1:sys%gr%mesh%np, 1:sys%st%d%nspin))
@@ -557,15 +567,15 @@ contains
 
       ! BORN CHARGES
       if(calc_Born) then
-        do iatom = 1, sys%geo%natoms
+        do iatom = 1, sys%ions%natoms
           if(isign == 1) then
           ! temporary assignment for use in next cycle when isign == 2
-            Born_charges%charge(ii, 1:sys%space%dim, iatom) = sys%geo%atom(iatom)%f(1:sys%space%dim)
+            Born_charges%charge(ii, 1:sys%space%dim, iatom) = sys%ions%tot_force(:, iatom)
           else
             Born_charges%charge(ii, 1:sys%space%dim, iatom) = &
-              (sys%geo%atom(iatom)%f(1:sys%space%dim) - Born_charges%charge(ii, 1:sys%space%dim, iatom)) &
+              (sys%ions%tot_force(:, iatom) - Born_charges%charge(ii, 1:sys%space%dim, iatom)) &
               / (M_TWO*e_field)
-            Born_charges%charge(ii, ii, iatom) = Born_charges%charge(ii, ii, iatom) + species_zval(sys%geo%atom(iatom)%species)
+            Born_charges%charge(ii, ii, iatom) = Born_charges%charge(ii, ii, iatom) + species_zval(sys%ions%atom(iatom)%species)
             ! since the efield is applied in the SCF calculation by just altering the external potential felt by the electrons,
             ! the ionic force due to the efield is not included in the forces returned by the SCF run, and so the ionic
             ! contribution to the Born charge must be added by hand here
@@ -574,8 +584,8 @@ contains
       end if
 
       !DENSITY AND POLARIZABILITY DENSITY   
-      if(bitand(sys%outp%what, OPTION__OUTPUT__DENSITY) /= 0 .or. &
-         bitand(sys%outp%what, OPTION__OUTPUT__POL_DENSITY) /= 0) then 
+      if (sys%outp%what(OPTION__OUTPUT__DENSITY) .or. &
+         sys%outp%what(OPTION__OUTPUT__POL_DENSITY)) then 
          
         if(isign == 1 .and. ii == 2) then
           tmp_rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin) = sys%st%rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin)
@@ -595,33 +605,33 @@ contains
 
           !write
           do is = 1, sys%st%d%nspin
-            if(bitand(sys%outp%what, OPTION__OUTPUT__DENSITY) /= 0) then
+            if (sys%outp%what(OPTION__OUTPUT__DENSITY)) then
               fn_unit = units_out%length**(1-sys%space%dim) / units_out%energy
               write(fname, '(a,i1,2a)') 'fd_density-sp', is, '-', index2axis(ii)
-              call dio_function_output(sys%outp%how, EM_RESP_FD_DIR, trim(fname),&
-                sys%namespace, sys%gr%mesh, lr_rho(:, is), fn_unit, ierr, geo = sys%geo)
+              call dio_function_output(sys%outp%how(OPTION__OUTPUT__DENSITY), EM_RESP_FD_DIR, trim(fname),&
+                sys%namespace, sys%space, sys%gr%mesh, lr_rho(:, is), fn_unit, ierr, ions = sys%ions)
 
               ! save the trouble of writing many copies of each density, since ii,jj = jj,ii
               fn_unit = units_out%length**(2-sys%space%dim) / units_out%energy**2
               do jj = ii, sys%space%dim
                 write(fname, '(a,i1,4a)') 'fd2_density-sp', is, '-', index2axis(ii), '-', index2axis(jj)
-                call dio_function_output(sys%outp%how, EM_RESP_FD_DIR, trim(fname),&
-                  sys%namespace, sys%gr%mesh, lr_rho2(:, is), fn_unit, ierr, geo = sys%geo)
+                call dio_function_output(sys%outp%how(OPTION__OUTPUT__DENSITY), EM_RESP_FD_DIR, trim(fname),&
+                  sys%namespace, sys%space, sys%gr%mesh, lr_rho2(:, is), fn_unit, ierr, ions = sys%ions)
               end do
             end if
 
-            if(bitand(sys%outp%what, OPTION__OUTPUT__POL_DENSITY) /= 0) then
+            if (sys%outp%what(OPTION__OUTPUT__POL_DENSITY)) then
               do jj = ii, sys%space%dim
                 fn_unit = units_out%length**(2-sys%space%dim) / units_out%energy
                 write(fname, '(a,i1,4a)') 'alpha_density-sp', is, '-', index2axis(ii), '-', index2axis(jj)
-                call dio_function_output(sys%outp%how, EM_RESP_FD_DIR, trim(fname), &
-                  sys%namespace, sys%gr%mesh, -sys%gr%mesh%x(:, jj) * lr_rho(:, is), fn_unit, ierr, geo = sys%geo)
+                call dio_function_output(sys%outp%how(OPTION__OUTPUT__POL_DENSITY), EM_RESP_FD_DIR, trim(fname), &
+                  sys%namespace, sys%space, sys%gr%mesh, -sys%gr%mesh%x(:, jj) * lr_rho(:, is), fn_unit, ierr, ions = sys%ions)
 
                 fn_unit = units_out%length**(3-sys%space%dim) / units_out%energy**2
                 write(fname, '(a,i1,6a)') 'beta_density-sp', is, '-', index2axis(ii), &
                   '-', index2axis(ii), '-', index2axis(jj)
-                call dio_function_output(sys%outp%how, EM_RESP_FD_DIR, trim(fname), &
-                  sys%namespace, sys%gr%mesh, -sys%gr%mesh%x(:, jj) * lr_rho2(:, is), fn_unit, ierr, geo = sys%geo)
+                call dio_function_output(sys%outp%how(OPTION__OUTPUT__POL_DENSITY), EM_RESP_FD_DIR, trim(fname), &
+                  sys%namespace, sys%space, sys%gr%mesh, -sys%gr%mesh%x(:, jj) * lr_rho2(:, is), fn_unit, ierr, ions = sys%ions)
               end do
             end if
           end do
@@ -630,7 +640,7 @@ contains
       end if
 
       !ELF
-      if(bitand(sys%outp%what, OPTION__OUTPUT__ELF) /= 0) then 
+      if (sys%outp%what(OPTION__OUTPUT__ELF)) then 
          
         if(isign == 1) then 
           call elf_calc(sys%st, sys%gr, sys%kpoints, elf, elfd)
@@ -646,11 +656,11 @@ contains
           !write
           do is = 1, sys%st%d%nspin
             write(fname, '(a,i1,2a)') 'lr_elf-sp', is, '-', index2axis(ii)
-            call dio_function_output(sys%outp%how, EM_RESP_FD_DIR, trim(fname),&
-                sys%namespace, sys%gr%mesh, lr_elf(:, is), unit_one, ierr, geo = sys%geo)
+            call dio_function_output(sys%outp%how(OPTION__OUTPUT__ELF), EM_RESP_FD_DIR, trim(fname),&
+                sys%namespace, sys%space, sys%gr%mesh, lr_elf(:, is), unit_one, ierr, ions = sys%ions)
             write(fname, '(a,i1,2a)') 'lr_elf_D-sp', is, '-', index2axis(ii)
-            call dio_function_output(sys%outp%how, EM_RESP_FD_DIR, trim(fname),&
-                sys%namespace, sys%gr%mesh, lr_elfd(:, is), unit_one, ierr, geo = sys%geo)
+            call dio_function_output(sys%outp%how(OPTION__OUTPUT__ELF), EM_RESP_FD_DIR, trim(fname),&
+                sys%namespace, sys%space, sys%gr%mesh, lr_elfd(:, is), unit_one, ierr, ions = sys%ions)
           end do
         end if
 
@@ -672,25 +682,25 @@ contains
 
       call io_mkdir(EM_RESP_FD_DIR, sys%namespace)
 
-      if((bitand(sys%outp%what, OPTION__OUTPUT__DENSITY) /= 0 .or. &
-         bitand(sys%outp%what, OPTION__OUTPUT__POL_DENSITY) /= 0) .and. calc_diagonal) then 
+      if ((sys%outp%what(OPTION__OUTPUT__DENSITY) .or. &
+         sys%outp%what(OPTION__OUTPUT__POL_DENSITY)) .and. calc_diagonal) then 
         lr_rho2(1:sys%gr%mesh%np, 1:sys%st%d%nspin) = &
           -(sys%st%rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin) - lr_rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin) &
           - tmp_rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin) + gs_rho(1:sys%gr%mesh%np, 1:sys%st%d%nspin)) / e_field**2
   
         do is = 1, sys%st%d%nspin
-          if(bitand(sys%outp%what, OPTION__OUTPUT__DENSITY) /= 0) then
+          if (sys%outp%what(OPTION__OUTPUT__DENSITY)) then
             fn_unit = units_out%length**(2-sys%space%dim) / units_out%energy**2
             write(fname, '(a,i1,a)') 'fd2_density-sp', is, '-y-z'
-            call dio_function_output(sys%outp%how, EM_RESP_FD_DIR, trim(fname),&
-              sys%namespace, sys%gr%mesh, lr_rho2(:, is), fn_unit, ierr, geo = sys%geo)
+            call dio_function_output(sys%outp%how(OPTION__OUTPUT__DENSITY), EM_RESP_FD_DIR, trim(fname),&
+              sys%namespace, sys%space, sys%gr%mesh, lr_rho2(:, is), fn_unit, ierr, ions = sys%ions)
           end if
   
-          if(bitand(sys%outp%what, OPTION__OUTPUT__POL_DENSITY) /= 0) then
+          if (sys%outp%what(OPTION__OUTPUT__POL_DENSITY)) then
             fn_unit = units_out%length**(3-sys%space%dim) / units_out%energy**2
             write(fname, '(a,i1,a)') 'beta_density-sp', is, '-x-y-z'
-            call dio_function_output(sys%outp%how, EM_RESP_FD_DIR, trim(fname),&
-              sys%namespace, sys%gr%mesh, -sys%gr%mesh%x(:, 1) * lr_rho2(:, is), fn_unit, ierr, geo = sys%geo)
+            call dio_function_output(sys%outp%how(OPTION__OUTPUT__POL_DENSITY), EM_RESP_FD_DIR, trim(fname),&
+              sys%namespace, sys%space, sys%gr%mesh, -sys%gr%mesh%x(:, 1) * lr_rho2(:, is), fn_unit, ierr, ions = sys%ions)
           end if
         end do
       end if
@@ -730,19 +740,19 @@ contains
         freq_factor(1:3) = M_ZERO ! for compatibility with em_resp version
         call out_hyperpolarizability(sys%gr%sb, beta, freq_factor(1:3), .true., EM_RESP_FD_DIR, sys%namespace)
 
-        if(calc_Born) then
-          call out_Born_charges(Born_charges, sys%geo, sys%namespace, sys%space%dim, &
+        if (calc_Born) then
+          call out_Born_charges(Born_charges, sys%ions, sys%namespace, sys%space%dim, &
             EM_RESP_FD_DIR, states_are_real(sys%st))
         end if
       end if
 
-      if(bitand(sys%outp%what, OPTION__OUTPUT__DENSITY) /= 0 .or. &
-         bitand(sys%outp%what, OPTION__OUTPUT__POL_DENSITY) /= 0) then 
+      if (sys%outp%what(OPTION__OUTPUT__DENSITY) .or. &
+         sys%outp%what(OPTION__OUTPUT__POL_DENSITY)) then 
         SAFE_DEALLOCATE_A(lr_rho)
         SAFE_DEALLOCATE_A(lr_rho2)
       end if
       
-      if(bitand(sys%outp%what, OPTION__OUTPUT__ELF) /= 0) then 
+      if (sys%outp%what(OPTION__OUTPUT__ELF)) then 
         SAFE_DEALLOCATE_A(lr_elf)
         SAFE_DEALLOCATE_A(elf)
         SAFE_DEALLOCATE_A(lr_elfd)

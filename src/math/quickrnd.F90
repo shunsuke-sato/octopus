@@ -89,7 +89,7 @@ contains
       rnd(ii) = TOFLOAT(iseed)/TOFLOAT(im)
       iseed = mod(iseed*ia + ic, im)
       rnd(ii) = rnd(ii) + M_ZI*TOFLOAT(iseed)/TOFLOAT(im)
-      rnd(ii) = rnd(ii)/sqrt(CNST(2.0))
+      rnd(ii) = rnd(ii)/sqrt(M_TWO)
     end do
     
     POP_SUB(quickrnd_array)

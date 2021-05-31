@@ -83,13 +83,14 @@ contains
 
     type(eigensolver_t) :: eigens
     integer :: iunit, ierr, iter, ierr_rho, ik
+    integer(8) :: what_it
     logical :: read_gs, converged, forced_finish, showoccstates, is_orbital_dependent, occ_missing
     integer :: max_iter, nst_calculated, showstart
     integer :: n_filled, n_partially_filled, n_half_filled
     integer, allocatable :: lowest_missing(:, :), occ_states(:)
     character(len=10) :: dirname
     type(restart_t) :: restart_load_unocc, restart_load_gs, restart_dump
-    logical :: write_density, bandstructure_mode, read_td_states
+    logical :: write_density, bandstructure_mode, read_td_states, output_iter
 
     PUSH_SUB(unocc_run_legacy)
 
@@ -154,7 +155,7 @@ contains
         mesh = sys%gr%mesh, exact = .true.)
 
       if(ierr == 0) then
-        call states_elec_load(restart_load_unocc, sys%namespace, sys%st, sys%gr, sys%kpoints, &
+        call states_elec_load(restart_load_unocc, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, &
                   ierr, lowest_missing = lowest_missing)
         call restart_end(restart_load_unocc)
       end if
@@ -176,12 +177,13 @@ contains
 
     if(ierr_rho == 0) then
       if (read_gs) then
-        call states_elec_load(restart_load_gs, sys%namespace, sys%st, sys%gr, sys%kpoints, &
+        call states_elec_load(restart_load_gs, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, &
                ierr, lowest_missing = lowest_missing)
       end if
-      if(sys%hm%lda_u_level /= DFT_U_NONE) &
+      if (sys%hm%lda_u_level /= DFT_U_NONE) then
         call lda_u_load(restart_load_gs, sys%hm%lda_u, sys%st, sys%hm%energy%dft_u, ierr)
-      call states_elec_load_rho(restart_load_gs, sys%st, sys%gr, ierr_rho)
+      end if
+      call states_elec_load_rho(restart_load_gs, sys%space, sys%st, sys%gr%mesh, ierr_rho)
       write_density = restart_has_map(restart_load_gs)
       call restart_end(restart_load_gs)
     else
@@ -242,10 +244,10 @@ contains
         nst_calculated = minval(lowest_missing) - 1
       end if
       showstart = max(nst_calculated + 1, 1)
-      call lcao_run(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm, st_start = showstart)
+      call lcao_run(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm, st_start = showstart)
     else
       ! we successfully read all the states and are planning to use them, no need for LCAO
-      call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%geo, calc_eigenval = .false.)
+      call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%ions, calc_eigenval = .false.)
       showstart = minval(occ_states(:)) + 1
     end if
 
@@ -272,8 +274,9 @@ contains
       call restart_init(restart_dump, sys%namespace, RESTART_UNOCC, RESTART_TYPE_DUMP, sys%mc, ierr, mesh=sys%gr%mesh)
 
       ! make sure the density is defined on the same mesh as the wavefunctions that will be written
-      if(write_density) &
-        call states_elec_dump_rho(restart_dump, sys%st, sys%gr, ierr_rho)
+      if (write_density) then
+        call states_elec_dump_rho(restart_dump, sys%space, sys%st, sys%gr%mesh, ierr_rho)
+      end if
     end if
 
     message(1) = "Info: Starting calculation of unoccupied states."
@@ -290,6 +293,7 @@ contains
     if(sys%st%d%pack_states .and. hamiltonian_elec_apply_packed(sys%hm)) call sys%st%pack()
 
     do iter = 1, max_iter
+      output_iter = .false.
       call eigensolver_run(eigens, sys%namespace, sys%gr, sys%st, sys%hm, 1, converged, sys%st%nst_conv)
 
       ! If not all gs wavefunctions were read when starting, in particular for nscf with different k-points,
@@ -321,7 +325,7 @@ contains
         ! write restart information.
         if(converged .or. (modulo(iter, sys%outp%restart_write_interval) == 0) &
                      .or. iter == max_iter .or. forced_finish) then
-          call states_elec_dump(restart_dump, sys%st, sys%gr, sys%kpoints, ierr, iter=iter)
+          call states_elec_dump(restart_dump, sys%space, sys%st, sys%gr%mesh, sys%kpoints, ierr, iter=iter)
           if(ierr /= 0) then
             message(1) = "Unable to write states wavefunctions."
             call messages_warning(1)
@@ -329,10 +333,16 @@ contains
         end if
       end if 
 
-      if(sys%outp%output_interval /= 0 .and. mod(iter, sys%outp%output_interval) == 0 &
-            .and. sys%outp%duringscf) then
+      do what_it = lbound(sys%outp%output_interval, 1), ubound(sys%outp%output_interval, 1)
+        if (sys%outp%what_now(what_it, iter)) then
+            output_iter = .true.
+            exit
+        end if
+      end do
+
+      if (output_iter .and. sys%outp%duringscf) then
         write(dirname,'(a,i4.4)') "unocc.",iter
-        call output_all(sys%outp, sys%namespace, sys%space, dirname, sys%gr, sys%geo, sys%st, sys%hm, sys%ks)
+        call output_all(sys%outp, sys%namespace, sys%space, dirname, sys%gr, sys%ions, iter, sys%st, sys%hm, sys%ks)
       end if
      
       if(converged .or. forced_finish) exit
@@ -359,14 +369,14 @@ contains
     if(sys%space%is_periodic().and. sys%st%d%nik > sys%st%d%nspin) then
       if(bitand(sys%kpoints%method, KPOINTS_PATH) /= 0) then
         call states_elec_write_bandstructure(STATIC_DIR, sys%namespace, sys%st%nst, sys%st, &
-              sys%gr%sb, sys%geo, sys%gr%mesh, sys%kpoints, &
+              sys%gr%sb, sys%ions, sys%gr%mesh, sys%kpoints, &
               sys%hm%hm_base%phase, vec_pot = sys%hm%hm_base%uniform_vector_potential, &
               vec_pot_var = sys%hm%hm_base%vector_potential)
       end if
     end if
  
 
-    call output_all(sys%outp, sys%namespace, sys%space, STATIC_DIR, sys%gr, sys%geo, sys%st, sys%hm, sys%ks)
+    call output_all(sys%outp, sys%namespace, sys%space, STATIC_DIR, sys%gr, sys%ions, -1, sys%st, sys%hm, sys%ks)
 
     call end_()
     POP_SUB(unocc_run_legacy)

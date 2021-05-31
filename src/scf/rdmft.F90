@@ -26,13 +26,13 @@ module rdmft_oct_m
   use eigensolver_oct_m
   use energy_oct_m
   use exchange_operator_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use hamiltonian_elec_oct_m
   use hamiltonian_elec_base_oct_m
   use io_oct_m
   use io_function_oct_m
+  use ions_oct_m
   use lalg_adv_oct_m
   use loct_oct_m
   use mesh_oct_m
@@ -278,12 +278,12 @@ contains
   ! ----------------------------------------
 
   ! scf for the occupation numbers and the natural orbitals
-  subroutine scf_rdmft(rdm, namespace, space, gr, geo, st, ks, hm, outp, restart_dump)
+  subroutine scf_rdmft(rdm, namespace, space, gr, ions, st, ks, hm, outp, restart_dump)
     type(rdm_t),              intent(inout) :: rdm
     type(namespace_t),        intent(in)    :: namespace
     type(space_t),            intent(in)    :: space
     type(grid_t),             intent(in)    :: gr  !< grid
-    type(geometry_t),         intent(in)    :: geo !< geometry
+    type(ions_t),             intent(in)    :: ions !< geometry
     type(states_elec_t),      intent(inout) :: st  !< States
     type(v_ks_t),             intent(inout) :: ks  !< Kohn-Sham
     type(hamiltonian_elec_t), intent(inout) :: hm  !< Hamiltonian
@@ -292,6 +292,7 @@ contains
 
     type(states_elec_t) :: states_save
     integer :: iter, icount, ip, ist, ierr, maxcount, iorb
+    integer(8) :: what_i
     FLOAT :: energy, energy_dif, energy_old, energy_occ, xpos, xneg, rel_ener
     FLOAT, allocatable :: dpsi(:,:), dpsi2(:,:)
     logical :: conv
@@ -358,7 +359,7 @@ contains
         if (rdm%do_basis) then
           call scf_orb(rdm, namespace, gr, st, hm, space, energy)
         else
-          call scf_orb_cg(rdm, namespace, space, gr, geo, st, ks, hm, energy)
+          call scf_orb_cg(rdm, namespace, space, gr, ions, st, ks, hm, energy)
         end if
         energy_dif = energy - energy_old
         energy_old = energy
@@ -417,7 +418,7 @@ contains
           end do
           call density_calc(states_save, gr, states_save%rho)
           ! if other quantities besides the densities and the states are needed they also have to be recalculated here!
-          call states_elec_dump(restart_dump, states_save, gr, hm%kpoints, ierr, iter=iter) 
+          call states_elec_dump(restart_dump, space, states_save, gr%mesh, hm%kpoints, ierr, iter=iter) 
 
           if (conv .or. iter == rdm%max_iter) then
             call states_elec_end(st)
@@ -429,7 +430,7 @@ contains
           SAFE_DEALLOCATE_A(dpsi)
           SAFE_DEALLOCATE_A(dpsi2)
         else
-          call states_elec_dump(restart_dump, st, gr, hm%kpoints, ierr, iter=iter) 
+          call states_elec_dump(restart_dump, space, st, gr%mesh, hm%kpoints, ierr, iter=iter) 
           
           ! calculate maxFO for cg-solver 
           if (.not. rdm%hf) then
@@ -447,11 +448,15 @@ contains
       endif
 
       ! write output for iterations if requested
-      if (outp%what/=0 .and. outp%duringscf .and. outp%output_interval /= 0 &
-        .and. mod(iter, outp%output_interval) == 0) then
-        write(dirname,'(a,a,i4.4)') trim(outp%iter_dir), "scf.", iter
-        call output_all(outp, namespace, space, dirname, gr, geo, st, hm, ks)
-        call scf_write_static(dirname, "info")
+      if (any(outp%what) .and. outp%duringscf) then
+        do what_i = lbound(outp%what, 1), ubound(outp%what, 1)
+          if (outp%what_now(what_i, iter)) then
+            write(dirname,'(a,a,i4.4)') trim(outp%iter_dir), "scf.", iter
+            call output_all(outp, namespace, space, dirname, gr, ions, iter, st, hm, ks)
+            call scf_write_static(dirname, "info")
+            exit
+          end if
+        end do
       end if
 
       if (conv) exit
@@ -469,7 +474,7 @@ contains
     end if
 
     call scf_write_static(STATIC_DIR, "info")
-    call output_all(outp, namespace, space, STATIC_DIR, gr, geo, st, hm, ks)
+    call output_all(outp, namespace, space, STATIC_DIR, gr, ions, -1, st, hm, ks)
 
     POP_SUB(scf_rdmft) 
 
@@ -1019,12 +1024,12 @@ contains
   !-----------------------------------------------------------------
   ! Minimize the total energy wrt. an orbital by conjugate gradient
   !-----------------------------------------------------------------
-  subroutine scf_orb_cg(rdm, namespace, space, gr, geo, st, ks, hm, energy)
+  subroutine scf_orb_cg(rdm, namespace, space, gr, ions, st, ks, hm, energy)
     type(rdm_t),              intent(inout) :: rdm
     type(namespace_t),        intent(in)    :: namespace
     type(space_t),            intent(in)    :: space
     type(grid_t),             intent(in)    :: gr !< grid
-    type(geometry_t),         intent(in)    :: geo !< geometry
+    type(ions_t),             intent(in)    :: ions !< geometry
     type(states_elec_t),      intent(inout) :: st !< States
     type(v_ks_t),             intent(inout) :: ks !< Kohn-Sham
     type(hamiltonian_elec_t), intent(inout) :: hm !< Hamiltonian
@@ -1037,8 +1042,8 @@ contains
     PUSH_SUB(scf_orb_cg)
     call profiling_in(prof_orb_cg, "CG")
     
-    call v_ks_calc(ks, namespace, space, hm, st, geo)
-    call hamiltonian_elec_update(hm, gr%mesh, namespace)
+    call v_ks_calc(ks, namespace, space, hm, st, ions)
+    call hamiltonian_elec_update(hm, gr%mesh, namespace, space)
     
     rdm%eigens%converged = 0
     if(mpi_grp_is_root(mpi_world) .and. .not. debug%info) then
@@ -1050,7 +1055,7 @@ contains
         rdm%eigens%converged(ik), ik, rdm%eigens%diff(:, ik), rdm%eigens%orthogonalize_to_all, &
         rdm%eigens%conjugate_direction, rdm%eigens%additional_terms, rdm%eigens%energy_change_threshold)
   
-      if(st%calc_eigenval .and. .not. rdm%eigens%folded_spectrum) then
+      if(.not. rdm%eigens%folded_spectrum) then
         ! recheck convergence after subspace diagonalization, since states may have reordered (copied from eigensolver_run)
         rdm%eigens%converged(ik) = 0
         do ist = 1, st%nst
@@ -1069,8 +1074,8 @@ contains
     
     ! calculate total energy with new states
     call density_calc (st, gr, st%rho)
-    call v_ks_calc(ks, namespace, space, hm, st, geo)
-    call hamiltonian_elec_update(hm, gr%mesh, namespace)
+    call v_ks_calc(ks, namespace, space, hm, st, ions)
+    call hamiltonian_elec_update(hm, gr%mesh, namespace, space)
     call rdm_derivatives(rdm, namespace, hm, st, gr, space)
     
     call total_energy_rdm(rdm, st%occ(:,1), energy)
@@ -1304,8 +1309,7 @@ contains
       !
       ! only used to calculate total energy
       call xst%nullify()
-      call dexchange_operator_compute_potentials(hm%exxop, namespace, space, gr%mesh, gr%sb%latt, &
-                                                 st, xst, hm%kpoints, F_out = v_ij)
+      call dexchange_operator_compute_potentials(hm%exxop, namespace, space, gr%mesh, st, xst, hm%kpoints, F_out = v_ij)
       call states_elec_end(xst)
 
       do ist = 1, st%nst

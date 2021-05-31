@@ -24,16 +24,17 @@ module system_dftb_oct_m
 #ifdef HAVE_DFTBPLUS
   use dftbplus
 #endif
-  use geometry_oct_m
   use global_oct_m
   use interaction_oct_m
   use interactions_factory_oct_m
   use io_oct_m
   use ion_dynamics_oct_m
+  use ions_oct_m
   use iso_c_binding
   use lasers_oct_m
   use messages_oct_m
   use mpi_oct_m
+  use multisystem_debug_oct_m
   use namespace_oct_m
   use parser_oct_m
   use profiling_oct_m
@@ -69,9 +70,9 @@ module system_dftb_oct_m
     character(len=LABEL_LEN), allocatable  :: labels(:)
     FLOAT, allocatable :: prev_acc(:,:,:) !< A storage of the prior times.
     FLOAT :: scc_tolerance
-    type(geometry_t), pointer :: geo => NULL()
+    type(ions_t),     pointer :: ions => NULL()
     type(c_ptr) :: output_handle(2)
-    type(ion_dynamics_t) :: ions
+    type(ion_dynamics_t) :: ions_dyn
     class(lasers_t), pointer :: ext_lasers => null()
     logical :: laser_field
     FLOAT :: field(3)
@@ -91,6 +92,7 @@ module system_dftb_oct_m
     procedure :: update_quantity => system_dftb_update_quantity
     procedure :: update_exposed_quantity => system_dftb_update_exposed_quantity
     procedure :: copy_quantities_to_interaction => system_dftb_copy_quantities_to_interaction
+    procedure :: init_interaction_as_partner => system_dftb_init_interaction_as_partner
     procedure :: update_interactions_start => system_dftb_update_interactions_start
     procedure :: update_interactions_finish => system_dftb_update_interactions_finish
     final :: system_dftb_finalize
@@ -169,8 +171,8 @@ contains
       call messages_not_implemented('DFTB+ for Dimensions /= 3')
     end if
 
-    this%geo => geometry_t(namespace, this%space)
-    this%n_atom = this%geo%natoms
+    this%ions => ions_t(namespace)
+    this%n_atom = this%ions%natoms
     SAFE_ALLOCATE(this%coords(3, this%n_atom))
     SAFE_ALLOCATE(this%acc(3, this%n_atom))
     SAFE_ALLOCATE(this%vel(3, this%n_atom))
@@ -180,23 +182,23 @@ contains
     SAFE_ALLOCATE(this%species(this%n_atom))
     SAFE_ALLOCATE(this%mass(this%n_atom))
     SAFE_ALLOCATE(this%atom_charges(this%n_atom, 1))
-    SAFE_ALLOCATE(this%labels(this%geo%nspecies))
-    SAFE_ALLOCATE(max_ang_mom(this%geo%nspecies))
+    SAFE_ALLOCATE(this%labels(this%ions%nspecies))
+    SAFE_ALLOCATE(max_ang_mom(this%ions%nspecies))
 
     ispec = 1
     this%species(1) = 1
-    this%labels(1) = trim(this%geo%atom(1)%label)
+    this%labels(1) = trim(this%ions%atom(1)%label)
 
+    this%coords = this%ions%pos
+    ! mass is read from the default pseudopotential files
+    this%mass = this%ions%mass
     do ii = 1, this%n_atom
-      this%coords(1:3,ii) = this%geo%atom(ii)%x(1:3)
-      ! mass is read from the default pseudopotential files
-      this%mass(ii) = species_mass(this%geo%atom(ii)%species)
-      if ((ii > 1) .and. .not. (any(this%labels(1:ispec) == this%geo%atom(ii)%label))) then
+      if ((ii > 1) .and. .not. (any(this%labels(1:ispec) == this%ions%atom(ii)%label))) then
         ispec = ispec + 1
-        this%labels(ispec) = trim(this%geo%atom(ii)%label)
+        this%labels(ispec) = trim(this%ions%atom(ii)%label)
       end if
       do jj = 1, ispec
-        if (trim(this%geo%atom(ii)%label) == trim(this%labels(jj))) then
+        if (trim(this%ions%atom(ii)%label) == trim(this%labels(jj))) then
           this%species(ii) = jj
         end if
       end do
@@ -221,7 +223,7 @@ contains
     n_maxang_block = 0
     if(parse_block(namespace, 'MaxAngularMomentum', blk) == 0) then
       n_maxang_block = parse_block_n(blk)
-      if (n_maxang_block /= this%geo%nspecies) then
+      if (n_maxang_block /= this%ions%nspecies) then
         call messages_input_error(namespace, "MaxAngularMomentum", "Wrong number of species.")
       end if
 
@@ -231,7 +233,7 @@ contains
         if (any(["s","p","d","f"] == trim(this_max_ang_mom))) then
           call messages_input_error(namespace, "MaxAngularMomentum", "Wrong maximum angular momentum for element"//trim(this_label))
         end if
-        do jj = 1, this%geo%nspecies
+        do jj = 1, this%ions%nspecies
           if (trim(adjustl(this_label)) == trim(adjustl(this%labels(jj)))) then
             max_ang_mom(jj) = trim(adjustl(this_max_ang_mom))
           end if
@@ -252,12 +254,12 @@ contains
 
     ! Dynamics variables
 
-    call ion_dynamics_init(this%ions, namespace, this%geo)
+    call ion_dynamics_init(this%ions_dyn, namespace, this%ions)
 
     call parse_variable(namespace, 'TDDynamics', BO, this%dynamics)
     call messages_print_var_option(stdout, 'TDDynamics', this%dynamics)
     if (this%dynamics == BO) then
-      call ion_dynamics_unfreeze(this%ions)
+      call ion_dynamics_unfreeze(this%ions_dyn)
     end if
 
     !%Variable InitialIonicTemperature
@@ -324,7 +326,7 @@ contains
     call input%getRootNode(pRoot)
     call setChild(pRoot, "Geometry", pGeo)
     call setChildValue(pGeo, "Periodic", .false.)
-    call setChildValue(pGeo, "TypeNames", this%labels(1:this%geo%nspecies))
+    call setChildValue(pGeo, "TypeNames", this%labels(1:this%ions%nspecies))
     call setChildValue(pGeo, "TypesAndCoordinates", reshape(this%species, [1, size(this%species)]), this%coords)
     call setChild(pRoot, "Hamiltonian", pHam)
     call setChild(pHam, "Dftb", pDftb)
@@ -344,7 +346,7 @@ contains
     ! sub-block inside hamiltonian for the maximum angular momenta
     call setChild(pDftb, "MaxAngularMomentum", pMaxAng)
     ! explicitly set the maximum angular momenta for the species
-    do ii = 1, this%geo%nspecies
+    do ii = 1, this%ions%nspecies
       call setChildValue(pMaxAng, this%labels(ii), max_ang_mom(ii))
     end do
 
@@ -368,20 +370,20 @@ contains
     if (this%dynamics == EHRENFEST) then
 #ifdef HAVE_DFTBPLUS_DEVEL
       call setChild(pRoot, "ElectronDynamics", pElecDyn)
-      call setChildValue(pElecDyn, "IonDynamics", ion_dynamics_ions_move(this%ions))
-      if (ion_dynamics_ions_move(this%ions)) then
+      call setChildValue(pElecDyn, "IonDynamics", ion_dynamics_ions_move(this%ions_dyn))
+      if (ion_dynamics_ions_move(this%ions_dyn)) then
         call setChildValue(pElecDyn, "InitialTemperature", initial_temp)
       end if
 
       ! initialize with wrong arguments for the moment, will be overriden later
       call setChildValue(pElecDyn, "Steps", 1)
-      call setChildValue(pElecDyn, "TimeStep", CNST(1.0))
+      call setChildValue(pElecDyn, "TimeStep", M_ONE)
       call setChild(pElecDyn, "Perturbation", pPerturb)
       if (this%laser_field) then
         call setChild(pPerturb, "Laser", pLaser)
-        call setChildValue(pLaser, "PolarizationDirection", [ CNST(1.0) , CNST(0.0) , CNST(0.0) ])
-        call setChildValue(pLaser, "LaserEnergy", CNST(1.0))
-        call setChildValue(pElecDyn, "FieldStrength", CNST(1.0))
+        call setChildValue(pLaser, "PolarizationDirection", [ M_ONE , M_ZERO , M_ZERO ])
+        call setChildValue(pLaser, "LaserEnergy", M_ONE)
+        call setChildValue(pElecDyn, "FieldStrength", M_ONE)
       else
         call setChild(pPerturb, "None", pLaser)
       end if
@@ -480,6 +482,8 @@ contains
                + M_HALF * this%prop%dt**2 * this%acc(1:this%space%dim, jj)
         end do
         this%quantities(POSITION)%clock = this%quantities(POSITION)%clock + CLOCK_TICK
+        call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", &
+                                            QUANTITY_LABEL(POSITION), this%quantities(POSITION)%clock, "tick") )
 
       case (VERLET_COMPUTE_ACC)
         do ii = size(this%prev_acc, dim=3) - 1, 1, -1
@@ -500,6 +504,9 @@ contains
             + M_HALF * this%prop%dt * (this%prev_acc(1:this%space%dim, 1:this%n_atom, 1) + &
               this%acc(1:this%space%dim, 1:this%n_atom))
         this%quantities(VELOCITY)%clock = this%quantities(VELOCITY)%clock + CLOCK_TICK
+        call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", &
+                                            QUANTITY_LABEL(VELOCITY), this%quantities(VELOCITY)%clock, "tick") )
+
 
       case default
         message(1) = "Unsupported TD operation."
@@ -728,6 +735,22 @@ contains
   end subroutine system_dftb_update_exposed_quantity
 
   ! ---------------------------------------------------------
+  subroutine system_dftb_init_interaction_as_partner(partner, interaction)
+    class(system_dftb_t),          intent(in)    :: partner
+    class(interaction_t),          intent(inout) :: interaction
+
+    PUSH_SUB(system_dftb_init_interaction_as_partner)
+
+    select type (interaction)
+    class default
+      message(1) = "Unsupported interaction."
+      call messages_fatal(1)
+    end select
+
+    POP_SUB(system_dftb_init_interaction_as_partner)
+  end subroutine system_dftb_init_interaction_as_partner
+
+  ! ---------------------------------------------------------
   subroutine system_dftb_copy_quantities_to_interaction(partner, interaction)
     class(system_dftb_t),          intent(inout) :: partner
     class(interaction_t),                 intent(inout) :: interaction
@@ -789,8 +812,8 @@ contains
     SAFE_DEALLOCATE_A(this%gradients)
     SAFE_DEALLOCATE_A(this%species)
     SAFE_DEALLOCATE_A(this%mass)
-    SAFE_DEALLOCATE_P(this%geo)
-    call ion_dynamics_end(this%ions)
+    SAFE_DEALLOCATE_P(this%ions)
+    call ion_dynamics_end(this%ions_dyn)
 
     ! No call to safe_deallocate macro here, as it gives an ICE with gfortran
     if (associated(this%ext_lasers)) then

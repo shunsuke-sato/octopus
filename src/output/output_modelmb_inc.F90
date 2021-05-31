@@ -20,13 +20,14 @@
 !
 !> routine for output of model many-body quantities.
 !
-subroutine X(output_modelmb) (outp, namespace, dir, gr, st, geo)
+subroutine X(output_modelmb) (outp, namespace, space, dir, gr, st, ions)
   type(output_t),         intent(in)    :: outp
   type(namespace_t),      intent(in)    :: namespace
+  type(space_t),          intent(in)    :: space
   character(len=*),       intent(in)    :: dir
   type(grid_t),           intent(in)    :: gr
   type(states_elec_t),    intent(in)    :: st
-  type(geometry_t),       intent(in)    :: geo
+  type(ions_t),           intent(in)    :: ions
 
   integer :: mm
   integer :: ierr, iunit
@@ -79,7 +80,7 @@ subroutine X(output_modelmb) (outp, namespace, dir, gr, st, geo)
 
   SAFE_ALLOCATE(wf(1:gr%mesh%np))
 
-  if(bitand(outp%what, OPTION__OUTPUT__MMB_DEN) /= 0) then
+  if (outp%what(OPTION__OUTPUT__MMB_DEN)) then
     call modelmb_density_matrix_init(dirname, namespace, st, denmat)
   end if
 
@@ -104,15 +105,15 @@ subroutine X(output_modelmb) (outp, namespace, dir, gr, st, geo)
       symmetries_satisfied = .false.
     end if
 
-    if(bitand(outp%what, OPTION__OUTPUT__MMB_DEN) /= 0 .and. symmetries_satisfied) then
+    if (outp%what(OPTION__OUTPUT__MMB_DEN) .and. symmetries_satisfied) then
       call X(modelmb_density_matrix_write)(gr, st, wf, mm, denmat, namespace)
     end if
 
-    if(bitand(outp%what, OPTION__OUTPUT__MMB_WFS) /= 0 .and. symmetries_satisfied) then
-      fn_unit = units_out%length**(-gr%sb%dim)
+    if (outp%what(OPTION__OUTPUT__MMB_WFS) .and. symmetries_satisfied) then
+      fn_unit = units_out%length**(-space%dim)
       write(filename, '(a,i4.4)') 'wf-st', mm
-      call X(io_function_output)(outp%how, trim(dirname), trim(filename), namespace, &
-        gr%mesh, wf, fn_unit, ierr, geo = geo)
+      call X(io_function_output)(outp%how(OPTION__OUTPUT__MMB_WFS), trim(dirname), trim(filename), namespace, space, &
+        gr%mesh, wf, fn_unit, ierr, ions = ions)
     end if
 
   end do
@@ -121,8 +122,8 @@ subroutine X(output_modelmb) (outp, namespace, dir, gr, st, geo)
 
   SAFE_DEALLOCATE_A(wf)
 
-  if(bitand(outp%what, OPTION__OUTPUT__MMB_DEN) /= 0) then
-    call modelmb_density_matrix_end (denmat)
+  if (outp%what(OPTION__OUTPUT__MMB_DEN)) then
+    call modelmb_density_matrix_end(denmat)
   end if
 
   POP_SUB(X(output_modelmb))

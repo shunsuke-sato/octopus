@@ -11,19 +11,22 @@ Input      : 21-magnon.01-gs.inp
 
 match ; SCF convergence ; GREPCOUNT(static/info, 'SCF converged') ; 1
 
-Precision: 4.e-08
-match ;  Total energy        ; GREPFIELD(static/info, 'Total       =', 3) ; -123.76308618499999
-Precision: 1.65e-08
+Precision: 1.76e-07
+match ;  Total energy        ; GREPFIELD(static/info, 'Total       =', 3) ; -123.76308638
+Precision: 7.83e-14
 match ;  Ion-ion energy      ; GREPFIELD(static/info, 'Ion-ion     =', 3) ; -78.31680646
-match ;  Eigenvalues sum     ; GREPFIELD(static/info, 'Eigenvalues =', 3) ; -17.445635685
-Precision: 3.e-08
-match ;  Hartree energy      ; GREPFIELD(static/info, 'Hartree     =', 3) ; 28.418400205
-match ;  Exchange energy     ; GREPFIELD(static/info, 'Exchange    =', 3) ; -15.4989915
+Precision: 2.26e-07
+match ;  Eigenvalues sum     ; GREPFIELD(static/info, 'Eigenvalues =', 3) ; -17.445636014999998
+Precision: 6.05e-08
+match ;  Hartree energy      ; GREPFIELD(static/info, 'Hartree     =', 3) ; 28.418400075
+Precision: 1.65e-08
+match ;  Exchange energy     ; GREPFIELD(static/info, 'Exchange    =', 3) ; -15.498991475
+Precision: 1.33e-15
 match ;  Correlation energy  ; GREPFIELD(static/info, 'Correlation =', 3) ; -1.32675244
-Precision: 2.20e-08
-match ;  Kinetic energy      ; GREPFIELD(static/info, 'Kinetic     =', 3) ; 50.75427295
-Precision: 4.95e-08
-match ;  External energy     ; GREPFIELD(static/info, 'External    =', 3) ; -107.793208915
+Precision: 3.85e-08
+match ;  Kinetic energy      ; GREPFIELD(static/info, 'Kinetic     =', 3) ; 50.754272854999996
+Precision: 8.80e-08
+match ;  External energy     ; GREPFIELD(static/info, 'External    =', 3) ; -107.79320870999999
 
 Precision: 1.00e-15
 match ;  k-point 2 (x)   ; GREPFIELD(static/info, '#k =   2', 7) ; 0.0
@@ -32,16 +35,17 @@ match ;  k-point 2 (z)   ; GREPFIELD(static/info, '#k =   2', 9) ; 0.0
 
 Precision: 3.35e-15
 match ;  Eigenvalue  1   ; GREPFIELD(static/info, '#k =   2', 3, 1) ; -3.346208
+Precision: 3.29e-15
 match ;  Eigenvalue  2   ; GREPFIELD(static/info, '#k =   2', 3, 2) ; -3.286024
+Precision: 1.94e-15
 match ;  Eigenvalue  3   ; GREPFIELD(static/info, '#k =   2', 3, 3) ; -1.944945
+Precision: 1.93e-15
 match ;  Eigenvalue  4   ; GREPFIELD(static/info, '#k =   2', 3, 5) ; -1.930112
 
-Precision: 1.00e-15
-match ;  Total xc torque x   ; GREPFIELD(static/info, 'Tx = ', 3) ; 0.0
-Precision: 1.00e-15
-match ;  Total xc torque y   ; GREPFIELD(static/info, 'Ty = ', 3) ; 0.0
-Precision: 1.00e-15
-match ;  Total xc torque z   ; GREPFIELD(static/info, 'Tz = ', 3) ; 0.0
+Precision: 4.30e-26
+match ;   Total xc torque x    ; GREPFIELD(static/info, 'Tx = ', 3) ; -2.260000000000001e-27
+match ;   Total xc torque y    ; GREPFIELD(static/info, 'Ty = ', 3) ; -2.260000000000001e-27
+match ;   Total xc torque z    ; GREPFIELD(static/info, 'Tz = ', 3) ; -2.260000000000001e-27
 
 
 Input      : 21-magnon.02-td.inp

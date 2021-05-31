@@ -19,9 +19,10 @@
 
   ! ----------------------------------------------------------------------
   !> 
-  subroutine target_init_groundstate(gr, namespace, tg, td, restart, kpoints)
-    type(grid_t),      intent(in)    :: gr
+  subroutine target_init_groundstate(mesh, namespace, space, tg, td, restart, kpoints)
+    type(mesh_t),      intent(in)    :: mesh
     type(namespace_t), intent(in)    :: namespace
+    type(space_t),     intent(in)    :: space
     type(target_t),    intent(inout) :: tg
     type(td_t),        intent(in)    :: td
     type(restart_t),   intent(in)    :: restart
@@ -34,13 +35,13 @@
     message(1) =  'Info: Using Ground State for TargetOperator'
     call messages_info(1)
 
-    call states_elec_load(restart, namespace, tg%st, gr, kpoints, ierr)
+    call states_elec_load(restart, namespace, space, tg%st, mesh, kpoints, ierr)
     if (ierr /= 0) then
       message(1) = "Unable to read wavefunctions."
       call messages_fatal(1)
     end if
 
-    tg%move_ions = ion_dynamics_ions_move(td%ions)
+    tg%move_ions = ion_dynamics_ions_move(td%ions_dyn)
     tg%dt = td%dt
 
     POP_SUB(target_init_groundstate)
@@ -57,19 +58,20 @@
 
 
   ! ----------------------------------------------------------------------
-  subroutine target_output_groundstate(tg, namespace, gr, dir, geo, hm, outp)
+  subroutine target_output_groundstate(tg, namespace, space, gr, dir, ions, hm, outp)
     type(target_t),      intent(in) :: tg
     type(namespace_t),   intent(in) :: namespace
+    type(space_t),       intent(in)    :: space
     type(grid_t),        intent(in) :: gr
     character(len=*),    intent(in) :: dir
-    type(geometry_t),    intent(in) :: geo
+    type(ions_t),        intent(in) :: ions
     type(hamiltonian_elec_t), intent(in) :: hm
     type(output_t),      intent(in) :: outp
 
     PUSH_SUB(target_output_groundstate)
     
     call io_mkdir(trim(dir), namespace)
-    call output_states(outp, namespace, trim(dir), tg%st, gr, geo, hm)
+    call output_states(outp, namespace, space, trim(dir), tg%st, gr, ions, hm, -1)
 
     POP_SUB(target_output_groundstate)
   end subroutine target_output_groundstate

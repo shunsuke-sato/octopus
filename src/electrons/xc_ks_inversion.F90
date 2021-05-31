@@ -22,12 +22,12 @@ module xc_ks_inversion_oct_m
   use density_oct_m
   use derivatives_oct_m
   use eigensolver_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use hamiltonian_elec_oct_m
   use io_oct_m
   use io_function_oct_m
+  use ions_oct_m
   use kpoints_oct_m
   use mesh_oct_m
   use messages_oct_m
@@ -92,11 +92,11 @@ module xc_ks_inversion_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine xc_ks_inversion_init(ks_inv, namespace, gr, geo, st, xc, mc, space, kpoints)
+  subroutine xc_ks_inversion_init(ks_inv, namespace, gr, ions, st, xc, mc, space, kpoints)
     type(xc_ks_inversion_t), intent(inout) :: ks_inv
     type(namespace_t),       intent(in)    :: namespace
     type(grid_t),            intent(inout) :: gr
-    type(geometry_t),        intent(inout) :: geo
+    type(ions_t),            intent(inout) :: ions
     type(states_elec_t),     intent(in)    :: st
     type(xc_t),              intent(in)    :: xc
     type(multicomm_t),       intent(in)    :: mc
@@ -171,7 +171,7 @@ contains
 
       ! initialize densities, hamiltonian and eigensolver
       call states_elec_densities_init(ks_inv%aux_st, gr)
-      call hamiltonian_elec_init(ks_inv%aux_hm, namespace, space, gr, geo, ks_inv%aux_st, INDEPENDENT_PARTICLES, xc, mc, kpoints)
+      call hamiltonian_elec_init(ks_inv%aux_hm, namespace, space, gr, ions, ks_inv%aux_st, INDEPENDENT_PARTICLES, xc, mc, kpoints)
       call eigensolver_init(ks_inv%eigensolver, namespace, gr, ks_inv%aux_st, mc, space)
     end if
 
@@ -212,7 +212,7 @@ contains
 
   ! specific routine for 2 particles - this is analytical, no need for iterative scheme
   ! ---------------------------------------------------------
-  subroutine invertks_2part(target_rho, nspin, aux_hm, gr, st, eigensolver, namespace, asymptotics)
+  subroutine invertks_2part(target_rho, nspin, aux_hm, gr, st, eigensolver, namespace, space, asymptotics)
     FLOAT,                    intent(in)    :: target_rho(:,:) !< (1:gr%mesh%np, 1:nspin)
     integer,                  intent(in)    :: nspin
     type(hamiltonian_elec_t), intent(inout) :: aux_hm
@@ -220,6 +220,7 @@ contains
     type(states_elec_t),      intent(inout) :: st
     type(eigensolver_t),      intent(inout) :: eigensolver
     type(namespace_t),        intent(in)    :: namespace
+    type(space_t),            intent(in)    :: space
     integer,                  intent(in)    :: asymptotics
            
     integer :: ii, jj, asym1, asym2 
@@ -322,7 +323,7 @@ contains
       aux_hm%vhxc(:,ii) = aux_hm%vxc(:,ii) + aux_hm%vhartree(1:np)
     end do
     
-    call hamiltonian_elec_update(aux_hm, gr%mesh, namespace)
+    call hamiltonian_elec_update(aux_hm, gr%mesh, namespace, space)
     call eigensolver_run(eigensolver, namespace, gr, st, aux_hm, 1)
     call density_calc(st, gr, st%rho)
 
@@ -338,9 +339,10 @@ contains
   ! here states are used to iterate KS solution and update of the VHXC potential,
   ! then new calculation of rho.
   ! ---------------------------------------------------------
-  subroutine invertks_iter(target_rho, namespace, nspin, aux_hm, gr, st, eigensolver, asymptotics, method)
+  subroutine invertks_iter(target_rho, namespace, space, nspin, aux_hm, gr, st, eigensolver, asymptotics, method)
     type(grid_t),             intent(in)    :: gr
     type(namespace_t),        intent(in)    :: namespace
+    type(space_t),            intent(in)    :: space
     type(states_elec_t),      intent(inout) :: st
     type(hamiltonian_elec_t), intent(inout) :: aux_hm
     type(eigensolver_t),      intent(inout) :: eigensolver
@@ -400,7 +402,7 @@ contains
     !%Description
     !% prefactor for iterative KS inversion convergence scheme from Godby based on van Leeuwen scheme
     !%End    
-    call parse_variable(namespace, 'InvertKSGodbyMu', CNST(1.0), mu)
+    call parse_variable(namespace, 'InvertKSGodbyMu', M_ONE, mu)
 
     !%Variable InvertKSGodbyPower
     !%Type float
@@ -462,13 +464,13 @@ contains
 
       if(verbosity == 2) then
         write(fname,'(i6.6)') counter
-        call dio_function_output(io_function_fill_how("AxisX"), ".", "vhxc"//fname, namespace, &
+        call dio_function_output(io_function_fill_how("AxisX"), ".", "vhxc"//fname, namespace, space, &
           gr%mesh, aux_hm%vhxc(:,1), units_out%energy, ierr)
-        call dio_function_output(io_function_fill_how("AxisX"), ".", "rho"//fname, namespace, &
-          gr%mesh, st%rho(:,1), units_out%length**(-gr%sb%dim), ierr)
+        call dio_function_output(io_function_fill_how("AxisX"), ".", "rho"//fname, namespace, space, &
+          gr%mesh, st%rho(:,1), units_out%length**(-space%dim), ierr)
       end if
 
-      call hamiltonian_elec_update(aux_hm, gr%mesh, namespace)
+      call hamiltonian_elec_update(aux_hm, gr%mesh, namespace, space)
       call eigensolver_run(eigensolver, namespace, gr, st, aux_hm, 1)
       call density_calc(st, gr, st%rho)      
 
@@ -488,7 +490,7 @@ contains
         beta = diffdensity*CNST(0.001) !parameter to avoid numerical problems due to small denominator
   
         ! proposition to increase convergence speed progressively
-        alpha = max(CNST(0.05), CNST(0.5) - diffdensity*CNST(100.0)*CNST(0.45))
+        alpha = max(CNST(0.05), M_HALF - diffdensity*CNST(100.0)*CNST(0.45))
         write(message(1),'(a,2E15.4,3I8, 2E15.4)') &
           ' KSinversion: diffdensity, convdensity, imax, counter, max_iter, alpha, beta ', &
           diffdensity, convdensity, imax, counter, max_iter, alpha, beta
@@ -594,7 +596,7 @@ contains
 
     !calculate final density
 
-    call hamiltonian_elec_update(aux_hm, gr%mesh, namespace)
+    call hamiltonian_elec_update(aux_hm, gr%mesh, namespace, space)
     call eigensolver_run(eigensolver, namespace, gr, st, aux_hm, 1)
     call density_calc(st, gr, st%rho)
     
@@ -610,9 +612,10 @@ contains
   end subroutine invertks_iter
 
   ! ---------------------------------------------------------
-  subroutine xc_ks_inversion_calc(ks_inversion, namespace, gr, hm, st, vxc, time)
+  subroutine xc_ks_inversion_calc(ks_inversion, namespace, space, gr, hm, st, vxc, time)
     type(xc_ks_inversion_t),  intent(inout) :: ks_inversion
     type(namespace_t),        intent(in)    :: namespace
+    type(space_t),            intent(in)    :: space
     type(grid_t),             intent(in)    :: gr
     type(hamiltonian_elec_t), intent(in)    :: hm
     type(states_elec_t),      intent(inout) :: st
@@ -668,9 +671,9 @@ contains
     ! adiabatic ks inversion
     case(XC_INV_METHOD_TWO_PARTICLE)
       call invertks_2part(ks_inversion%aux_st%rho, st%d%nspin, ks_inversion%aux_hm, gr, &
-                         ks_inversion%aux_st, ks_inversion%eigensolver, namespace, ks_inversion%asymp)
+                         ks_inversion%aux_st, ks_inversion%eigensolver, namespace, space, ks_inversion%asymp)
     case(XC_INV_METHOD_VS_ITER : XC_INV_METHOD_ITER_GODBY)
-      call invertks_iter(st%rho, namespace, st%d%nspin, ks_inversion%aux_hm, gr, &
+      call invertks_iter(st%rho, namespace, space, st%d%nspin, ks_inversion%aux_hm, gr, &
                          ks_inversion%aux_st, ks_inversion%eigensolver, ks_inversion%asymp, &
                          ks_inversion%method)
     end select

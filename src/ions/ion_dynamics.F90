@@ -20,8 +20,8 @@
 
 module ion_dynamics_oct_m
   use iso_c_binding
-  use geometry_oct_m
   use global_oct_m
+  use ions_oct_m
   use loct_math_oct_m
   use messages_oct_m
   use mpi_oct_m
@@ -95,7 +95,7 @@ module ion_dynamics_oct_m
       
     logical :: drive_ions  
     type(ion_td_displacement_t), allocatable ::  td_displacements(:) !> Time-dependent displacements driving the ions
-    type(geometry_t), pointer :: geo_t0
+    type(ions_t),     pointer :: ions_t0
   end type ion_dynamics_t
 
   type ion_state_t
@@ -109,13 +109,13 @@ module ion_dynamics_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine ion_dynamics_init(this, namespace, geo)
+  subroutine ion_dynamics_init(this, namespace, ions)
     type(ion_dynamics_t), intent(out)   :: this
     type(namespace_t),    intent(in)    :: namespace
-    type(geometry_t),     intent(inout) :: geo
+    type(ions_t),         intent(inout) :: ions
 
     integer :: i, j, iatom, ierr
-    FLOAT   :: x(MAX_DIM), temperature, sigma, kin1, kin2
+    FLOAT   :: xx(ions%space%dim), temperature, sigma, kin1, kin2
     type(c_ptr) :: random_gen_pointer
     type(read_coords_info) :: xyz
     character(len=100)  :: temp_function_name
@@ -172,8 +172,8 @@ contains
     if(parse_block(namespace, 'IonsTimeDependentDisplacements', blk) == 0) then
       call messages_experimental("IonsTimeDependentDisplacements")
       ndisp= parse_block_n(blk)
-      SAFE_ALLOCATE(this%td_displacements(1:geo%natoms))
-      this%td_displacements(1:geo%natoms)%move = .false.
+      SAFE_ALLOCATE(this%td_displacements(1:ions%natoms))
+      this%td_displacements(1:ions%natoms)%move = .false.
       if (ndisp > 0) this%drive_ions =.true.
       
       do i = 1, ndisp
@@ -204,8 +204,8 @@ contains
         
       end do
       
-      SAFE_ALLOCATE(this%geo_t0)
-      this%geo_t0 = geo
+      SAFE_ALLOCATE(this%ions_t0)
+      this%ions_t0 = ions
       
     end if
     
@@ -274,17 +274,15 @@ contains
         !%End
         call messages_obsolete_variable(namespace, 'NHMass', 'ThermostatMass')
 
-        call parse_variable(namespace, 'ThermostatMass', CNST(1.0), this%nh(1)%mass)
+        call parse_variable(namespace, 'ThermostatMass', M_ONE, this%nh(1)%mass)
         this%nh(2)%mass = this%nh(1)%mass
 
         this%nh(1:2)%pos = M_ZERO
         this%nh(1:2)%vel = M_ZERO
         
-        SAFE_ALLOCATE(this%old_pos(1:geo%space%dim, 1:geo%natoms))
+        SAFE_ALLOCATE(this%old_pos(1:ions%space%dim, 1:ions%natoms))
         
-        do iatom = 1, geo%natoms
-          this%old_pos(1:geo%space%dim, iatom) = geo%atom(iatom)%x(1:geo%space%dim)
-        end do
+        this%old_pos = ions%pos
       end if
 
     end if
@@ -311,17 +309,17 @@ contains
         call parse_variable(namespace, 'RandomVelocityTemp', M_ZERO, temperature, unit = unit_kelvin)
       end if
 
-      do i = 1, geo%natoms
+      do i = 1, ions%natoms
         !generate the velocities in the root node
         if( mpi_grp_is_root(mpi_world)) then
-          sigma = sqrt(temperature / species_mass(geo%atom(i)%species) )
+          sigma = sqrt(temperature / ions%mass(i))
           do j = 1, 3
-             geo%atom(i)%v(j) = loct_ran_gaussian(random_gen_pointer, sigma)
+             ions%vel(j, i) = loct_ran_gaussian(random_gen_pointer, sigma)
           end do
         end if
 #ifdef HAVE_MPI
         !and send them to the others
-        call MPI_Bcast(geo%atom(i)%v, geo%space%dim, MPI_FLOAT, 0, mpi_world%comm, mpi_err)
+        call MPI_Bcast(ions%vel(:, i), ions%space%dim, MPI_FLOAT, 0, mpi_world%comm, mpi_err)
 #endif
       end do
 
@@ -329,24 +327,23 @@ contains
         call loct_ran_end(random_gen_pointer)
       end if
 
-      kin1 = ion_dynamics_kinetic_energy(geo)
+      kin1 = ion_dynamics_kinetic_energy(ions)
 
-      x = M_ZERO
-      x(1:geo%space%dim) = geo%center_of_mass_vel()
-      do i = 1, geo%natoms
-        geo%atom(i)%v = geo%atom(i)%v - x
+      xx = ions%center_of_mass_vel()
+      do i = 1, ions%natoms
+        ions%vel(:, i) = ions%vel(:, i) - xx
       end do
 
-      kin2 = ion_dynamics_kinetic_energy(geo)
+      kin2 = ion_dynamics_kinetic_energy(ions)
 
-      do i = 1, geo%natoms
-        geo%atom(i)%v(:) =  sqrt(kin1/kin2)*geo%atom(i)%v(:)
+      do i = 1, ions%natoms
+        ions%vel(:, i) =  sqrt(kin1/kin2)*ions%vel(:, i)
       end do
 
       write(message(1),'(a,f10.4,1x,a)') 'Info: Initial velocities randomly distributed with T =', &
         units_from_atomic(unit_kelvin, temperature), units_abbrev(unit_kelvin)
       write(message(2),'(2x,a,f8.4,1x,a)') '<K>       =', &
-        units_from_atomic(units_out%energy, ion_dynamics_kinetic_energy(geo)/geo%natoms), &
+        units_from_atomic(units_out%energy, ion_dynamics_kinetic_energy(ions)/ions%natoms), &
         units_abbrev(units_out%energy)
       write(message(3),'(2x,a,f8.4,1x,a)') '3/2 k_B T =', &
         units_from_atomic(units_out%energy, (M_THREE/M_TWO)*temperature), &
@@ -404,31 +401,29 @@ contains
       !%End
 
       call read_coords_init(xyz)
-      call read_coords_read('Velocities', xyz, geo%space, namespace)
+      call read_coords_read('Velocities', xyz, ions%space, namespace)
       if(xyz%source /= READ_COORDS_ERR) then
         
         have_velocities = .true.
 
-        if(geo%natoms /= xyz%n) then
-          write(message(1), '(a,i4,a,i4)') 'I need exactly ', geo%natoms, ' velocities, but I found ', xyz%n
+        if(ions%natoms /= xyz%n) then
+          write(message(1), '(a,i4,a,i4)') 'I need exactly ', ions%natoms, ' velocities, but I found ', xyz%n
           call messages_fatal(1, namespace=namespace)
         end if
 
         ! copy information and adjust units
-        do i = 1, geo%natoms
-          geo%atom(i)%v = units_to_atomic(units_inp%velocity/units_inp%length, xyz%atom(i)%x)
+        do i = 1, ions%natoms
+          ions%vel(:, i) = units_to_atomic(units_inp%velocity/units_inp%length, xyz%atom(i)%x(1:ions%space%dim))
         end do
 
         call read_coords_end(xyz)
 
       else
-        do i = 1, geo%natoms
-          geo%atom(i)%v = M_ZERO
-        end do
+        ions%vel = M_ZERO
       end if
     end if
 
-    geo%kinetic_energy = ion_dynamics_kinetic_energy(geo)
+    ions%kinetic_energy = ion_dynamics_kinetic_energy(ions)
 
     !%Variable MoveIons
     !%Type logical
@@ -441,13 +436,13 @@ contains
     call parse_variable(namespace, 'MoveIons', have_velocities, this%move_ions)
     call messages_print_var_value(stdout, 'MoveIons', this%move_ions)
 
-    if (this%move_ions .and. geo%space%periodic_dim == 1) then
+    if (this%move_ions .and. ions%space%periodic_dim == 1) then
       call messages_input_error(namespace, 'MoveIons', &
         'Moving ions for a 1D periodic system is not allowed, as forces are incorrect.')
     end if
 
     if(ion_dynamics_ions_move(this)) then 
-      SAFE_ALLOCATE(this%oldforce(1:geo%space%dim, 1:geo%natoms))
+      SAFE_ALLOCATE(this%oldforce(1:ions%space%dim, 1:ions%natoms))
     end if
 
     POP_SUB(ion_dynamics_init)
@@ -466,13 +461,13 @@ contains
     end if
 
     if (this%drive_ions .and. allocated(this%td_displacements) ) then
-      if (any (this%td_displacements(1:this%geo_t0%natoms)%move)) then
-        ! geometry end cannot be called here, otherwise the species are destroyed twice
-        ! call geometry_end(this%geo_t0)
+      if (any (this%td_displacements(1:this%ions_t0%natoms)%move)) then
+        ! ions end cannot be called here, otherwise the species are destroyed twice
+        ! call ions_end(this%ions_t0)
       end if
       SAFE_DEALLOCATE_A(this%td_displacements)
       if (any (this%td_displacements(:)%move)) then
-        SAFE_DEALLOCATE_P(this%geo_t0)
+        SAFE_DEALLOCATE_P(this%ions_t0)
       end if
     end if
 
@@ -481,15 +476,15 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine ion_dynamics_propagate(this, geo, time, dt, namespace)
+  subroutine ion_dynamics_propagate(this, ions, time, dt, namespace)
     type(ion_dynamics_t), intent(inout) :: this
-    type(geometry_t),     intent(inout) :: geo
+    type(ions_t),         intent(inout) :: ions
     FLOAT,                intent(in)    :: time
     FLOAT,                intent(in)    :: dt
     type(namespace_t),    intent(in)    :: namespace
 
     integer :: iatom
-    FLOAT   :: DR(1:3)
+    FLOAT   :: dr(3)
 
     if(.not. ion_dynamics_ions_move(this)) return
 
@@ -513,36 +508,34 @@ contains
         call messages_fatal(1, namespace=namespace)
       end if
     else
-      this%current_temperature = CNST(0.0)
+      this%current_temperature = M_ZERO
     end if
 
     if(this%thermostat /= THERMO_NH) then
       ! integrate using verlet
-      do iatom = 1, geo%natoms
-        if(.not. geo%atom(iatom)%move) cycle
+      do iatom = 1, ions%natoms
+        if (ions%fixed(iatom)) cycle
 
         if(.not. this%drive_ions) then
 
-          geo%atom(iatom)%x(1:geo%space%dim) = geo%atom(iatom)%x(1:geo%space%dim) &
-            + dt*geo%atom(iatom)%v(1:geo%space%dim) + &
-            M_HALF*dt**2 / species_mass(geo%atom(iatom)%species) * geo%atom(iatom)%f(1:geo%space%dim)
+          ions%pos(:, iatom) = ions%pos(:, iatom) + dt*ions%vel(:, iatom) + &
+            M_HALF*dt**2 / ions%mass(iatom) * ions%tot_force(:, iatom)
           
-          this%oldforce(1:geo%space%dim, iatom) = geo%atom(iatom)%f(1:geo%space%dim)
+          this%oldforce(:, iatom) = ions%tot_force(:, iatom)
           
         else
           if(this%constant_velocity) then
-            geo%atom(iatom)%x(1:geo%space%dim) = geo%atom(iatom)%x(1:geo%space%dim) &
-                                                + dt*geo%atom(iatom)%v(1:geo%space%dim)
+            ions%pos(:, iatom) = ions%pos(:, iatom) + dt*ions%vel(:, iatom)
           end if
 
 
           if (this%td_displacements(iatom)%move) then
             
-            DR(1:3)=(/TOFLOAT(tdf(this%td_displacements(iatom)%fx,time)), &
+            dr(1:3)=(/TOFLOAT(tdf(this%td_displacements(iatom)%fx,time)), &
                       TOFLOAT(tdf(this%td_displacements(iatom)%fy,time)), &
                       TOFLOAT(tdf(this%td_displacements(iatom)%fz,time)) /)
 
-            geo%atom(iatom)%x(1:geo%space%dim) = this%geo_t0%atom(iatom)%x(1:geo%space%dim) + DR(1:geo%space%dim)
+            ions%pos(:, iatom) = this%ions_t0%pos(:, iatom) + dr(1:ions%space%dim)
           end if
             
         end if
@@ -556,71 +549,68 @@ contains
       ! Understanding Molecular Simulations by Frenkel and Smit,
       ! Appendix E, page 540-542.
 
-      call nh_chain(this, geo)
+      call nh_chain(this, ions)
 
-      do iatom = 1, geo%natoms
-        geo%atom(iatom)%x(1:geo%space%dim) = geo%atom(iatom)%x(1:geo%space%dim) + M_HALF*dt*geo%atom(iatom)%v(1:geo%space%dim)
+      do iatom = 1, ions%natoms
+        ions%pos(:, iatom) = ions%pos(:, iatom) + M_HALF*dt*ions%vel(:, iatom)
       end do
 
     end if
 
     ! When the system is periodic in some directions, the atoms might have moved to a an adjacent cell, so we need to move them back to the original cell
-    call geo%fold_atoms_into_cell()
+    call ions%fold_atoms_into_cell()
 
     POP_SUB(ion_dynamics_propagate)
   end subroutine ion_dynamics_propagate
   
 
   ! ---------------------------------------------------------
-  subroutine nh_chain(this, geo)
+  subroutine nh_chain(this, ions)
     type(ion_dynamics_t), intent(inout) :: this
-    type(geometry_t),     intent(inout) :: geo
+    type(ions_t),         intent(inout) :: ions
 
     FLOAT :: g1, g2, ss, uk, dt, temp
-    integer :: iatom
 
     PUSH_SUB(nh_chain)
 
     dt = this%dt
 
-    uk = ion_dynamics_kinetic_energy(geo)
+    uk = ion_dynamics_kinetic_energy(ions)
 
     temp = this%current_temperature
     
     g2 = (this%nh(1)%mass*this%nh(1)%vel**2 - temp)/this%nh(2)%mass
-    this%nh(2)%vel = this%nh(2)%vel + g2*dt/CNST(4.0)
+    this%nh(2)%vel = this%nh(2)%vel + g2*dt/M_FOUR
     this%nh(1)%vel = this%nh(1)%vel*exp(-this%nh(2)%vel*dt/CNST(8.0))
 
-    g1 = (CNST(2.0)*uk - M_THREE*geo%natoms*temp)/this%nh(1)%mass
-    this%nh(1)%vel = this%nh(1)%vel + g1*dt/CNST(4.0)
+    g1 = (M_TWO*uk - M_THREE*ions%natoms*temp)/this%nh(1)%mass
+    this%nh(1)%vel = this%nh(1)%vel + g1*dt/M_FOUR
     this%nh(1)%vel = this%nh(1)%vel*exp(-this%nh(2)%vel*dt/CNST(8.0))
-    this%nh(1)%pos = this%nh(1)%pos + this%nh(1)%vel*dt/CNST(2.0)
-    this%nh(2)%pos = this%nh(2)%pos + this%nh(2)%vel*dt/CNST(2.0)
+    this%nh(1)%pos = this%nh(1)%pos + this%nh(1)%vel*dt/M_TWO
+    this%nh(2)%pos = this%nh(2)%pos + this%nh(2)%vel*dt/M_TWO
 
-    ss = exp(-this%nh(1)%vel*dt/CNST(2.0))
+    ss = exp(-this%nh(1)%vel*dt/M_TWO)
     
-    do iatom = 1, geo%natoms
-      geo%atom(iatom)%v(1:geo%space%dim) = ss*geo%atom(iatom)%v(1:geo%space%dim)
-    end do
+    ions%vel = ss*ions%vel
     
     uk = uk*ss**2
 
     this%nh(1)%vel = this%nh(1)%vel*exp(-this%nh(2)%vel*dt/CNST(8.0))
-    g1 = (CNST(2.0)*uk - M_THREE*geo%natoms*temp)/this%nh(1)%mass
-    this%nh(1)%vel = this%nh(1)%vel + g1*dt/CNST(4.0)
+    g1 = (M_TWO*uk - M_THREE*ions%natoms*temp)/this%nh(1)%mass
+    this%nh(1)%vel = this%nh(1)%vel + g1*dt/M_FOUR
     this%nh(1)%vel = this%nh(1)%vel*exp(-this%nh(2)%vel*dt/CNST(8.0))
 
     g2 = (this%nh(1)%mass*this%nh(1)%vel**2 - temp)/this%nh(2)%mass
-    this%nh(2)%vel = this%nh(2)%vel + g2*dt/CNST(4.0)
+    this%nh(2)%vel = this%nh(2)%vel + g2*dt/M_FOUR
     
     POP_SUB(nh_chain)
   end subroutine nh_chain
   
 
   ! ---------------------------------------------------------
-  subroutine ion_dynamics_propagate_vel(this, geo, atoms_moved)
+  subroutine ion_dynamics_propagate_vel(this, ions, atoms_moved)
     type(ion_dynamics_t), intent(inout) :: this
-    type(geometry_t),     intent(inout) :: geo
+    type(ions_t),         intent(inout) :: ions
     logical, optional,    intent(out)   :: atoms_moved !< Returns true if the atoms were moved by this function.
 
     integer :: iatom
@@ -636,33 +626,30 @@ contains
     if(this%thermostat /= THERMO_NH) then
       ! velocity verlet
       
-      do iatom = 1, geo%natoms
-        if(.not. geo%atom(iatom)%move) cycle
+      do iatom = 1, ions%natoms
+        if (ions%fixed(iatom)) cycle
         
-        geo%atom(iatom)%v(1:geo%space%dim) = geo%atom(iatom)%v(1:geo%space%dim) &
-          + this%dt/species_mass(geo%atom(iatom)%species) * M_HALF * (this%oldforce(1:geo%space%dim, iatom) + &
-          geo%atom(iatom)%f(1:geo%space%dim))
+        ions%vel(:, iatom) = ions%vel(:, iatom) &
+          + this%dt/ions%mass(iatom) * M_HALF * (this%oldforce(:, iatom) + &
+          ions%tot_force(:, iatom))
         
       end do
       
     else
       ! the nose-hoover integration
-      do iatom = 1, geo%natoms
-        geo%atom(iatom)%v(1:geo%space%dim) = geo%atom(iatom)%v(1:geo%space%dim) + &
-          this%dt*geo%atom(iatom)%f(1:geo%space%dim) / species_mass(geo%atom(iatom)%species)
-        geo%atom(iatom)%x(1:geo%space%dim) = geo%atom(iatom)%x(1:geo%space%dim) + M_HALF*this%dt*geo%atom(iatom)%v(1:geo%space%dim)
+      do iatom = 1, ions%natoms
+        ions%vel(:, iatom) = ions%vel(:, iatom) + this%dt*ions%tot_force(:, iatom) / ions%mass(iatom)
+        ions%pos(:, iatom) = ions%pos(:, iatom) + M_HALF*this%dt*ions%vel(:, iatom)
       end do
       
-      call nh_chain(this, geo)
+      call nh_chain(this, ions)
 
     end if
 
     if(this%thermostat == THERMO_SCAL) then
-      scal = sqrt(this%current_temperature/ion_dynamics_temperature(geo))
+      scal = sqrt(this%current_temperature/ion_dynamics_temperature(ions))
 
-      do iatom = 1, geo%natoms
-        geo%atom(iatom)%v(1:geo%space%dim) = scal*geo%atom(iatom)%v(1:geo%space%dim)
-      end do
+      ions%vel = scal*ions%vel
     end if
 
     POP_SUB(ion_dynamics_propagate_vel)
@@ -671,8 +658,8 @@ contains
 
   ! ---------------------------------------------------------
   !> A bare verlet integrator.
-  subroutine ion_dynamics_verlet_step1(geo, q, v, fold, dt)
-    type(geometry_t),     intent(in)    :: geo
+  subroutine ion_dynamics_verlet_step1(ions, q, v, fold, dt)
+    type(ions_t),         intent(in)    :: ions
     FLOAT,                intent(inout) :: q(:, :)
     FLOAT,                intent(inout) :: v(:, :)
     FLOAT,                intent(in)    :: fold(:, :)
@@ -683,21 +670,20 @@ contains
     PUSH_SUB(ion_dynamics_verlet_step1)
 
     ! First transform momenta to velocities
-    do iatom = 1, geo%natoms
-      v(iatom, 1:geo%space%dim) = v(iatom, 1:geo%space%dim) / species_mass(geo%atom(iatom)%species)
+    do iatom = 1, ions%natoms
+      v(iatom, 1:ions%space%dim) = v(iatom, 1:ions%space%dim) / ions%mass(iatom)
     end do
 
     ! integrate using verlet
-    do iatom = 1, geo%natoms
-      if(.not. geo%atom(iatom)%move) cycle
-      q(iatom, 1:geo%space%dim) = q(iatom, 1:geo%space%dim) &
-        + dt * v(iatom, 1:geo%space%dim) + &
-        M_HALF*dt**2 / species_mass(geo%atom(iatom)%species) * fold(iatom, 1:geo%space%dim)
+    do iatom = 1, ions%natoms
+      if (ions%fixed(iatom)) cycle
+      q(iatom, 1:ions%space%dim) = q(iatom, 1:ions%space%dim) + dt * v(iatom, 1:ions%space%dim) + &
+        M_HALF*dt**2 / ions%mass(iatom) * fold(iatom, 1:ions%space%dim)
     end do
 
     ! And back to momenta.
-    do iatom = 1, geo%natoms
-      v(iatom, 1:geo%space%dim) = species_mass(geo%atom(iatom)%species) * v(iatom, 1:geo%space%dim)
+    do iatom = 1, ions%natoms
+      v(iatom, 1:ions%space%dim) = ions%mass(iatom) * v(iatom, 1:ions%space%dim)
     end do
 
     POP_SUB(ion_dynamics_verlet_step1)
@@ -707,8 +693,8 @@ contains
 
   ! ---------------------------------------------------------
   !> A bare verlet integrator.
-  subroutine ion_dynamics_verlet_step2(geo, v, fold, fnew, dt)
-    type(geometry_t),     intent(in)    :: geo
+  subroutine ion_dynamics_verlet_step2(ions, v, fold, fnew, dt)
+    type(ions_t),         intent(in)    :: ions
     FLOAT,                intent(inout) :: v(:, :)
     FLOAT,                intent(in)    :: fold(:, :)
     FLOAT,                intent(in)    :: fnew(:, :)
@@ -719,21 +705,20 @@ contains
     PUSH_SUB(ion_dynamics_verlet_step2)
 
     ! First transform momenta to velocities
-    do iatom = 1, geo%natoms
-      v(iatom, 1:geo%space%dim) = v(iatom, 1:geo%space%dim) / species_mass(geo%atom(iatom)%species)
+    do iatom = 1, ions%natoms
+      v(iatom, 1:ions%space%dim) = v(iatom, 1:ions%space%dim) / ions%mass(iatom)
     end do
 
     ! velocity verlet
-    do iatom = 1, geo%natoms
-      if(.not. geo%atom(iatom)%move) cycle
-      v(iatom, 1:geo%space%dim) = v(iatom, 1:geo%space%dim) &
-        + dt / species_mass(geo%atom(iatom)%species) * M_HALF * (fold(iatom, 1:geo%space%dim) + &
-        fnew(iatom, 1:geo%space%dim))
+    do iatom = 1, ions%natoms
+      if (ions%fixed(iatom)) cycle
+      v(iatom, 1:ions%space%dim) = v(iatom, 1:ions%space%dim) &
+        + dt / ions%mass(iatom) * M_HALF * (fold(iatom, 1:ions%space%dim) + fnew(iatom, 1:ions%space%dim))
     end do
 
     ! And back to momenta.
-    do iatom = 1, geo%natoms
-      v(iatom, 1:geo%space%dim) = species_mass(geo%atom(iatom)%species) * v(iatom, 1:geo%space%dim)
+    do iatom = 1, ions%natoms
+      v(iatom, 1:ions%space%dim) = ions%mass(iatom) * v(iatom, 1:ions%space%dim)
     end do
 
     POP_SUB(ion_dynamics_verlet_step2)
@@ -741,28 +726,24 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine ion_dynamics_save_state(this, geo, state)
+  subroutine ion_dynamics_save_state(this, ions, state)
     type(ion_dynamics_t), intent(in)    :: this
-    type(geometry_t),     intent(in)    :: geo
+    type(ions_t),         intent(in)    :: ions
     type(ion_state_t),    intent(out)   :: state
-
-    integer :: iatom
 
     if(.not. ion_dynamics_ions_move(this)) return
 
     PUSH_SUB(ion_dynamics_save_state)
 
-    SAFE_ALLOCATE(state%pos(1:geo%space%dim, 1:geo%natoms))
-    SAFE_ALLOCATE(state%vel(1:geo%space%dim, 1:geo%natoms))
+    SAFE_ALLOCATE(state%pos(1:ions%space%dim, 1:ions%natoms))
+    SAFE_ALLOCATE(state%vel(1:ions%space%dim, 1:ions%natoms))
 
-    do iatom = 1, geo%natoms
-      state%pos(1:geo%space%dim, iatom) = geo%atom(iatom)%x(1:geo%space%dim)
-      state%vel(1:geo%space%dim, iatom) = geo%atom(iatom)%v(1:geo%space%dim)
-    end do
+    state%pos = ions%pos
+    state%vel = ions%vel
 
     if(this%thermostat == THERMO_NH) then
-      SAFE_ALLOCATE(state%old_pos(1:geo%space%dim, 1:geo%natoms))
-      state%old_pos(1:geo%space%dim, 1:geo%natoms) = this%old_pos(1:geo%space%dim, 1:geo%natoms)
+      SAFE_ALLOCATE(state%old_pos(1:ions%space%dim, 1:ions%natoms))
+      state%old_pos(1:ions%space%dim, 1:ions%natoms) = this%old_pos(1:ions%space%dim, 1:ions%natoms)
       state%nh(1:2)%pos = this%nh(1:2)%pos
       state%nh(1:2)%vel = this%nh(1:2)%vel
     end if
@@ -772,24 +753,20 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine ion_dynamics_restore_state(this, geo, state)
+  subroutine ion_dynamics_restore_state(this, ions, state)
     type(ion_dynamics_t), intent(inout) :: this
-    type(geometry_t),     intent(inout) :: geo
+    type(ions_t),         intent(inout) :: ions
     type(ion_state_t),    intent(inout) :: state
-
-    integer :: iatom
 
     if(.not. ion_dynamics_ions_move(this)) return
 
     PUSH_SUB(ion_dynamics_restore_state)
 
-    do iatom = 1, geo%natoms
-      geo%atom(iatom)%x(1:geo%space%dim) = state%pos(1:geo%space%dim, iatom)
-      geo%atom(iatom)%v(1:geo%space%dim) = state%vel(1:geo%space%dim, iatom)
-    end do
+    ions%pos = state%pos
+    ions%vel = state%vel
 
     if(this%thermostat == THERMO_NH) then
-      this%old_pos(1:geo%space%dim, 1:geo%natoms) = state%old_pos(1:geo%space%dim, 1:geo%natoms)
+      this%old_pos(1:ions%space%dim, 1:ions%natoms) = state%old_pos(1:ions%space%dim, 1:ions%natoms)
       this%nh(1:2)%pos = state%nh(1:2)%pos
       this%nh(1:2)%vel = state%nh(1:2)%vel
       SAFE_DEALLOCATE_A(state%old_pos)
@@ -812,15 +789,15 @@ contains
   
 
   ! ---------------------------------------------------------
-  FLOAT pure function ion_dynamics_kinetic_energy(geo) result(kinetic_energy)
-    type(geometry_t),      intent(in) :: geo
+  FLOAT pure function ion_dynamics_kinetic_energy(ions) result(kinetic_energy)
+    type(ions_t),          intent(in) :: ions
 
     integer :: iatom
 
     kinetic_energy = M_ZERO
-    do iatom = 1, geo%natoms
+    do iatom = 1, ions%natoms
       kinetic_energy = kinetic_energy + &
-        M_HALF * species_mass(geo%atom(iatom)%species) * sum(geo%atom(iatom)%v(1:geo%space%dim)**2)
+        M_HALF * ions%mass(iatom) * sum(ions%vel(:, iatom)**2)
     end do
 
   end function ion_dynamics_kinetic_energy
@@ -828,10 +805,10 @@ contains
 
   ! ---------------------------------------------------------
   !> This function returns the ionic temperature in energy units.
-  FLOAT pure function ion_dynamics_temperature(geo) result(temperature)
-    type(geometry_t),      intent(in) :: geo
+  FLOAT pure function ion_dynamics_temperature(ions) result(temperature)
+    type(ions_t),          intent(in) :: ions
 
-    temperature = CNST(2.0)/CNST(3.0)*ion_dynamics_kinetic_energy(geo)/geo%natoms
+    temperature = M_TWO/M_THREE*ion_dynamics_kinetic_energy(ions)/ions%natoms
     
   end function ion_dynamics_temperature
 

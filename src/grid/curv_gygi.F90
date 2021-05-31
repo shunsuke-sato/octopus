@@ -22,14 +22,14 @@
 !! F. Gygi and G. Galli, PRB 52 R2229 (1996).
 
 module curv_gygi_oct_m
-  use geometry_oct_m
+  use coordinate_system_oct_m
   use global_oct_m
+  use lalg_adv_oct_m
   use messages_oct_m
   use namespace_oct_m
   use parser_oct_m
   use profiling_oct_m
   use root_solver_oct_m
-  use simul_box_oct_m
   use unit_oct_m
   use unit_system_oct_m
 
@@ -38,40 +38,54 @@ module curv_gygi_oct_m
   private
   public ::                   &
     curv_gygi_t,              &
-    curv_gygi_init,           &
-    curv_gygi_copy,           &
-    curv_gygi_end,            &
-    curv_gygi_chi2x,          &
-    curv_gygi_x2chi,          &
-    curv_gygi_jacobian
+    curv_gygi_copy
 
-  type curv_gygi_t
+  type, extends(coordinate_system_t) :: curv_gygi_t
     private
     FLOAT, public :: A             !< local reduction in grid spacing is 1/(1+A)
     FLOAT, public :: alpha         !< range of enhancement of the resolution
     FLOAT, public :: beta          !< distance over which Euclidian coordinates are recovered
     FLOAT, allocatable :: pos(:, :)
     integer :: npos
+    type(root_solver_t) :: rs
+  contains
+    procedure :: chi2x => curv_gygi_chi2x
+    procedure :: x2chi => curv_gygi_x2chi
+    procedure :: det_jac => curv_gygi_det_jac
+    procedure :: write_info => curv_gygi_write_info
+    final :: curv_gygi_finalize
   end type curv_gygi_t
 
-  type(simul_box_t), pointer  :: sb_p
-  type(curv_gygi_t), pointer  :: cv_p
+  interface curv_gygi_t
+    procedure curv_gygi_constructor
+  end interface curv_gygi_t
+
+  ! Auxiliary variables for the root solver.
+  class(curv_gygi_t), pointer  :: gygi_p
   integer :: i_p
-  FLOAT :: chi_p(MAX_DIM)
+  FLOAT, allocatable :: chi_p(:)
 
 contains
 
   ! ---------------------------------------------------------
-  subroutine curv_gygi_init(cv, namespace, sb, geo, min_scaling_product)
-    type(curv_gygi_t), intent(out) :: cv
+  function curv_gygi_constructor(namespace, dim, npos, pos) result(gygi)
     type(namespace_t), intent(in)  :: namespace
-    type(simul_box_t), intent(in)  :: sb
-    type(geometry_t),  intent(in)  :: geo
-    FLOAT,             intent(out) :: min_scaling_product
+    integer,           intent(in)  :: dim
+    integer,           intent(in)  :: npos
+    FLOAT,             intent(in)  :: pos(1:dim,1:npos)
+    class(curv_gygi_t), pointer :: gygi
 
-    integer :: ipos, idir
+    PUSH_SUB(curv_gygi_constructor)
 
-    PUSH_SUB(curv_gygi_init)
+    SAFE_ALLOCATE(gygi)
+
+    gygi%dim = dim
+    gygi%local_basis = .true.
+    gygi%orthogonal = .true. ! This needs to be checked.
+
+    gygi%npos = npos
+    SAFE_ALLOCATE(gygi%pos(1:dim, 1:gygi%npos))
+    gygi%pos = pos
 
     !%Variable CurvGygiA
     !%Type float
@@ -84,7 +98,7 @@ contains
     !% [This is the <math>A_{\alpha}</math> variable in Eq. 2 of F. Gygi and G. Galli, <i>Phys.
     !% Rev. B</i> <b>52</b>, R2229 (1995)]. It must be larger than zero.
     !%End
-    call parse_variable(namespace, 'CurvGygiA', M_HALF, cv%A)
+    call parse_variable(namespace, 'CurvGygiA', M_HALF, gygi%A)
 
     !%Variable CurvGygiAlpha
     !%Type float
@@ -98,7 +112,7 @@ contains
     !% It must be larger than zero.
     !%End
 
-    call parse_variable(namespace, 'CurvGygiAlpha', M_TWO, cv%alpha, units_inp%length)
+    call parse_variable(namespace, 'CurvGygiAlpha', M_TWO, gygi%alpha, units_inp%length)
     !%Variable CurvGygiBeta
     !%Type float
     !%Default 4.0 a.u.
@@ -108,98 +122,80 @@ contains
     !% recovered. [This is the <math>b_{\alpha}</math> variable in Eq. 2 of F. Gygi and G. Galli,
     !% <i>Phys. Rev. B</i> <b>52</b>, R2229 (1995)]. It must be larger than zero.
     !%End
-    call parse_variable(namespace, 'CurvGygiBeta', M_FOUR, cv%beta, units_inp%length)
+    call parse_variable(namespace, 'CurvGygiBeta', M_FOUR, gygi%beta, units_inp%length)
 
-    if(cv%a<=M_ZERO)     call messages_input_error(namespace, 'CurvGygiA')
-    if(cv%alpha<=M_ZERO) call messages_input_error(namespace, 'CurvGygiAlpha')
-    if(cv%beta<=M_ZERO)  call messages_input_error(namespace, 'CurvGygiBeta')
+    if (gygi%a <= M_ZERO)     call messages_input_error(namespace, 'CurvGygiA')
+    if (gygi%alpha <= M_ZERO) call messages_input_error(namespace, 'CurvGygiAlpha')
+    if (gygi%beta <= M_ZERO)  call messages_input_error(namespace, 'CurvGygiBeta')
 
-    cv%npos = geo%natoms
-    SAFE_ALLOCATE(cv%pos(1:cv%npos, 1:sb%dim))
-    do idir = 1, sb%dim
-      do ipos = 1, cv%npos
-        cv%pos(ipos, idir) = geo%atom(ipos)%x(idir)
-      end do
-    end do
+    gygi%min_mesh_scaling_product = (M_ONE / (M_ONE + gygi%A))**gygi%dim
 
-    call curv_gygi_min_scaling(sb, cv, min_scaling_product)
+    ! initialize root solver
+    call root_solver_init(gygi%rs, namespace, dim, solver_type = ROOT_NEWTON, maxiter = 500, abs_tolerance = CNST(1.0e-10))
 
-    POP_SUB(curv_gygi_init)
-  end subroutine curv_gygi_init
+    POP_SUB(curv_gygi_constructor)
+  end function curv_gygi_constructor
 
   ! ---------------------------------------------------------
   subroutine curv_gygi_copy(this_out, this_in)
     type(curv_gygi_t), intent(inout) :: this_out
     type(curv_gygi_t), intent(in)    :: this_in
-    !
+
     PUSH_SUB(curv_gygi_copy)
-    this_out%A=this_in%A
-    this_out%alpha=this_in%alpha
-    this_out%beta=this_in%beta
+
+    this_out%A = this_in%A
+    this_out%alpha = this_in%alpha
+    this_out%beta = this_in%beta
     SAFE_ALLOCATE_SOURCE_A(this_out%pos, this_in%pos)
-    this_out%npos=this_in%npos
+    this_out%npos = this_in%npos
+
     POP_SUB(curv_gygi_copy)
-    return
   end subroutine curv_gygi_copy
 
   ! ---------------------------------------------------------
-  subroutine curv_gygi_end(cv)
-    type(curv_gygi_t), intent(inout) :: cv
+  subroutine curv_gygi_finalize(this)
+    type(curv_gygi_t), intent(inout) :: this
 
-    PUSH_SUB(curv_gygi_end)
+    PUSH_SUB(curv_gygi_finalize)
 
-    SAFE_DEALLOCATE_A(cv%pos)
+    SAFE_DEALLOCATE_A(this%pos)
 
-    POP_SUB(curv_gygi_end)
-  end subroutine curv_gygi_end
-
-  ! ---------------------------------------------------------
-  subroutine getf(y, f, jf)
-    FLOAT, intent(in)    :: y(:)
-    FLOAT, intent(out)   :: f(:), jf(:, :)
-
-    ! no push_sub, called too frequently
-
-    call curv_gygi_jacobian(sb_p, cv_p, y, f, jf, i_p)
-    f(1:sb_p%dim) = f(1:sb_p%dim) - chi_p(1:sb_p%dim)
-
-  end subroutine getf 
-
+    POP_SUB(curv_gygi_finalize)
+  end subroutine curv_gygi_finalize
 
   ! ---------------------------------------------------------
-  subroutine curv_gygi_chi2x(sb, cv, rs, chi, x)
-    type(simul_box_t), target, intent(in)   :: sb
-    type(curv_gygi_t), target, intent(in)   :: cv
-    type(root_solver_t), intent(in)         :: rs
-    FLOAT,                     intent(in)  :: chi(:)  !< chi(sb%dim)
-    FLOAT,                     intent(out) :: x(:)    !< x(sb%dim)
+  subroutine curv_gygi_chi2x(this, chi, xx)
+    class(curv_gygi_t), target, intent(in)  :: this
+    FLOAT,                      intent(in)  :: chi(:)  !< chi(dim)
+    FLOAT,                      intent(out) :: xx(:)    !< x(dim)
 
     integer :: i
     logical :: conv
 
-    ! no push_sub, called too frequently
+    ! no PUSH_SUB, called too often
 
-    sb_p            => sb
-    cv_p            => cv
-    i_p             =  cv%npos
-    chi_p(1:sb%dim) =  chi(1:sb%dim)
+    gygi_p => this
+    i_p =  this%npos
+    SAFE_ALLOCATE(chi_p(1:this%dim))
+    chi_p(:) = chi(:)
 
-    call droot_solver_run(rs, getf, x, conv, startval = chi)
+    call droot_solver_run(this%rs, getf, xx, conv, startval = chi)
 
-    if(.not.conv) then
-      do i = 1, cv%npos
+    if (.not. conv) then
+      do i = 1, this%npos
         conv = .false.
         i_p = i
-        call droot_solver_run(rs, getf, x, conv, startval = x(1:sb%dim))
+        call droot_solver_run(this%rs, getf, xx, conv, startval = xx(1:this%dim))
       end do
     end if
 
-    nullify(sb_p); nullify(cv_p)
+    nullify(gygi_p)
+    SAFE_DEALLOCATE_A(chi_p)
 
-    if(.not.conv) then
+    if (.not. conv) then
       message(1) = "During the construction of the adaptive grid, the Newton-Raphson"
       message(2) = "method did not converge for point:"
-      write(message(3),'(9f14.6)') x(1:sb%dim)
+      write(message(3),'(9f14.6)') xx(1:this%dim)
       message(4) = "Try varying the Gygi parameters -- usually reducing CurvGygiA or"
       message(5) = "CurvGygiAlpha (or both) solves the problem."
       call messages_fatal(5)
@@ -207,89 +203,122 @@ contains
 
   end subroutine curv_gygi_chi2x
 
-
   ! ---------------------------------------------------------
-  subroutine curv_gygi_x2chi(sb, cv, x, chi)
-    type(simul_box_t), intent(in)  :: sb
-    type(curv_gygi_t), intent(in)  :: cv
-    FLOAT,             intent(in)  :: x(:)    ! x(sb%dim)
-    FLOAT,             intent(out) :: chi(:)  ! chi(sb%dim)
+  subroutine curv_gygi_x2chi(this, xx, chi)
+    class(curv_gygi_t), target, intent(in)  :: this
+    FLOAT,                      intent(in)  :: xx(:)    !< xx(dim)
+    FLOAT,                      intent(out) :: chi(:)  !< chi(dim)
 
     integer :: i, ia
     FLOAT   :: r, ar, th, ex
 
-    PUSH_SUB(curv_gygi_x2chi)
+    ! no PUSH_SUB, called too often
 
-    chi(1:sb%dim) = x(1:sb%dim)
-    do ia = 1, cv%npos
-      r = max(sqrt(sum((x(1:sb%dim) - cv%pos(ia, 1:sb%dim))**2)), CNST(1e-6))
-      ar = cv%A*cv%alpha/r
-      th = tanh(r/cv%alpha)
-      ex = exp(-(r/cv%beta)**2)
-      do i = 1, sb%dim
-        chi(i) = chi(i) + (x(i) - cv%pos(ia, i)) * cv%a * ar * th * ex
+    chi(1:this%dim) = xx(1:this%dim)
+    do ia = 1, this%npos
+      r = max(norm2(xx(1:this%dim) - this%pos(1:this%dim, ia)), CNST(1e-6))
+      ar = this%A*this%alpha/r
+      th = tanh(r/this%alpha)
+      ex = exp(-(r/this%beta)**2)
+      do i = 1, this%dim
+        chi(i) = chi(i) + (xx(i) - this%pos(i, ia)) * this%a * ar * th * ex
       end do
     end do
 
     POP_SUB(curv_gygi_x2chi)
   end subroutine curv_gygi_x2chi
 
+  ! ---------------------------------------------------------
+  FLOAT function curv_gygi_det_jac(this, xx, chi) result(jdet)
+    class(curv_gygi_t), intent(in)  :: this
+    FLOAT,              intent(in)  :: xx(:)   !< xx(dim)
+    FLOAT,              intent(in)  :: chi(:)  !< chi(dim)
+
+    FLOAT :: dummy(this%dim)
+    FLOAT :: jac(1:this%dim, 1:this%dim)
+
+    ! no PUSH_SUB, called too often
+
+    call curv_gygi_jacobian(this, xx, dummy, jac)
+    jdet = M_ONE/lalg_determinant(this%dim, jac, preserve_mat = .false.)
+
+  end function curv_gygi_det_jac
 
   ! ---------------------------------------------------------
-  subroutine curv_gygi_jacobian(sb, cv, x, chi, J, natoms)
-    type(simul_box_t), intent(in)  :: sb
-    type(curv_gygi_t), intent(in)  :: cv
-    FLOAT,             intent(in)  :: x(:)    !< x(sb%dim)
-    FLOAT,             intent(out) :: chi(:)  !< chi(sb%dim)
-    FLOAT,             intent(out) :: J(:,:)  !< J(sb%dim,sb%dim), the Jacobian
-    integer, optional, intent(in)  :: natoms
+  subroutine curv_gygi_write_info(this, unit)
+    class(curv_gygi_t), intent(in) :: this
+    integer,            intent(in) :: unit
+
+    PUSH_SUB(curv_gygi_write_info)
+
+    write(message(1), '(a)')  '  Curvilinear Method = gygi'
+    write(message(2), '(a)')  '  Gygi Parameters:'
+    write(message(3), '(4x,a,f6.3)')  'A = ', this%a
+    write(message(4), '(4x,3a,f6.3)') 'alpha [', trim(units_abbrev(units_out%length)), '] = ', &
+      units_from_atomic(units_out%length, this%alpha)
+    write(message(5), '(4x,3a,f6.3)') 'beta  [', trim(units_abbrev(units_out%length)), '] = ', &
+      units_from_atomic(units_out%length, this%beta)
+    call messages_info(5, unit)
+
+    POP_SUB(curv_gygi_write_info)
+  end subroutine curv_gygi_write_info
+
+  ! ---------------------------------------------------------
+  subroutine curv_gygi_jacobian(this, xx, chi, jac, natoms)
+    class(curv_gygi_t), intent(in)  :: this
+    FLOAT,              intent(in)  :: xx(:)       !< x(dim)
+    FLOAT,              intent(out) :: chi(:)     !< chi(dim)
+    FLOAT,              intent(out) :: jac(:, :)  !< jac(dim,dim), the Jacobian
+    integer,  optional, intent(in)  :: natoms
 
     integer :: i, ix, iy, natoms_
     FLOAT :: r, f_alpha, df_alpha
     FLOAT :: th, ex, ar
 
-    ! no push_sub, called too frequently
+    ! no PUSH_SUB, called too often
 
-    J(1:sb%dim,1:sb%dim) = M_ZERO
-    do ix = 1, sb%dim
-      J(ix, ix) = M_ONE
-      chi(ix)   = x(ix)
+    jac(1:this%dim, 1:this%dim) = M_ZERO
+    do ix = 1, this%dim
+      jac(ix, ix) = M_ONE
+      chi(ix)   = xx(ix)
     end do
 
-    natoms_ = cv%npos
+    natoms_ = this%npos
     if(present(natoms)) natoms_ = natoms
 
     do i = 1, natoms_
-      r = max(sqrt(sum((x(1:sb%dim) - cv%pos(i, 1:sb%dim))**2)), CNST(1e-6))
+      r = max(norm2(xx(1:this%dim) - this%pos(1:this%dim, i)), CNST(1e-6))
 
-      ar = cv%A*cv%alpha/r
-      th = tanh(r/cv%alpha)
-      ex = exp(-(r/cv%beta)**2)
+      ar = this%A*this%alpha/r
+      th = tanh(r/this%alpha)
+      ex = exp(-(r/this%beta)**2)
 
       f_alpha  = ar * th * ex
-      df_alpha = ar*(-th*ex/r + ex/(cv%alpha*cosh(r/cv%alpha)**2) - th*M_TWO*r*ex/cv%beta**2)
+      df_alpha = ar*(-th*ex/r + ex/(this%alpha*cosh(r/this%alpha)**2) - th*M_TWO*r*ex/this%beta**2)
 
-      do ix = 1, sb%dim
-        chi(ix) = chi(ix) + f_alpha*(x(ix)-cv%pos(i, ix))
+      do ix = 1, this%dim
+        chi(ix) = chi(ix) + f_alpha*(xx(ix) - this%pos(ix, i))
 
-        J(ix, ix) = J(ix, ix) + f_alpha
-        do iy = 1, sb%dim
-          J(ix, iy) = J(ix, iy) + (x(ix)-cv%pos(i, ix))*(x(iy)-cv%pos(i, iy))/r*df_alpha
+        jac(ix, ix) = jac(ix, ix) + f_alpha
+        do iy = 1, this%dim
+          jac(ix, iy) = jac(ix, iy) + (xx(ix) - this%pos(ix, i))*(xx(iy) - this%pos(iy, i))/r*df_alpha
         end do
       end do
     end do
 
   end subroutine curv_gygi_jacobian
 
-
   ! ---------------------------------------------------------
-  subroutine curv_gygi_min_scaling(sb, cv, min_scaling_product)
-    type(simul_box_t), intent(in)  :: sb
-    type(curv_gygi_t), intent(in)  :: cv
-    FLOAT,             intent(out) :: min_scaling_product
-    
-    min_scaling_product = (1.0 / (1.0 + cv%A))**sb%dim
-  end subroutine curv_gygi_min_scaling
+  subroutine getf(y, f, jf)
+    FLOAT, intent(in)    :: y(:)
+    FLOAT, intent(out)   :: f(:), jf(:, :)
+
+    ! no PUSH_SUB, called too often
+
+    call curv_gygi_jacobian(gygi_p, y, f, jf, i_p)
+    f(1:gygi_p%dim) = f(1:gygi_p%dim) - chi_p(1:gygi_p%dim)
+
+  end subroutine getf
 
 end module curv_gygi_oct_m
 

@@ -26,6 +26,7 @@ module interaction_partner_oct_m
   use messages_oct_m
   use namespace_oct_m
   use quantity_oct_m
+  use space_oct_m
   implicit none
 
   private
@@ -41,6 +42,7 @@ module interaction_partner_oct_m
     private
     type(namespace_t), public :: namespace
     type(clock_t),     public :: clock
+    type(space_t),     public :: space
 
     type(integer_list_t), public :: supported_interactions_as_partner
 
@@ -50,6 +52,7 @@ module interaction_partner_oct_m
   contains
     procedure(interaction_partner_update_exposed_quantities),      deferred :: update_exposed_quantities
     procedure(interaction_partner_update_exposed_quantity),        deferred :: update_exposed_quantity
+    procedure(interaction_partner_init_interaction_as_partner),    deferred :: init_interaction_as_partner
     procedure(interaction_partner_copy_quantities_to_interaction), deferred :: copy_quantities_to_interaction
   end type interaction_partner_t
 
@@ -73,12 +76,21 @@ module interaction_partner_oct_m
     end subroutine interaction_partner_update_exposed_quantity
 
     ! ---------------------------------------------------------
+    subroutine interaction_partner_init_interaction_as_partner(partner, interaction)
+      import interaction_partner_t
+      import interaction_t
+      class(interaction_partner_t),     intent(in)    :: partner
+      class(interaction_t),             intent(inout) :: interaction
+    end subroutine interaction_partner_init_interaction_as_partner
+
+    ! ---------------------------------------------------------
     subroutine interaction_partner_copy_quantities_to_interaction(partner, interaction)
       import interaction_partner_t
       import interaction_t
       class(interaction_partner_t),     intent(inout) :: partner
       class(interaction_t),             intent(inout) :: interaction
     end subroutine interaction_partner_copy_quantities_to_interaction
+
 
   end interface
 

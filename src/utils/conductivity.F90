@@ -21,10 +21,10 @@
   program conductivity
     use batch_oct_m
     use command_line_oct_m
-    use geometry_oct_m
     use global_oct_m
     use grid_oct_m
     use io_oct_m
+    use ions_oct_m
     use messages_oct_m
     use namespace_oct_m
     use parser_oct_m
@@ -44,7 +44,7 @@
     FLOAT, allocatable :: total_current(:, :), ftcurr(:, :, :), curr(:, :)
     FLOAT, allocatable :: heat_current(:,:), ftheatcurr(:,:,:), heatcurr(:,:)
     CMPLX, allocatable :: invdielectric(:, :)
-    type(geometry_t), pointer :: geo 
+    type(ions_t),     pointer :: ions 
     type(space_t)     :: space
     type(spectrum_t) :: spectrum
     type(block_t)     :: blk
@@ -76,7 +76,9 @@
 
     call unit_system_init(global_namespace)
 
-    call spectrum_init(spectrum, global_namespace, default_energy_step = CNST(0.0001), default_max_energy  = CNST(1.0))
+    call space_init(space, global_namespace)
+
+    call spectrum_init(spectrum, global_namespace, default_energy_step = CNST(0.0001), default_max_energy  = M_ONE)
  
     !%Variable ConductivitySpectrumTimeStepFactor
     !%Type integer
@@ -107,12 +109,11 @@
     
     if (spectrum%end_time < M_ZERO) spectrum%end_time = huge(spectrum%end_time)
 
-    call space_init(space, global_namespace)
-    geo => geometry_t(global_namespace, space)
+    ions => ions_t(global_namespace)
 
     !We need the total charge
     call parse_variable(global_namespace, 'ExcessCharge', M_ZERO, excess_charge)
-    qtot = -(geo%val_charge() + excess_charge)
+    qtot = -(ions%val_charge() + excess_charge)
 
     if(from_forces) then
 
@@ -126,7 +127,7 @@
       call spectrum_count_time_steps(global_namespace, iunit, ntime, deltat)
       call io_close(iunit)
 
-      nvel = geo%natoms*space%dim
+      nvel = ions%natoms*ions%space%dim
 
       SAFE_ALLOCATE(time(1:ntime))
       SAFE_ALLOCATE(velocities(1:nvel, 1:ntime))
@@ -141,8 +142,8 @@
 
       do
         read(unit = iunit, iostat = ierr, fmt = *) read_iter, curtime, &
-          ((geo%atom(ii)%x(jj), jj = 1, 3), ii = 1, geo%natoms), &
-          ((geo%atom(ii)%v(jj), jj = 1, 3), ii = 1, geo%natoms)
+          ((ions%pos(jj, ii), jj = 1, 3), ii = 1, ions%natoms), &
+          ((ions%vel(jj, ii), jj = 1, 3), ii = 1, ions%natoms)
 
         curtime = units_to_atomic(units_out%time, curtime)
 
@@ -158,9 +159,9 @@
 
           time(ntime) = curtime
           ivel = 1
-          do ii = 1, geo%natoms
-            do jj = 1, space%dim
-              velocities(ivel, ntime) = units_to_atomic(units_out%velocity, geo%atom(ii)%v(jj))
+          do ii = 1, ions%natoms
+            do jj = 1, ions%space%dim
+              velocities(ivel, ntime) = units_to_atomic(units_out%velocity, ions%vel(jj, ii))
               ivel = ivel + 1
             end do
           end do
@@ -189,6 +190,7 @@
         
         call io_skip_header(iunit)
         call spectrum_count_time_steps(global_namespace, iunit, ntime, deltat)
+        deltat = units_to_atomic(units_out%time, deltat)
         ntime = ntime + 1
 
         call io_skip_header(iunit)
@@ -199,6 +201,10 @@
         
         do iter = 1, ntime
           read(iunit, *) read_iter, time(iter), (total_current(ii, iter), ii = 1, space%dim)
+          time(iter) = units_to_atomic(units_out%time, time(iter))
+          do ii = 1, space%dim
+            total_current(ii, iter) = units_to_atomic(units_out%length/units_out%time, total_current(ii, iter)) 
+          end do
         end do
         
         call io_close(iunit)
@@ -299,9 +305,9 @@
        if(iter == 1) then
          vel0 = M_ZERO
          ivel = 1
-         do ii = 1, geo%natoms
+         do ii = 1, ions%natoms
            do jj = 1, space%dim
-             vel0(jj) = vel0(jj) + velocities(ivel, iter)/TOFLOAT(geo%natoms)
+             vel0(jj) = vel0(jj) + velocities(ivel, iter)/TOFLOAT(ions%natoms)
              ivel = ivel + 1
            end do
          end do
@@ -311,23 +317,24 @@
        current = M_ZERO
         
        ivel = 1
-       do ii = 1, geo%natoms
+       do ii = 1, ions%natoms
          do jj = 1, space%dim
-           velcm(jj) = velcm(jj) + velocities(ivel, iter)/TOFLOAT(geo%natoms)
-           current(jj) = current(jj) + species_mass(geo%atom(ii)%species)/geo%latt%rcell_volume*(velocities(ivel, iter) - vel0(jj))
+           velcm(jj) = velcm(jj) + velocities(ivel, iter)/TOFLOAT(ions%natoms)
+           current(jj) = current(jj) + &
+             ions%mass(ii)/ions%latt%rcell_volume*(velocities(ivel, iter) - vel0(jj))
            ivel = ivel + 1
          end do
        end do
         
-       integral(1) = integral(1) + deltat/vel0(1)*(vel0(1)*qtot/geo%latt%rcell_volume + current(1))
+       integral(1) = integral(1) + deltat/vel0(1)*(vel0(1)*qtot/ions%latt%rcell_volume + current(1))
        integral(2) = integral(2) + &
-         deltat/vel0(1)*(vel0(1)*qtot/geo%latt%rcell_volume - total_current(1, iter)/geo%latt%rcell_volume)
+         deltat/vel0(1)*(vel0(1)*qtot/ions%latt%rcell_volume - total_current(1, iter)/ions%latt%rcell_volume)
 
-       curr(iter, 1:space%dim) = vel0(1:space%dim)*qtot/geo%latt%rcell_volume + current(1:space%dim)
+       curr(iter, 1:space%dim) = vel0(1:space%dim)*qtot/ions%latt%rcell_volume + current(1:space%dim)
        
      else
-       curr(iter, 1:space%dim)    = total_current(1:space%dim, iter)/geo%latt%rcell_volume
-       heatcurr(iter,1:space%dim) = heat_current(1:space%dim, iter)/geo%latt%rcell_volume
+       curr(iter, 1:space%dim)    = total_current(1:space%dim, iter)/ions%latt%rcell_volume
+       heatcurr(iter,1:space%dim) = heat_current(1:space%dim, iter)/ions%latt%rcell_volume
      end if
         
      if(from_forces) write(iunit,*) iter, iter*deltat,  curr(iter, 1:space%dim)
@@ -374,7 +381,7 @@
       '###########################################################################################################################'
 
     v0 = sqrt(sum(vel0(1:space%dim)**2))
-    if(.not. from_forces .or. v0 < epsilon(v0)) v0 = CNST(1.0)
+    if(.not. from_forces .or. v0 < epsilon(v0)) v0 = M_ONE
 
     if( .not. from_forces .and. parse_is_defined(global_namespace, 'GaugeVectorField')) then
       if(parse_block(global_namespace, 'GaugeVectorField', blk) == 0) then
@@ -477,7 +484,7 @@
       '###########################################################################################################################'
 
     v0 = sqrt(sum(vel0(1:space%dim)**2))
-    if(.not. from_forces .or. v0 < epsilon(v0)) v0 = CNST(1.0)
+    if(.not. from_forces .or. v0 < epsilon(v0)) v0 = M_ONE
 
     do ifreq = 1, energy_steps
       ww = spectrum%energy_step*(ifreq - 1) + spectrum%min_energy
@@ -492,7 +499,7 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     
-    SAFE_DEALLOCATE_P(geo)
+    SAFE_DEALLOCATE_P(ions)
 
     SAFE_DEALLOCATE_A(time)
 

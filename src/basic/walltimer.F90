@@ -95,7 +95,7 @@ contains
     !% In huge calculations, this value should be increased.
     !%End
     call parse_variable(global_namespace, 'RestartWriteTime', CNST(5.0), write_time)
-    if(write_time > alarm_time/CNST(4.0)) write_time = alarm_time/CNST(4.0)
+    if(write_time > alarm_time/M_FOUR) write_time = alarm_time/M_FOUR
     call set_margin(write_time*CNST(60.0))
 
     call start()

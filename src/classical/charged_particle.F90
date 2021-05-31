@@ -22,14 +22,13 @@ module charged_particle_oct_m
   use algorithm_oct_m
   use classical_particle_oct_m
   use clock_oct_m
+  use coulomb_force_oct_m
   use global_oct_m
   use interaction_oct_m
-  use coulomb_force_oct_m
-  use lorentz_force_oct_m
   use interactions_factory_oct_m
-  use io_oct_m
-  use iso_c_binding
+  use lorentz_force_oct_m
   use messages_oct_m
+  use multisystem_debug_oct_m
   use mpi_oct_m
   use namespace_oct_m
   use parser_oct_m
@@ -37,7 +36,6 @@ module charged_particle_oct_m
   use quantity_oct_m
   use space_oct_m
   use system_oct_m
-  use write_iter_oct_m
 
   implicit none
 
@@ -59,6 +57,7 @@ module charged_particle_oct_m
     procedure :: is_tolerance_reached => charged_particle_is_tolerance_reached
     procedure :: update_quantity => charged_particle_update_quantity
     procedure :: update_exposed_quantity => charged_particle_update_exposed_quantity
+    procedure :: init_interaction_as_partner => charged_particle_init_interaction_as_partner
     procedure :: copy_quantities_to_interaction => charged_particle_copy_quantities_to_interaction
   end type charged_particle_t
 
@@ -213,6 +212,9 @@ contains
       ! The charged particle has a charge, but it is not necessary to update it, as it does not change with time.
       ! We still need to set its clock, so we set it to be in sync with the particle position.
       call partner%quantities(iq)%clock%set_time(partner%quantities(POSITION)%clock)
+      call multisystem_debug_write_marker(partner%namespace, &
+        event_clock_update_t("quantity", QUANTITY_LABEL(iq), partner%quantities(iq)%clock, "set") )
+
     case default
       ! Other quantities should be handled by the parent class
       call partner%classical_particle_t%update_exposed_quantity(iq)
@@ -220,6 +222,27 @@ contains
 
     POP_SUB(charged_particle_update_exposed_quantity)
   end subroutine charged_particle_update_exposed_quantity
+
+  ! ---------------------------------------------------------
+  subroutine charged_particle_init_interaction_as_partner(partner, interaction)
+    class(charged_particle_t), intent(in)    :: partner
+    class(interaction_t),      intent(inout) :: interaction
+
+    PUSH_SUB(charged_particle_init_interaction_as_partner)
+
+    select type (interaction)
+    type is (coulomb_force_t)
+      interaction%partner_np = 1
+      SAFE_ALLOCATE(interaction%partner_charge(1))
+      SAFE_ALLOCATE(interaction%partner_pos(partner%space%dim, 1))
+
+    class default
+      ! Other interactions should be handled by the parent class
+      call partner%classical_particle_t%init_interaction_as_partner(interaction)
+    end select
+
+    POP_SUB(charged_particle_init_interaction_as_partner)
+  end subroutine charged_particle_init_interaction_as_partner
 
   ! ---------------------------------------------------------
   subroutine charged_particle_copy_quantities_to_interaction(partner, interaction)
@@ -230,16 +253,7 @@ contains
 
     select type (interaction)
     type is (coulomb_force_t)
-      interaction%partner_np = 1
-
-      if (.not. allocated(interaction%partner_charge)) then
-        SAFE_ALLOCATE(interaction%partner_charge(1))
-      end if
       interaction%partner_charge(1) = partner%charge(1)
-
-      if (.not. allocated(interaction%partner_pos)) then
-        SAFE_ALLOCATE(interaction%partner_pos(partner%space%dim, 1))
-      end if
       interaction%partner_pos(:,1) = partner%pos(:, 1)
 
     class default

@@ -38,9 +38,10 @@ dist_share_DATA = \
 	03-magnetic.05-gs-spinors.inp                  \
 	03-magnetic.06-td-spinors.inp                  \
 	05-output.test                                 \
-	05-output.01-gs.inp                            \
-	05-output.02-convert.inp                       \
-	05-output.03-convert-op.inp                    \
+	05-output.01-gs-set1.inp                       \
+	05-output.02-gs.inp                            \
+	05-output.03-convert.inp                       \
+	05-output.04-convert-op.inp                    \
 	06-restart.01-gs_mixrho.inp                    \
 	06-restart.02-restart_gs_mixrho.inp            \
 	06-restart.03-gs_mixvhxc.inp                   \
@@ -106,8 +107,6 @@ dist_share_DATA = \
         23-go-na2.05-constrains.inp                  \
 	24-o2-spin.test                              \
 	24-o2-spin.01-gs.inp \
-	27-fine_mesh.test                            \
-	27-fine_mesh.01-gs.inp \
         29-pcm_chlorine_anion.01-ground_state-n60.inp \
         29-pcm_chlorine_anion.02-td_prop-n60.inp      \
         29-pcm_chlorine_anion.03-ground_state-n60-poisson.inp \

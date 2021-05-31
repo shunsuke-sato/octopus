@@ -343,6 +343,11 @@ contains
     SAFE_ALLOCATE(st%rs_current_density_restart_t2(1:mesh%np_part, 1:st%dim))
     st%rs_current_density_restart_t2 = M_z0
 
+    SAFE_ALLOCATE(st%ep(1:mesh%np_part))
+    SAFE_ALLOCATE(st%mu(1:mesh%np_part))
+    st%ep = P_ep
+    st%mu = P_mu
+
     call profiling_out(prof)
 
     POP_SUB(states_mxll_allocate)

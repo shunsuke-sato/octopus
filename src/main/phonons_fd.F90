@@ -21,10 +21,10 @@
 module phonons_fd_oct_m
   use density_oct_m
   use energy_calc_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use hamiltonian_elec_oct_m
+  use ions_oct_m
   use mesh_oct_m
   use messages_oct_m
   use multicomm_oct_m
@@ -95,7 +95,9 @@ contains
 
     ! load wavefunctions
     call restart_init(gs_restart, sys%namespace, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=sys%gr%mesh, exact=.true.)
-    if(ierr == 0) call states_elec_load(gs_restart, sys%namespace, sys%st, sys%gr, sys%kpoints, ierr)
+    if(ierr == 0) then
+      call states_elec_load(gs_restart, sys%namespace, sys%space, sys%st, sys%gr%mesh, sys%kpoints, ierr)
+    end if
     if (ierr /= 0) then
       message(1) = "Unable to read wavefunctions."
       call messages_fatal(1)
@@ -105,9 +107,9 @@ contains
     ! setup Hamiltonian
     message(1) = 'Info: Setting up Hamiltonian.'
     call messages_info(1)
-    call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%geo, sys%st, sys%ks, sys%hm)
+    call v_ks_h_setup(sys%namespace, sys%space, sys%gr, sys%ions, sys%st, sys%ks, sys%hm)
 
-    call vibrations_init(vib, sys%geo, "fd", sys%namespace)
+    call vibrations_init(vib, sys%ions, "fd", sys%namespace)
 
     !%Variable Displacement
     !%Type float
@@ -122,7 +124,7 @@ contains
     call parse_variable(sys%namespace, 'Displacement', CNST(0.01), vib%disp, units_inp%length)
 
     ! calculate dynamical matrix
-    call get_dyn_matrix(sys%gr, sys%namespace, sys%mc, sys%geo, sys%st, sys%ks, sys%hm, sys%outp, vib, &
+    call get_dyn_matrix(sys%gr, sys%namespace, sys%mc, sys%ions, sys%st, sys%ks, sys%hm, sys%outp, vib, &
                         sys%space)
 
     call vibrations_output(vib)
@@ -156,11 +158,11 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine get_dyn_matrix(gr, namespace, mc, geo, st, ks, hm, outp, vib, space)
+  subroutine get_dyn_matrix(gr, namespace, mc, ions, st, ks, hm, outp, vib, space)
     type(grid_t),     target, intent(inout) :: gr
     type(namespace_t),        intent(in)    :: namespace
     type(multicomm_t),        intent(in)    :: mc
-    type(geometry_t),         intent(inout) :: geo
+    type(ions_t),             intent(inout) :: ions
     type(states_elec_t),      intent(inout) :: st
     type(v_ks_t),             intent(inout) :: ks
     type(hamiltonian_elec_t), intent(inout) :: hm
@@ -177,15 +179,15 @@ contains
 
     mesh => gr%mesh
 
-    call scf_init(scf, namespace, gr, geo, st, mc, hm, ks, space)
-    SAFE_ALLOCATE(forces0(1:geo%natoms, 1:space%dim))
-    SAFE_ALLOCATE(forces (1:geo%natoms, 1:space%dim))
+    call scf_init(scf, namespace, gr, ions, st, mc, hm, ks, space)
+    SAFE_ALLOCATE(forces0(1:space%dim, 1:ions%natoms))
+    SAFE_ALLOCATE(forces (1:space%dim, 1:ions%natoms))
     forces = M_ZERO
     forces0 = M_ZERO
 
     ! FIXME: why displace in + and -? Could just do + and take difference from undisplaced.
     
-    do iatom = 1, geo%natoms
+    do iatom = 1, ions%natoms
       do alpha = 1, space%dim
         imat = vibrations_get_index(vib, iatom, alpha)
 
@@ -193,43 +195,38 @@ contains
         call messages_info(1)
 
         ! move atom iatom in direction alpha by dist
-        geo%atom(iatom)%x(alpha) = geo%atom(iatom)%x(alpha) + vib%disp
+        ions%pos(alpha, iatom) = ions%pos(alpha, iatom) + vib%disp
 
         ! first force
-        call hamiltonian_elec_epot_generate(hm, namespace, gr, geo, st)
+        call hamiltonian_elec_epot_generate(hm, namespace, space, gr, ions, st)
         call density_calc(st, gr, st%rho)
-        call v_ks_calc(ks, namespace, space, hm, st, geo, calc_eigenval=.true.)
+        call v_ks_calc(ks, namespace, space, hm, st, ions, calc_eigenval=.true.)
         call energy_calc_total (namespace, space, hm, gr, st)
         call scf_mix_clear(scf)
-        call scf_run(scf, namespace, space, mc, gr, geo, st, ks, hm, outp, gs_run=.false., verbosity = VERB_COMPACT)
-        do jatom = 1, geo%natoms
-          forces0(jatom, 1:space%dim) = geo%atom(jatom)%f(1:space%dim)
-        end do
+        call scf_run(scf, namespace, space, mc, gr, ions, st, ks, hm, outp, gs_run=.false., verbosity = VERB_COMPACT)
+        forces0 = ions%tot_force
 
         write(message(1), '(a,i3,3a)') 'Info: Moving atom ', iatom, ' in the -', index2axis(alpha), '-direction.'
         call messages_info(1)
 
-        geo%atom(iatom)%x(alpha) = geo%atom(iatom)%x(alpha) - M_TWO*vib%disp
+        ions%pos(alpha, iatom) = ions%pos(alpha, iatom) - M_TWO*vib%disp
 
         ! second force
-        call hamiltonian_elec_epot_generate(hm, namespace, gr, geo, st)
+        call hamiltonian_elec_epot_generate(hm, namespace, space, gr, ions, st)
         call density_calc(st, gr, st%rho)
-        call v_ks_calc(ks, namespace, space, hm, st, geo, calc_eigenval=.true.)
+        call v_ks_calc(ks, namespace, space, hm, st, ions, calc_eigenval=.true.)
         call energy_calc_total(namespace, space, hm, gr, st)
         call scf_mix_clear(scf)
-        call scf_run(scf, namespace, space, mc, gr, geo, st, ks, hm, outp, gs_run=.false., verbosity = VERB_COMPACT)
-        do jatom = 1, geo%natoms
-          forces(jatom, 1:mesh%sb%dim) = geo%atom(jatom)%f(1:space%dim)
-        end do
+        call scf_run(scf, namespace, space, mc, gr, ions, st, ks, hm, outp, gs_run=.false., verbosity = VERB_COMPACT)
+        forces = ions%tot_force
 
-        geo%atom(iatom)%x(alpha) = geo%atom(iatom)%x(alpha) + vib%disp
+        ions%pos(alpha, iatom) = ions%pos(alpha, iatom) + vib%disp
 
-        do jatom = 1, geo%natoms
+        do jatom = 1, ions%natoms
           do beta = 1, space%dim
             jmat = vibrations_get_index(vib, jatom, beta)
-            vib%dyn_matrix(jmat, imat) = &
-              (forces0(jatom, beta) - forces(jatom, beta)) / (M_TWO*vib%disp) &
-              * vibrations_norm_factor(vib, geo, iatom, jatom)
+            vib%dyn_matrix(jmat, imat) = (forces0(beta, jatom) - forces(beta, jatom)) / (M_TWO*vib%disp) &
+              * vibrations_norm_factor(vib, ions, iatom, jatom)
           end do
         end do
         call vibrations_out_dyn_matrix_row(vib, imat)

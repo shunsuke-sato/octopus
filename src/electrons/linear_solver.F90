@@ -214,7 +214,7 @@ contains
       call messages_experimental("Multigrid linear solver")
 
       SAFE_ALLOCATE(this%mgrid)
-      call multigrid_init(this%mgrid, namespace, space, gr%cv, gr%mesh, gr%der, gr%stencil, mc)
+      call multigrid_init(this%mgrid, namespace, space, gr%mesh, gr%der, gr%stencil, mc)
     end if
 
     if (this%solver == OPTION__LINEARSOLVER__QMR_DOTP) then

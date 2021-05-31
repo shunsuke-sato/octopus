@@ -20,6 +20,8 @@
 
 module pes_mask_oct_m
   use batch_oct_m
+  use box_sphere_oct_m
+  use box_parallelepiped_oct_m
   use boundary_op_oct_m
   use comm_oct_m
   use cube_function_oct_m
@@ -27,13 +29,13 @@ module pes_mask_oct_m
   use density_oct_m
   use fft_oct_m
   use fourier_space_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use hamiltonian_elec_oct_m
   use io_binary_oct_m
   use io_function_oct_m
   use io_oct_m
+  use ions_oct_m
   use kpoints_oct_m
   use lasers_oct_m
   use loct_oct_m
@@ -196,13 +198,13 @@ contains
     integer :: defaultMask,k1,k2,st1,st2
     integer :: cols_pesmask_block, idim, ip
 
-    FLOAT :: xx(1:sb%dim), r
+    FLOAT :: xx(space%dim), r
     FLOAT :: ufn_re, ufn_im
     character(len=1024) :: user_def_expr
    
     PUSH_SUB(pes_mask_init)
         
-    mask%mesh => mesh  
+    mask%mesh => mesh
     
     if (space%is_periodic()) &
       call messages_experimental("PES_mask with periodic dimensions")
@@ -212,11 +214,15 @@ contains
     call messages_info(1)
     
     
-    if(sb%box_shape /= SPHERE .and. .not. space%is_periodic()) then
-      message(1) = 'PhotoElectronSpectrum = pes_mask usually requires BoxShape = sphere.'
-      message(2) = 'Unless you know what you are doing modify this parameter and rerun.'
-      call messages_warning(2, namespace=namespace)
-    end if
+    select type (box => sb%box)
+    type is (box_sphere_t)
+    class default
+      if (.not. space%is_periodic()) then
+        message(1) = 'PhotoElectronSpectrum = pes_mask usually requires BoxShape = sphere.'
+        message(2) = 'Unless you know what you are doing modify this parameter and rerun.'
+        call messages_warning(2, namespace=namespace)
+      end if
+    end select
 
     if(hm%bc%abtype /= NOT_ABSORBING) then
       message(1) = 'PhotoElectronSpectrum = pes_mask already contains absorbing boundaries.'
@@ -427,13 +433,13 @@ contains
     mask%ll(1:3) = mesh%idx%ll(1:3)    
     
     !Enlarge the cube region
-    mask%ll(1:sb%dim) = int(mask%ll(1:sb%dim) * mask%enlarge(1:sb%dim))
+    mask%ll(1:space%dim) = int(mask%ll(1:space%dim) * mask%enlarge(1:space%dim))
     
     select case(mask%pw_map_how)
       
     case(PW_MAP_PFFT)
       ASSERT(mask%mesh%parallel_in_domains)
-      call cube_init(mask%cube, mask%ll, mesh%sb, namespace, &
+      call cube_init(mask%cube, mask%ll, namespace, space, &
         fft_type = FFT_COMPLEX, fft_library = FFTLIB_PFFT, nn_out = ll, &
         mpi_grp = mask%mesh%mpi_grp, need_partition=.true., spacing = mesh%spacing)
       !        print *,mpi_world%rank, "mask%mesh%mpi_grp%comm", mask%mesh%mpi_grp%comm, mask%mesh%mpi_grp%size
@@ -456,9 +462,8 @@ contains
       end if
       
     case(PW_MAP_FFT)
-      call cube_init(mask%cube, mask%ll, mesh%sb, namespace, &
-        fft_type = FFT_COMPLEX, fft_library = FFTLIB_FFTW, nn_out = ll, &
-        spacing = mesh%spacing )
+      call cube_init(mask%cube, mask%ll, namespace, space, fft_type = FFT_COMPLEX, fft_library = FFTLIB_FFTW, &
+        nn_out = ll, spacing = mesh%spacing)
       mask%ll = ll 
       mask%fft = mask%cube%fft
       mask%np = mesh%np_part_global 
@@ -468,12 +473,11 @@ contains
       
       !NFFT initialization
       ! we just add 2 points for the enlarged region
-      if (mask%enlarge_2p(1) /= 1) mask%ll(1:sb%dim) = mask%ll(1:sb%dim) + 2 
+      if (mask%enlarge_2p(1) /= 1) mask%ll(1:space%dim) = mask%ll(1:space%dim) + 2 
 
-      call cube_init(mask%cube, mask%ll, mesh%sb, namespace, &
-        fft_type = FFT_COMPLEX, fft_library = FFTLIB_NFFT, nn_out = ll, &
-        spacing = mesh%spacing, tp_enlarge = mask%enlarge_2p )
-                     
+      call cube_init(mask%cube, mask%ll, namespace, space,  fft_type = FFT_COMPLEX, fft_library = FFTLIB_NFFT, &
+        nn_out = ll, spacing = mesh%spacing, tp_enlarge = mask%enlarge_2p)
+
       mask%ll = ll 
       mask%fft = mask%cube%fft
       mask%np = mesh%np_part_global       
@@ -481,14 +485,12 @@ contains
       
     case(PW_MAP_PNFFT)  
     
-      if (mask%enlarge_2p(1) /= 1) mask%ll(1:sb%dim) = mask%ll(1:sb%dim) + 2 
+      if (mask%enlarge_2p(1) /= 1) mask%ll(1:space%dim) = mask%ll(1:space%dim) + 2 
 
-      call cube_init(mask%cube, mask%ll, mesh%sb, namespace, &
-        fft_type = FFT_COMPLEX, fft_library = FFTLIB_PNFFT, nn_out = ll, &
-        spacing = mesh%spacing, tp_enlarge = mask%enlarge_2p, &
+      call cube_init(mask%cube, mask%ll, namespace, space, fft_type = FFT_COMPLEX, fft_library = FFTLIB_PNFFT, &
+        nn_out = ll, spacing = mesh%spacing, tp_enlarge = mask%enlarge_2p, &
         mpi_grp = mask%mesh%mpi_grp, need_partition=.true.)
-                     
-                     
+
       mask%ll(1:3) = mask%cube%fs_n(1:3) 
 
       mask%fft = mask%cube%fft
@@ -593,40 +595,43 @@ contains
     end if
 
     mask%user_def = .false.
-    
+
     select case(cols_pesmask_block)
     case(0)
-      if (sb%box_shape == SPHERE) then
-        mask%mask_R(1)=mesh%sb%rsize/M_TWO
-        mask%mask_R(2)=mesh%sb%rsize
+      select type (box => sb%box)
+      type is (box_sphere_t)
+        mask%mask_R(1) = box%radius/M_TWO
+        mask%mask_R(2) = box%radius
         message(1) = "Input: PESMaskSize R(1) and R(2) not specified. Using default values for spherical mask."
-      else if(sb%box_shape == PARALLELEPIPED) then
-        mask%mask_R(1)=mesh%sb%lsize(1)/M_TWO
-        mask%mask_R(2)=mesh%sb%lsize(1)        
+      type is (box_parallelepiped_t)
+        mask%mask_R(1) = box%half_length(1)/M_TWO
+        mask%mask_R(2) = box%half_length(1)
         message(1) = "Input: PESMaskSize R(1) and R(2) not specified. Using default values for cubic mask."
-      end if    
+      end select
       call messages_info(1)
     case(1)
       call parse_block_float(blk, 0, 0, mask%mask_R(1), units_inp%length)
-      if (sb%box_shape == SPHERE) then
-        mask%mask_R(2)=mesh%sb%rsize
+      select type (box => sb%box)
+      type is (box_sphere_t)
+        mask%mask_R(2) = box%radius
         message(1) = "Input: PESMaskSize R(2) not specified. Using default value for spherical mask."
-      else if(sb%box_shape == PARALLELEPIPED) then
-        mask%mask_R(2)=mesh%sb%lsize(1)
+      type is (box_parallelepiped_t)
+        mask%mask_R(2) = box%half_length(1)
         message(1) = "Input: PESMaskSize R(2) not specified. Using default value for cubic mask."
-      end if    
+      end select
       call messages_info(1)
     case(2)
       call parse_block_float(blk, 0, 0, mask%mask_R(1), units_inp%length)
       call parse_block_float(blk, 0, 1, mask%mask_R(2), units_inp%length)
 
-      if (sb%box_shape == SPHERE) then
-        if(mask%mask_R(2) > mesh%sb%rsize)  mask%mask_R(2) = mesh%sb%rsize 
+      select type (box => sb%box)
+      type is (box_sphere_t)
+        if (mask%mask_R(2) > box%radius)  mask%mask_R(2) = box%radius
         message(1) = "Info: using spherical mask."
-      else if (sb%box_shape == PARALLELEPIPED) then
-        if(mask%mask_R(2) > mesh%sb%lsize(1))  mask%mask_R(2) = mesh%sb%lsize(1) 
+      type is (box_parallelepiped_t)
+        if (mask%mask_R(2) > box%half_length(1)) mask%mask_R(2) = box%half_length(1)
         message(1) = "Info: using cubic mask."
-      end if    
+      end select
       call messages_info(1)
 
     case(3)
@@ -638,12 +643,12 @@ contains
       call parse_block_string(blk, 0, 2, user_def_expr)
       do ip = 1, mask%np
         xx = M_ZERO
-        xx(1:sb%dim) = mesh%x(ip, 1:sb%dim)
-        r = units_from_atomic(units_inp%length, sqrt(sum(xx(1:sb%dim)**2)))
-        do idim = 1, sb%dim
+        xx(1:space%dim) = mesh%x(ip, 1:space%dim)
+        r = units_from_atomic(units_inp%length, sqrt(sum(xx(1:space%dim)**2)))
+        do idim = 1, space%dim
           xx(idim) = units_from_atomic(units_inp%length, xx(idim))
         end do
-        call parse_expression(ufn_re, ufn_im, sb%dim, xx, r, M_ZERO, user_def_expr)
+        call parse_expression(ufn_re, ufn_im, space%dim, xx, r, M_ZERO, user_def_expr)
         mask%ufn(ip) = ufn_re
       end do
       message(1) = "Input: using user-defined mask function from expression:"
@@ -718,8 +723,8 @@ contains
     !% The maximum energy for the PES spectrum.
     !%End
     MaxE = M_EPSILON
-    do idim = 1, mesh%sb%dim
-      tmp = maxval(mask%Lk(1:mask%ll(idim),1:mesh%sb%dim))**M_TWO/M_TWO
+    do idim = 1, space%dim
+      tmp = maxval(mask%Lk(1:mask%ll(idim),1:space%dim))**M_TWO/M_TWO
       if (tmp > MaxE) MaxE = tmp
     end do
     call parse_variable(namespace, 'PESMaskSpectEnergyMax', MaxE, mask%energyMax, unit = units_inp%energy)
@@ -731,7 +736,7 @@ contains
     !%Description
     !% The PES spectrum energy step.
     !%End
-    DeltaE = minval(mask%Lk(2,1:mesh%sb%dim)-mask%Lk(1,1:mesh%sb%dim))**M_TWO/M_TWO
+    DeltaE = minval(mask%Lk(2,1:space%dim) - mask%Lk(1,1:space%dim))**M_TWO/M_TWO
     call parse_variable(namespace, 'PESMaskSpectEnergyStep', DeltaE, mask%energyStep, unit = units_inp%energy)
     call messages_print_var_value(stdout, "PESMaskSpectEnergyStep", mask%energyStep, unit = units_out%energy)
     
@@ -935,8 +940,8 @@ contains
 
         else ! mask%user_def == .false.
 
-          if(mesh%sb%box_shape == SPHERE) then
-          
+          select type (box => mesh%sb%box)
+          type is (box_sphere_t)
             dd = rr -  R(1) 
             if(dd > M_ZERO ) then 
               if (dd  <  width) then
@@ -946,7 +951,7 @@ contains
               end if
             end if
 
-          else if (mesh%sb%box_shape == PARALLELEPIPED) then
+          type is (box_parallelepiped_t)
           
             ! We are filling from the center opposite to the spherical case
             tmp = M_ONE
@@ -964,7 +969,7 @@ contains
             end do
             mask_fn(ip) = M_ONE - mask_fn(ip)
           
-          end if  
+          end select
         end if
       end do
 

@@ -20,7 +20,6 @@
 #include "global.h"
 
 module simul_box_oct_m
-  use atom_oct_m
   use box_oct_m
   use box_cylinder_oct_m
   use box_hypercube_oct_m
@@ -29,10 +28,10 @@ module simul_box_oct_m
   use box_parallelepiped_oct_m
   use box_sphere_oct_m
   use box_user_defined_oct_m
-  use iso_c_binding
-  use geometry_oct_m
   use global_oct_m
   use io_oct_m
+  use ions_oct_m
+  use iso_c_binding
   use lalg_basic_oct_m
   use lattice_vectors_oct_m
   use lookup_oct_m
@@ -76,19 +75,12 @@ module simul_box_oct_m
                                            !! multibox_t (and thus store this in
                                            !! a list).
 
-    !> 1->sphere, 2->cylinder, 3->sphere around each atom,
-    !! 4->parallelepiped (orthonormal, up to now).
-    integer  :: box_shape   
-
-    FLOAT :: rsize          !< the radius of the sphere or of the cylinder
-    FLOAT :: xsize          !< the length of the cylinder in the x-direction
     FLOAT :: lsize(MAX_DIM) !< half of the length of the parallelepiped in each direction.
 
     type(lattice_vectors_t), pointer :: latt => NULL()
     
     FLOAT :: stress_tensor(MAX_DIM,MAX_DIM)   !< reciprocal-lattice primitive vectors
-    
-    integer :: periodic_dim
+
   contains
     procedure :: contains_points => simul_box_contains_points
     procedure :: write_info => simul_box_write_info
@@ -98,39 +90,38 @@ module simul_box_oct_m
 contains
 
   !--------------------------------------------------------------
-  subroutine simul_box_init(sb, namespace, geo, space)
+  subroutine simul_box_init(sb, namespace, ions, space)
     type(simul_box_t),                   intent(inout) :: sb
     type(namespace_t),                   intent(in)    :: namespace
-    type(geometry_t),  target,           intent(inout) :: geo
+    type(ions_t),      target,           intent(inout) :: ions
     type(space_t),                       intent(in)    :: space
 
     ! some local stuff
-    FLOAT :: def_h, def_rsize, center(space%dim)
+    integer :: box_shape
+    FLOAT :: def_h, def_rsize, center(space%dim), rsize, xsize
     integer :: n_site_types, n_sites
     integer, allocatable :: site_type(:)
-    FLOAT,   allocatable :: site_type_radius(:), site_position(:,:)
+    FLOAT,   allocatable :: site_type_radius(:)
     character(len=LABEL_LEN), allocatable :: site_type_label(:)
     character(len=200) :: filename
     character(len=1024) :: user_def
 
     PUSH_SUB(simul_box_init)
 
-    call geo%grid_defaults(def_h, def_rsize)
+    call ions%grid_defaults(def_h, def_rsize)
 
     sb%dim = space%dim
-    sb%periodic_dim = space%periodic_dim
 
-    sb%latt => geo%latt
+    sb%latt => ions%latt
 
     call read_box()                        ! Parameters defining the simulation box.
 
     center = M_ZERO ! Currently all the boxes have to be centered at the origin.
-    select case (sb%box_shape)
+    select case (box_shape)
     case (SPHERE)
-      sb%box => box_sphere_t(space%dim, center, sb%rsize)
+      sb%box => box_sphere_t(space%dim, center, rsize)
     case (CYLINDER)
-      sb%box => box_cylinder_t(space%dim, center, sb%rsize, 1, M_TWO*sb%xsize, namespace, &
-        periodic_boundaries=(space%periodic_dim > 0))
+      sb%box => box_cylinder_t(space%dim, center, rsize, 1, M_TWO*xsize, namespace, periodic_boundaries=(space%periodic_dim > 0))
     case (PARALLELEPIPED)
       sb%box => box_parallelepiped_t(space%dim, center, M_TWO*sb%lsize(1:space%dim), n_periodic_boundaries=space%periodic_dim)
     case (HYPERCUBE)
@@ -139,11 +130,10 @@ contains
       sb%box => box_user_defined_t(space%dim, center, user_def, M_TWO*sb%lsize(1:space%dim))
 
     case (MINIMUM)
-      sb%box => box_minimum_t(space%dim, n_site_types, site_type_label, site_type_radius, n_sites, site_type, site_position)
+      sb%box => box_minimum_t(space%dim, n_site_types, site_type_label, site_type_radius, n_sites, site_type, ions%pos)
       SAFE_DEALLOCATE_A(site_type_label)
       SAFE_DEALLOCATE_A(site_type_radius)
       SAFE_DEALLOCATE_A(site_type)
-      SAFE_DEALLOCATE_A(site_position)
 
     case (BOX_IMAGE)
       sb%box => box_image_t(center, sb%lsize, filename, space%periodic_dim, namespace)
@@ -204,9 +194,9 @@ contains
       else
         default_boxshape = MINIMUM
       end if
-      call parse_variable(namespace, 'BoxShape', default_boxshape, sb%box_shape)
-      if(.not.varinfo_valid_option('BoxShape', sb%box_shape)) call messages_input_error(namespace, 'BoxShape')
-      select case(sb%box_shape)
+      call parse_variable(namespace, 'BoxShape', default_boxshape, box_shape)
+      if(.not.varinfo_valid_option('BoxShape', box_shape)) call messages_input_error(namespace, 'BoxShape')
+      select case(box_shape)
       case(SPHERE, MINIMUM, BOX_USDEF)
         if(sb%dim > 1 .and. space%is_periodic()) call messages_input_error(namespace, 'BoxShape')
       case(CYLINDER)
@@ -218,21 +208,21 @@ contains
       end select
 
       ! ignore box_shape in 1D
-      if (sb%dim == 1 .and. sb%box_shape /= PARALLELEPIPED .and. sb%box_shape /= HYPERCUBE) then
-        sb%box_shape = SPHERE
+      if (sb%dim == 1 .and. box_shape /= PARALLELEPIPED .and. box_shape /= HYPERCUBE) then
+        box_shape = SPHERE
       end if
 
       ! Cannot use images in 1D or 3D
-      if(sb%dim /= 2 .and. sb%box_shape == BOX_IMAGE) call messages_input_error(namespace, 'BoxShape')
+      if(sb%dim /= 2 .and. box_shape == BOX_IMAGE) call messages_input_error(namespace, 'BoxShape')
 
-      if(sb%dim > 3 .and. sb%box_shape /= HYPERCUBE) then
+      if(sb%dim > 3 .and. box_shape /= HYPERCUBE) then
         message(1) = "For more than 3 dimensions, you can only use the hypercubic box."
         call messages_fatal(1, namespace=namespace)
         ! FIXME: why not a hypersphere as another option?
         ! Also, hypercube should be unified with parallepiped.
       end if
 
-      sb%rsize = -M_ONE
+      rsize = -M_ONE
       !%Variable Radius
       !%Type float
       !%Section Mesh::Simulation Box
@@ -245,43 +235,41 @@ contains
       !% <tt>minimum</tt>, a different radius is used for each
       !% species, while for other shapes, the maximum radius is used.
       !%End
-      select case(sb%box_shape)
+      select case(box_shape)
       case(SPHERE, CYLINDER)
-        call parse_variable(namespace, 'Radius', def_rsize, sb%rsize, units_inp%length)
-        if(sb%rsize < M_ZERO) call messages_input_error(namespace, 'radius')
-        if(def_rsize>M_ZERO) call messages_check_def(sb%rsize, .false., def_rsize, 'radius', units_out%length)
+        call parse_variable(namespace, 'Radius', def_rsize, rsize, units_inp%length)
+        if(rsize < M_ZERO) call messages_input_error(namespace, 'radius')
+        if(def_rsize>M_ZERO) call messages_check_def(rsize, .false., def_rsize, 'radius', units_out%length)
       case(MINIMUM)
-        default=sb%rsize
-        call parse_variable(namespace, 'radius', default, sb%rsize, units_inp%length)
-        if(sb%rsize < M_ZERO .and. def_rsize < M_ZERO) call messages_input_error(namespace, 'Radius')
+        default=rsize
+        call parse_variable(namespace, 'radius', default, rsize, units_inp%length)
+        if(rsize < M_ZERO .and. def_rsize < M_ZERO) call messages_input_error(namespace, 'Radius')
 
-        n_site_types = geo%nspecies
-        SAFE_ALLOCATE(site_type_label(1:geo%nspecies))
-        SAFE_ALLOCATE(site_type_radius(1:geo%nspecies))
+        n_site_types = ions%nspecies
+        SAFE_ALLOCATE(site_type_label(1:ions%nspecies))
+        SAFE_ALLOCATE(site_type_radius(1:ions%nspecies))
 
-        do ispec = 1, geo%nspecies
-          site_type_label(ispec) = species_label(geo%species(ispec))
-          if (sb%rsize > M_ZERO) then
-            site_type_radius(ispec) = sb%rsize
+        do ispec = 1, ions%nspecies
+          site_type_label(ispec) = species_label(ions%species(ispec))
+          if (rsize > M_ZERO) then
+            site_type_radius(ispec) = rsize
           else
-            if (species_def_rsize(geo%species(ispec)) < -M_EPSILON) then
+            if (species_def_rsize(ions%species(ispec)) < -M_EPSILON) then
               write(message(1),'(a,a,a)') 'Using default radii for minimum box, but radius for ', &
-                trim(species_label(geo%species(ispec))), ' is negative or undefined.'
+                trim(species_label(ions%species(ispec))), ' is negative or undefined.'
               message(2) = "Define it properly in the Species block or set the Radius variable explicitly."
               call messages_fatal(2, namespace=namespace)
             else
-              site_type_radius(ispec) = species_def_rsize(geo%species(ispec))
+              site_type_radius(ispec) = species_def_rsize(ions%species(ispec))
             end if
           end if
         end do
 
-        n_sites = geo%natoms
-        SAFE_ALLOCATE(site_position(1:sb%dim, 1:geo%natoms))
-        SAFE_ALLOCATE(site_type(1:geo%natoms))
-        do iatom = 1, geo%natoms
-          site_position(1:sb%dim, iatom) = geo%atom(iatom)%x(1:sb%dim)
-          do ispec = 1, geo%nspecies
-            if (geo%atom(iatom)%label == site_type_label(ispec)) then
+        n_sites = ions%natoms
+        SAFE_ALLOCATE(site_type(1:ions%natoms))
+        do iatom = 1, ions%natoms
+          do ispec = 1, ions%nspecies
+            if (ions%atom(iatom)%label == site_type_label(ispec)) then
               site_type(iatom) = ispec
             end if
           end do
@@ -289,7 +277,7 @@ contains
 
       end select
 
-      if(sb%box_shape == CYLINDER) then
+      if(box_shape == CYLINDER) then
         !%Variable Xlength
         !%Default <tt>Radius</tt>
         !%Type float
@@ -298,25 +286,25 @@ contains
         !% If <tt>BoxShape</tt> is <tt>cylinder</tt>, the total length of the cylinder is twice <tt>Xlength</tt>.
         !% Note that when PeriodicDimensions = 1, then the length of the cylinder is determined from the lattice vectors.
         !%End
-        if(sb%rsize > M_ZERO) then
-          default = sb%rsize
+        if(rsize > M_ZERO) then
+          default = rsize
         else
           default = def_rsize
         end if
 
         if (space%is_periodic()) then
-          sb%xsize = sqrt(sum(sb%latt%rlattice(1:space%periodic_dim, 1)**2))/M_TWO
+          xsize = sqrt(sum(sb%latt%rlattice(1:space%periodic_dim, 1)**2))/M_TWO
         else
-          call parse_variable(namespace, 'Xlength', default, sb%xsize, units_inp%length)
+          call parse_variable(namespace, 'Xlength', default, xsize, units_inp%length)
           if (def_rsize > M_ZERO .and. space%periodic_dim == 0) then
-            call messages_check_def(sb%xsize, .false., def_rsize, 'xlength', units_out%length)
+            call messages_check_def(xsize, .false., def_rsize, 'xlength', units_out%length)
           end if
         end if
       end if
 
       sb%lsize = M_ZERO
-      if(sb%box_shape == PARALLELEPIPED .or. sb%box_shape == HYPERCUBE .or. &
-         sb%box_shape == BOX_IMAGE .or. sb%box_shape == BOX_USDEF) then
+      if(box_shape == PARALLELEPIPED .or. box_shape == HYPERCUBE .or. &
+         box_shape == BOX_IMAGE .or. box_shape == BOX_USDEF) then
 
         !%Variable Lsize
         !%Type block
@@ -411,7 +399,7 @@ contains
       end if
 
       ! read in image for box_image
-      if(sb%box_shape == BOX_IMAGE) then
+      if(box_shape == BOX_IMAGE) then
 
         !%Variable BoxShapeImage
         !%Type string
@@ -435,7 +423,7 @@ contains
       end if
 
       ! read in box shape for user-defined boxes
-      if(sb%box_shape == BOX_USDEF) then
+      if(box_shape == BOX_USDEF) then
 
         !%Variable BoxShapeUsDef
         !%Type string
@@ -450,18 +438,18 @@ contains
       end if
 
       ! fill in lsize structure
-      select case(sb%box_shape)
+      select case(box_shape)
       case(SPHERE)
-        sb%lsize(1:sb%dim) = sb%rsize
+        sb%lsize(1:sb%dim) = rsize
       case(CYLINDER)
-        sb%lsize(1)        = sb%xsize
-        sb%lsize(2:sb%dim) = sb%rsize
+        sb%lsize(1)        = xsize
+        sb%lsize(2:sb%dim) = rsize
       case(MINIMUM)
         do idir = 1, sb%dim
-          if(sb%rsize > M_ZERO) then
-            sb%lsize(idir) = maxval(abs(geo%atom(:)%x(idir))) + sb%rsize
+          if(rsize > M_ZERO) then
+            sb%lsize(idir) = maxval(abs(ions%pos(idir, :))) + rsize
           else
-            sb%lsize(idir) = maxval(abs(geo%atom(:)%x(idir))) + def_rsize
+            sb%lsize(idir) = maxval(abs(ions%pos(idir, :))) + def_rsize
           end if
         end do
       end select
@@ -549,13 +537,9 @@ contains
 
     PUSH_SUB(simul_box_copy)
 
-    sbout%box_shape      = sbin%box_shape
-    sbout%rsize          = sbin%rsize
-    sbout%xsize          = sbin%xsize
     sbout%lsize          = sbin%lsize
     sbout%latt          => sbin%latt
     sbout%dim            = sbin%dim
-    sbout%periodic_dim   = sbin%periodic_dim
 
     POP_SUB(simul_box_copy)
   end subroutine simul_box_copy

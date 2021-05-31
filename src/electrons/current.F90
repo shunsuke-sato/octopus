@@ -26,8 +26,8 @@ module current_oct_m
   use comm_oct_m
   use derivatives_oct_m
   use exchange_operator_oct_m
-  use geometry_oct_m
   use global_oct_m
+  use ions_oct_m
   use hamiltonian_elec_base_oct_m
   use hamiltonian_elec_oct_m
   use lalg_basic_oct_m
@@ -161,7 +161,7 @@ contains
             do ip = 1, der%mesh%np
               st%current(ip, idir, 1) = st%current(ip, idir, 1) + ww*aimag(conjg(psi(ip, 1))*gpsi(ip, 1))
               st%current(ip, idir, 2) = st%current(ip, idir, 2) + ww*aimag(conjg(psi(ip, 2))*gpsi(ip, 2))
-              c_tmp = conjg(psi(ip, 1))*gpsi(ip, 2) - psi(ip, 2)*conjg(gpsi(ip, 1))
+              c_tmp = -M_HALF*M_ZI*(conjg(psi(ip, 2))*gpsi(ip, 1) - psi(ip, 1)*conjg(gpsi(ip, 2)))
               st%current(ip, idir, 3) = st%current(ip, idir, 3) + ww*TOFLOAT(c_tmp)
               st%current(ip, idir, 4) = st%current(ip, idir, 4) + ww*aimag(c_tmp)
             end do
@@ -261,12 +261,12 @@ contains
   end subroutine current_batch_accumulate
 
   ! ---------------------------------------------------------
-  subroutine current_calculate(this, namespace, der, hm, geo, st, symm)
+  subroutine current_calculate(this, namespace, der, hm, ions, st, symm)
     type(current_t),          intent(in)    :: this
     type(namespace_t),        intent(in)    :: namespace
     type(derivatives_t),      intent(inout) :: der
     type(hamiltonian_elec_t), intent(in)    :: hm
-    type(geometry_t),         intent(in)    :: geo
+    type(ions_t),             intent(in)    :: ions
     type(states_elec_t),      intent(inout) :: st
     type(symmetries_t),       intent(in)    :: symm
 
@@ -349,8 +349,8 @@ contains
                     ww*aimag(conjg(psi(ip, 1))*hrpsi(ip, 1) - conjg(psi(ip, 1))*rhpsi(ip, 1))
                   st%current(ip, idir, 2) = st%current(ip, idir, 2) + &
                     ww*aimag(conjg(psi(ip, 2))*hrpsi(ip, 2) - conjg(psi(ip, 2))*rhpsi(ip, 2))
-                  c_tmp = conjg(psi(ip, 1))*hrpsi(ip, 2) - conjg(psi(ip, 1))*rhpsi(ip, 2) &
-                    -psi(ip, 2)*conjg(hrpsi(ip, 1)) - psi(ip, 2)*conjg(rhpsi(ip, 1))
+                  c_tmp = -M_HALF*M_ZI*(conjg(psi(ip, 2))*hrpsi(ip, 1) - conjg(psi(ip, 2))*rhpsi(ip, 1) &
+                    -psi(ip, 1)*conjg(hrpsi(ip, 2)) - psi(ip, 1)*conjg(rhpsi(ip, 2)))
                   st%current(ip, idir, 3) = st%current(ip, idir, 3) + ww*TOFLOAT(c_tmp)
                   st%current(ip, idir, 4) = st%current(ip, idir, 4) + ww*aimag(c_tmp)
                 end do
@@ -450,7 +450,7 @@ contains
                   do idir = 1, der%dim
                     !$omp parallel do
                     do ip = 1, der%mesh%np
-                      gpsi(ip, idir, idim) = (M_ONE+CNST(2.0)*hm%vtau(ip,ispin))*gpsi(ip, idir, idim)
+                      gpsi(ip, idir, idim) = (M_ONE+M_TWO*hm%vtau(ip,ispin))*gpsi(ip, idir, idim)
                     end do
                     !$omp end parallel do
                   end do
@@ -458,7 +458,7 @@ contains
               end if
 
               !A nonlocal contribution from the pseudopotential must be included
-              call zprojector_commute_r_allatoms_alldir(hm%ep%proj, geo, der%mesh, st%d%dim, &
+              call zprojector_commute_r_allatoms_alldir(hm%ep%proj, ions, der%mesh, st%d%dim, &
                           der%boundaries, ik, psi, gpsi)                 
               !A nonlocal contribution from the scissor must be included
               if(hm%scissor%apply) then
@@ -490,7 +490,7 @@ contains
                     ww*aimag(conjg(psi(ip, 1))*gpsi(ip, idir, 1))
                   st%current(ip, idir, 2) = st%current(ip, idir, 2) + &
                     ww*aimag(conjg(psi(ip, 2))*gpsi(ip, idir, 2))
-                  c_tmp = conjg(psi(ip, 1))*gpsi(ip, idir, 2) - psi(ip, 2)*conjg(gpsi(ip, idir, 1))
+                  c_tmp = -M_HALF*M_ZI*(conjg(psi(ip, 2))*gpsi(ip, idir, 1) - psi(ip, 1)*conjg(gpsi(ip, idir, 2)))
                   st%current(ip, idir, 3) = st%current(ip, idir, 3) + ww*TOFLOAT(c_tmp)
                   st%current(ip, idir, 4) = st%current(ip, idir, 4) + ww*aimag(c_tmp)
                 end do
@@ -553,10 +553,10 @@ contains
   ! This is used only in the floquet_observables utility and 
   ! is highly experimental
   
-  subroutine current_calculate_mel(der, hm, geo, psi_i, psi_j, ik,  cmel)
+  subroutine current_calculate_mel(der, hm, ions, psi_i, psi_j, ik,  cmel)
     type(derivatives_t),  intent(inout) :: der
     type(hamiltonian_elec_t),  intent(in)    :: hm
-    type(geometry_t),     intent(in)    :: geo
+    type(ions_t),         intent(in)    :: ions
     CMPLX,                intent(in)    :: psi_i(:,:)
     CMPLX,                intent(in)    :: psi_j(:,:)
     integer,              intent(in)    :: ik
@@ -610,17 +610,17 @@ contains
         do idir = 1, der%dim
           !$omp parallel do
           do ip = 1, der%mesh%np
-            gpsi_i(ip, idir, idim) = (M_ONE+CNST(2.0)*hm%vtau(ip,ispin))*gpsi_i(ip, idir, idim)
-            gpsi_j(ip, idir, idim) = (M_ONE+CNST(2.0)*hm%vtau(ip,ispin))*gpsi_j(ip, idir, idim)
+            gpsi_i(ip, idir, idim) = (M_ONE+M_TWO*hm%vtau(ip,ispin))*gpsi_i(ip, idir, idim)
+            gpsi_j(ip, idir, idim) = (M_ONE+M_TWO*hm%vtau(ip,ispin))*gpsi_j(ip, idir, idim)
           end do
           !$omp end parallel do
         end do
       end do 
      
       !A nonlocal contribution from the pseudopotential must be included
-      call zprojector_commute_r_allatoms_alldir(hm%ep%proj, geo, der%mesh, hm%d%dim, &
+      call zprojector_commute_r_allatoms_alldir(hm%ep%proj, ions, der%mesh, hm%d%dim, &
                der%boundaries, ik, ppsi_i, gpsi_i)                 
-      call zprojector_commute_r_allatoms_alldir(hm%ep%proj, geo, der%mesh, hm%d%dim, &
+      call zprojector_commute_r_allatoms_alldir(hm%ep%proj, ions, der%mesh, hm%d%dim, &
                der%boundaries, ik, ppsi_j, gpsi_j)                 
       !A nonlocal contribution from the scissor must be included
       if(hm%scissor%apply) then

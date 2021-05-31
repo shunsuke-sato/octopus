@@ -20,14 +20,13 @@
 
 program centergeom
   use command_line_oct_m
-  use geometry_oct_m
   use global_oct_m
   use io_oct_m
+  use ions_oct_m
   use messages_oct_m
   use namespace_oct_m
   use parser_oct_m
   use profiling_oct_m
-  use space_oct_m
   use unit_oct_m
   use unit_system_oct_m
 
@@ -67,22 +66,20 @@ contains
       PSEUDO  = 2,        &
       LARGE   = 3
 
-    type(geometry_t), pointer :: geo
-    type(space_t)     :: space
+    type(ions_t),     pointer :: ions
     FLOAT, allocatable :: center(:), x1(:), x2(:), to(:)
     integer :: axis_type, idir, default
     type(block_t) :: blk
 
-    call space_init(space, global_namespace)
-    geo => geometry_t(global_namespace, space)
+    ions => ions_t(global_namespace)
 
-    SAFE_ALLOCATE(center(1:geo%space%dim))
-    SAFE_ALLOCATE(x1(1:geo%space%dim))
-    SAFE_ALLOCATE(x2(1:geo%space%dim))
-    SAFE_ALLOCATE(to(1:geo%space%dim))
+    SAFE_ALLOCATE(center(1:ions%space%dim))
+    SAFE_ALLOCATE(x1(1:ions%space%dim))
+    SAFE_ALLOCATE(x2(1:ions%space%dim))
+    SAFE_ALLOCATE(to(1:ions%space%dim))
 
     ! is there something to do
-    if (geo%natoms > 1) then
+    if (ions%natoms > 1) then
 
       !%Variable MainAxis
       !%Type block
@@ -96,8 +93,8 @@ contains
       !% <br> 1 | 0 | 0 
       !% <br>%</tt>
       !%End
-      if(parse_block(global_namespace, 'MainAxis', blk)==0) then
-        do idir = 1, geo%space%dim
+      if(parse_block(ions%namespace, 'MainAxis', blk)==0) then
+        do idir = 1, ions%space%dim
           call parse_block_float(blk, 0, idir - 1, to(idir))
         end do
         call parse_block_end(blk)
@@ -127,40 +124,40 @@ contains
       !%Option large_axis 3
       !% The larger axis of the molecule.
       !%End
-      if (geo%space%dim == 3) then
+      if (ions%space%dim == 3) then
         default = INERTIA
       else
         default = NONE
       end if
-      call parse_variable(global_namespace, 'AxisType', default, axis_type)
+      call parse_variable(ions%namespace, 'AxisType', default, axis_type)
       call messages_print_var_option(stdout, "AxisType", axis_type)
 
-      if (geo%space%dim /= 3 .and. axis_type /= NONE) then
-        call messages_not_implemented("alignment to axes (AxisType /= none) in other than 3 dimensions", namespace=global_namespace)
+      if (ions%space%dim /= 3 .and. axis_type /= NONE) then
+        call messages_not_implemented("alignment to axes (AxisType /= none) in other than 3 dimensions", namespace=ions%namespace)
       end if
 
       select case (axis_type)
       case (NONE, INERTIA, PSEUDO)
-        center = geo%center_of_mass(pseudo = (axis_type==PSEUDO))
+        center = ions%center_of_mass(pseudo = (axis_type==PSEUDO))
 
         write(message(1),'(3a,99f15.6)') 'Center of mass [', trim(units_abbrev(units_out%length)), '] = ', &
           units_from_atomic(units_out%length, center)
         call messages_info(1)
 
-        call geo%translate(center)
-        call geo%axis_inertia(x1, x2, pseudo = (axis_type==PSEUDO))
+        call ions%translate(center)
+        call ions%axis_inertia(x1, x2, pseudo = (axis_type==PSEUDO))
       case (LARGE)
-        center = geo%center()
+        center = ions%center()
 
         write(message(1),'(3a,99f15.6)') 'Center [', trim(units_abbrev(units_out%length)), '] = ', &
           units_from_atomic(units_out%length, center)
         call messages_info(1)
 
-        call geo%translate(center)
-        call geo%axis_large(x1, x2)
+        call ions%translate(center)
+        call ions%axis_large(x1, x2)
       case default
         write(message(1), '(a,i2,a)') 'AxisType = ', axis_type, ' not known by Octopus.'
-        call messages_fatal(1, namespace=global_namespace)
+        call messages_fatal(1, namespace=ions%namespace)
       end select
 
       write(message(1),'(a,99f15.6)') 'Found primary   axis ', x1
@@ -168,23 +165,23 @@ contains
       call messages_info(2)
 
       if (axis_type /= NONE) then
-        call geo%rotate(global_namespace, x1, x2, to)
+        call ions%rotate(x1, x2, to)
       end if
 
     end if
 
     ! recenter
-    center = geo%center()
-    call geo%translate(center)
+    center = ions%center()
+    call ions%translate(center)
 
     ! write adjusted geometry
-    call geo%write_xyz('./adjusted', global_namespace)
+    call ions%write_xyz('./adjusted')
 
     SAFE_DEALLOCATE_A(center)
     SAFE_DEALLOCATE_A(x1)
     SAFE_DEALLOCATE_A(x2)
     SAFE_DEALLOCATE_A(to)
-    SAFE_DEALLOCATE_P(geo)
+    SAFE_DEALLOCATE_P(ions)
 
   end subroutine center_geo
 

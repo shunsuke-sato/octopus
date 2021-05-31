@@ -23,12 +23,10 @@ module classical_particle_oct_m
   use algorithm_oct_m
   use classical_particles_oct_m
   use clock_oct_m
-  use force_interaction_oct_m
   use global_oct_m
   use interaction_oct_m
-  use gravity_oct_m
-  use lorentz_force_oct_m
   use interactions_factory_oct_m
+  use gravity_oct_m
   use io_oct_m
   use iso_c_binding
   use messages_oct_m
@@ -36,10 +34,6 @@ module classical_particle_oct_m
   use namespace_oct_m
   use parser_oct_m
   use profiling_oct_m
-  use propagator_beeman_oct_m
-  use propagator_exp_mid_oct_m
-  use propagator_oct_m
-  use propagator_verlet_oct_m
   use quantity_oct_m
   use space_oct_m
   use system_oct_m
@@ -65,6 +59,7 @@ module classical_particle_oct_m
     procedure :: output_finish => classical_particle_output_finish
     procedure :: update_quantity => classical_particle_update_quantity
     procedure :: update_exposed_quantity => classical_particle_update_exposed_quantity
+    procedure :: init_interaction_as_partner => classical_particle_init_interaction_as_partner
     procedure :: copy_quantities_to_interaction => classical_particle_copy_quantities_to_interaction
     final :: classical_particle_finalize
   end type classical_particle_t
@@ -107,13 +102,14 @@ contains
 
     this%namespace = namespace
 
-    call messages_print_stress(stdout, "Classical Particle", namespace=namespace)
-
-    call classical_particles_init(this, namespace, 1)
-
+    call space_init(this%space, namespace)
     if (this%space%periodic_dim > 0) then
       call messages_not_implemented('Classical particle for periodic systems')
     end if
+
+    call messages_print_stress(stdout, "Classical Particle", namespace=namespace)
+
+    call classical_particles_init(this, 1)
 
     !%Variable ParticleMass
     !%Type float
@@ -361,6 +357,27 @@ contains
   end subroutine classical_particle_update_exposed_quantity
 
   ! ---------------------------------------------------------
+  subroutine classical_particle_init_interaction_as_partner(partner, interaction)
+    class(classical_particle_t), intent(in)    :: partner
+    class(interaction_t),        intent(inout) :: interaction
+
+    PUSH_SUB(classical_particle_init_interaction_as_partner)
+
+    select type (interaction)
+    type is (gravity_t)
+      interaction%partner_np = 1
+      SAFE_ALLOCATE(interaction%partner_mass(1))
+      SAFE_ALLOCATE(interaction%partner_pos(partner%space%dim, 1))
+
+    class default
+      ! Other interactions should be handled by the parent class
+      call classical_particles_init_interaction_as_partner(partner, interaction)
+    end select
+
+    POP_SUB(classical_particle_init_interaction_as_partner)
+  end subroutine classical_particle_init_interaction_as_partner
+
+  ! ---------------------------------------------------------
   subroutine classical_particle_copy_quantities_to_interaction(partner, interaction)
     class(classical_particle_t),          intent(inout) :: partner
     class(interaction_t),                 intent(inout) :: interaction
@@ -369,16 +386,7 @@ contains
 
     select type (interaction)
     type is (gravity_t)
-      interaction%partner_np = 1
-
-      if (.not. allocated(interaction%partner_mass)) then
-        SAFE_ALLOCATE(interaction%partner_mass(1))
-      end if
       interaction%partner_mass(1) = partner%mass(1)
-
-      if (.not. allocated(interaction%partner_pos)) then
-        SAFE_ALLOCATE(interaction%partner_pos(partner%space%dim, 1))
-      end if
       interaction%partner_pos(:,1) = partner%pos(:,1)
 
     class default

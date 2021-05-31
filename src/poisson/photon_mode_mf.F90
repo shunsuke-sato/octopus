@@ -1,4 +1,5 @@
 !! Copyright (C) 2017 Johannes Flick
+!! Copyright (C) 2021 Davis Welakuh (merged)
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -26,11 +27,11 @@
 #include "global.h"
 
 module photon_mode_mf_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use io_function_oct_m
   use io_oct_m
+  use ions_oct_m
   use mesh_function_oct_m
   use messages_oct_m
   use photon_mode_oct_m
@@ -57,9 +58,9 @@ module photon_mode_mf_oct_m
     FLOAT,   pointer     :: vmf(:)
     FLOAT,   allocatable :: dipole(:, :)
     FLOAT,   allocatable :: dipole_former(:, :)
-    COMPLEX, allocatable :: integral(:)
-    FLOAT, allocatable   :: pt_q(:), pt_p(:)
-    FLOAT, allocatable   :: pt_q_former(:)
+    CMPLX,   allocatable :: integral(:)
+    FLOAT,   allocatable :: pt_q(:), pt_p(:)
+    FLOAT,   allocatable :: pt_q_former(:)
     FLOAT                :: time_former
     FLOAT,   pointer     :: fmf(:)  !! meanfield force
     logical              :: has_restart
@@ -68,42 +69,42 @@ module photon_mode_mf_oct_m
 
 contains
 
-  subroutine mf_init(this, gr, st, geo, pt_mode)
+  subroutine mf_init(this, gr, st, ions, pt_mode)
     type(mf_t),          intent(out)  :: this
     type(grid_t),        intent(in)   :: gr
     type(states_elec_t), intent(in)   :: st
-    type(geometry_t),    intent(in)   :: geo
+    type(ions_t),        intent(in)   :: ions
     type(photon_mode_t), intent(in)   :: pt_mode
 
     FLOAT, allocatable :: e_dip(:, :), n_dip(:)
-    integer :: jj, ispin, geo_dim
+    integer :: jj, ispin, ions_dim
 
     PUSH_SUB(mf_init)
    
-    geo_dim = gr%mesh%sb%dim
+    ions_dim = gr%mesh%sb%dim
     
-    SAFE_ALLOCATE(e_dip(1:geo_dim+1, 1:st%d%nspin))
-    SAFE_ALLOCATE(n_dip(1:geo_dim))
+    SAFE_ALLOCATE(e_dip(1:ions_dim+1, 1:st%d%nspin))
+    SAFE_ALLOCATE(n_dip(1:ions_dim))
 
     SAFE_ALLOCATE(this%vmf(1:gr%mesh%np))
-    SAFE_ALLOCATE(this%dipole(1:geo_dim, 1:st%d%nspin))
-    SAFE_ALLOCATE(this%dipole_former(1:geo_dim, 1:st%d%nspin))
+    SAFE_ALLOCATE(this%dipole(1:ions_dim, 1:st%d%nspin))
+    SAFE_ALLOCATE(this%dipole_former(1:ions_dim, 1:st%d%nspin))
 
     SAFE_ALLOCATE(this%integral(1:pt_mode%nmodes))
     SAFE_ALLOCATE(this%pt_q(1:pt_mode%nmodes))
     SAFE_ALLOCATE(this%pt_p(1:pt_mode%nmodes))
     SAFE_ALLOCATE(this%pt_q_former(1:pt_mode%nmodes))
-    SAFE_ALLOCATE(this%fmf(1:geo_dim))
+    SAFE_ALLOCATE(this%fmf(1:ions_dim))
    
     this%vmf = M_ZERO
     this%has_restart = .false.
-    !call dmf_multipoles(gr%fine%mesh, st%rho(:, 1), 1, e_dip(:, 1))
+    !call dmf_multipoles(gr%mesh, st%rho(:, 1), 1, e_dip(:, 1))
     do ispin = 1, st%d%nspin
-      call dmf_multipoles(gr%fine%mesh, st%rho(:, ispin), 1, e_dip(:, ispin))
+      call dmf_multipoles(gr%mesh, st%rho(:, ispin), 1, e_dip(:, ispin))
     end do
 
-    n_dip = geo%dipole()
-    do jj = 1, geo_dim
+    n_dip = ions%dipole()
+    do jj = 1, ions_dim
       e_dip(jj+1, 1) = sum(e_dip(jj+1, :))
       this%dipole(jj,1) = - n_dip(jj) - e_dip(jj+1, 1)  ! dipole moment <mu_el> = \sum_i -e <x_i>
     end do
@@ -122,7 +123,7 @@ contains
     this%pt_q_former = M_ZERO
     this%time_former = M_ZERO
 
-    this%fmf(1:geo_dim) = M_ZERO
+    this%fmf(1:ions_dim) = M_ZERO
 
     SAFE_DEALLOCATE_A(e_dip)
     SAFE_DEALLOCATE_A(n_dip)
@@ -154,53 +155,52 @@ contains
 
 !------------------------------------------
 
-  subroutine mf_calc(this, gr, st, geo, pt_mode, time)
+  subroutine mf_calc(this, gr, st, ions, pt_mode, time)
     type(mf_t),          intent(inout)    :: this
     type(grid_t),        intent(inout)    :: gr
     type(states_elec_t), intent(inout)    :: st
-    type(geometry_t) ,   intent(in)       :: geo
+    type(ions_t),        intent(in)       :: ions
     type(photon_mode_t), intent(in)       :: pt_mode
     FLOAT,               intent(in)       :: time
 
     FLOAT :: lambda_pol_dipole, lambda_pol_dipole_former
-    COMPLEX :: integrand
+    CMPLX :: integrand
     FLOAT, allocatable :: e_dip(:, :), n_dip(:)
     FLOAT :: q0, p0
-    integer :: ii, jj, kk, ispin, geo_dim
+    integer :: ii, jj, ispin, ions_dim
     logical, save :: first = .true.
-    logical, save :: second = .false.
 
     PUSH_SUB(mf_calc)
 
-    geo_dim = gr%mesh%sb%dim
+    ions_dim = gr%mesh%sb%dim
 
-    SAFE_ALLOCATE(e_dip(1:geo_dim+1, 1:st%d%nspin))
-    SAFE_ALLOCATE(n_dip(1:geo_dim))   
+    SAFE_ALLOCATE(e_dip(1:ions_dim+1, 1:st%d%nspin))
+    SAFE_ALLOCATE(n_dip(1:ions_dim))   
 
-    if (.NOT. (first .and. this%has_restart)) then
+    if (.not. (first .and. this%has_restart)) then
       do ii = 1, pt_mode%nmodes
         this%pt_q_former(ii) = this%pt_q(ii)
       end do
       this%dipole_former(:, :) = this%dipole(:, :)
       
       do ispin = 1, st%d%nspin
-        call dmf_multipoles(gr%fine%mesh, st%rho(:, ispin), 1, e_dip(:, ispin))
+        call dmf_multipoles(gr%mesh, st%rho(:, ispin), 1, e_dip(:, ispin))
       end do
 
-      n_dip = geo%dipole() 
-      do jj = 1, geo_dim
+      n_dip = ions%dipole() 
+      do jj = 1, ions_dim
         e_dip(jj+1, 1) = sum(e_dip(jj+1, :))
         this%dipole(jj,1) = - n_dip(jj) - e_dip(jj+1, 1)  ! dipole moment <mu_el> = \sum_i -e <x_i>
       end do
     end if    
       
     this%vmf(1:gr%mesh%np) = M_ZERO
-    this%fmf(1:geo_dim) = M_ZERO     
+    this%fmf(1:ions_dim) = M_ZERO     
     
     do ii = 1, pt_mode%nmodes
       lambda_pol_dipole = M_ZERO
       lambda_pol_dipole_former = M_ZERO
-      do jj = 1, geo_dim
+      do jj = 1, ions_dim
         lambda_pol_dipole = lambda_pol_dipole +  &
           pt_mode%lambda(ii)*pt_mode%pol(ii, jj)*this%dipole(jj, 1)
         lambda_pol_dipole_former = lambda_pol_dipole_former + &
@@ -208,7 +208,7 @@ contains
       end do
 
       ! these conditions are not so nice, 1 and 2 are fulfilled at t = 0 problematic for restart
-      if (.NOT.(first .and. this%has_restart)) then
+      if (.not.(first .and. this%has_restart)) then
         if (time == M_ZERO) then
           this%integral(ii) = M_ZERO
         else if (this%integral(ii) == M_ZERO) then
@@ -221,8 +221,8 @@ contains
       integrand = -(this%integral(ii)*exp(M_zI*pt_mode%omega(ii)*(time)*pt_mode%mu))* &
         (time*pt_mode%mu - this%time_former)
 
-      this%pt_q(ii) = AIMAG(integrand)
-      this%pt_p(ii) = pt_mode%omega(ii)*REAL(integrand)
+      this%pt_q(ii) = aimag(integrand)
+      this%pt_p(ii) = pt_mode%omega(ii)*real(integrand)
 
       if(associated(pt_mode%pt_coord_q0)) then
         q0 = pt_mode%pt_coord_q0(ii)*cos(pt_mode%omega(ii)*(time)*pt_mode%mu)
@@ -238,7 +238,7 @@ contains
       this%vmf(1:gr%mesh%np) = this%vmf(1:gr%mesh%np) - &
         M_HALF*((lambda_pol_dipole + lambda_pol_dipole_former) + pt_mode%omega(ii)* &
         (this%pt_q(ii) + this%pt_q_former(ii)))*(pt_mode%lambda(ii)*pt_mode%pol_dipole(1:gr%mesh%np,ii))
-      do jj = 1, geo_dim
+      do jj = 1, ions_dim
         this%fmf(jj) = this%fmf(jj) - pt_mode%omega(ii)*pt_mode%lambda(ii)* &
           pt_mode%pol(ii, jj)*(this%pt_q(ii) + lambda_pol_dipole/pt_mode%omega(ii)) !minus?
       end do
@@ -248,7 +248,7 @@ contains
         first = .false.
      end if
     !write(*,*) time, this%pt_q(1), this%pt_q_former(1), this%pt_p(1), this%fmf(1), this%integral(1), integrand, this%dipole(:,1), n_dip(:), e_dip(:, 1)
-    !write(*,*) 'test', n_dip(:), geo_dim, this%pt_q(1) + lambda_pol_dipole/pt_mode%omega(1), lambda_pol_dipole + lambda_pol_dipole_former, this%pt_q(1) + this%pt_q_former(1),  (time*pt_mode%mu - this%time_former)
+    !write(*,*) 'test', n_dip(:), ions_dim, this%pt_q(1) + lambda_pol_dipole/pt_mode%omega(1), lambda_pol_dipole + lambda_pol_dipole_former, this%pt_q(1) + this%pt_q_former(1),  (time*pt_mode%mu - this%time_former)
     
     this%time_former = time*pt_mode%mu
 
@@ -264,32 +264,32 @@ contains
     type(restart_t), intent(in)  :: restart
     type(mf_t),      intent(in)  :: this
     type(grid_t),        intent(in)    :: gr
-    FLOAT,               intent(in) :: dt
-    type(photon_mode_t), intent(in)       :: pt_mode
+    FLOAT,               intent(in)    :: dt
+    type(photon_mode_t), intent(in)    :: pt_mode
     integer,         intent(out) :: ierr
 
     character(len=80), allocatable :: lines(:)
-    integer :: iunit, err, jj, geo_dim
+    integer :: iunit, err, jj, ions_dim
   
     PUSH_SUB(mf_photons_dump)
-    geo_dim = gr%mesh%sb%dim
+    ions_dim = gr%mesh%sb%dim
     
-    SAFE_ALLOCATE(lines(1:2*geo_dim + 4))
+    SAFE_ALLOCATE(lines(1:2*ions_dim + 4))
     
     ierr = 0
     
     iunit = restart_open(restart, 'photon_mf')
-    write(lines(1), '(a10,2x,es19.12)') 'pt_integral_real', REAL(this%integral(1))
-    write(lines(2), '(a10,2x,es19.12)') 'pt_integral_aimag', AIMAG(this%integral(1))
+    write(lines(1), '(a10,2x,es19.12)') 'pt_integral_real', real(this%integral(1))
+    write(lines(2), '(a10,2x,es19.12)') 'pt_integral_aimag', aimag(this%integral(1))
     write(lines(3), '(a10,2x,es19.12)') 'pt_q_former', this%pt_q_former(1)
     write(lines(4), '(a10,2x,es19.12)') 'pt_time_former', this%time_former - dt*pt_mode%mu
-    do jj = 1, geo_dim
+    do jj = 1, ions_dim
       write(lines(4 + jj), '(a10,2x,es19.12)') 'dipole', this%dipole(jj, 1)
     end do
-    do jj = 1, geo_dim
-      write(lines(4 + geo_dim + jj), '(a10,2x,es19.12)') 'dipole_former', this%dipole_former(jj, 1)
+    do jj = 1, ions_dim
+      write(lines(4 + ions_dim + jj), '(a10,2x,es19.12)') 'dipole_former', this%dipole_former(jj, 1)
     end do
-    call restart_write(restart, iunit, lines, 2*geo_dim + 4, err)
+    call restart_write(restart, iunit, lines, 2*ions_dim + 4, err)
     if (err /= 0) ierr = ierr + 1
     call restart_close(restart, iunit)
   
@@ -303,12 +303,12 @@ contains
 ! ---------------------------------------------------------
 
   subroutine mf_photons_load(restart, this, gr, ierr)
-    type(restart_t), intent(in)    :: restart
-    type(mf_t),     intent(inout)  :: this
-    type(grid_t),        intent(in)    :: gr
-    integer,         intent(out) :: ierr
+    type(restart_t),   intent(in)    :: restart
+    type(mf_t),        intent(inout) :: this
+    type(grid_t),      intent(in)    :: gr
+    integer,           intent(out)   :: ierr
 
-    integer :: err, iunit, jj, geo_dim
+    integer :: err, iunit, jj, ions_dim
     character(len=128), allocatable :: lines(:)
     character(len=7) :: dummy
     FLOAT, allocatable :: rr(:)
@@ -316,7 +316,7 @@ contains
     PUSH_SUB(mf_photons_load)
   
     ierr = 0
-    geo_dim = gr%mesh%sb%dim
+    ions_dim = gr%mesh%sb%dim
 
     if (restart_skip(restart)) then
       ierr = -1
@@ -329,25 +329,25 @@ contains
       call messages_info(1)
     end if
 
-    SAFE_ALLOCATE(rr(1:2*geo_dim + 4))
-    SAFE_ALLOCATE(lines(1:2*geo_dim + 4))
+    SAFE_ALLOCATE(rr(1:2*ions_dim + 4))
+    SAFE_ALLOCATE(lines(1:2*ions_dim + 4))
     iunit = restart_open(restart, 'photon_mf')
-    call restart_read(restart, iunit, lines, 2*geo_dim + 4, err)
+    call restart_read(restart, iunit, lines, 2*ions_dim + 4, err)
     if (err /= 0) then    
       ierr = ierr + 1
     else
-      do jj = 1, 2*geo_dim + 4
+      do jj = 1, 2*ions_dim + 4
         read(lines(jj),'(a10,2x,es19.12)') dummy, rr(jj)
       end do
       
       this%integral(1) = rr(1) + M_zI*rr(2)
       this%pt_q_former(1) = rr(3)
       this%time_former = rr(4)
-      do jj = 1, geo_dim
+      do jj = 1, ions_dim
         this%dipole(jj, 1) = rr(jj + 4)
       end do
-      do jj = 1, geo_dim
-        this%dipole_former(jj, 1) = rr(jj + geo_dim + 4)
+      do jj = 1, ions_dim
+        this%dipole_former(jj, 1) = rr(jj + ions_dim + 4)
       end do
       this%has_restart = .true.
       

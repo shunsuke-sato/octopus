@@ -487,7 +487,7 @@ contains
     n_min = 5
     f_inc = CNST(1.1)
     dt_max = CNST(10.0) * dt
-    f_dec = CNST(0.5)
+    f_dec = M_HALF
 
     maxmove = CNST(0.2) * P_Ang 
     

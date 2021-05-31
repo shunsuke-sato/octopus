@@ -19,12 +19,17 @@
 #include "global.h"
 
 module grid_oct_m
+  use affine_coordinates_oct_m
   use box_image_oct_m
+  use cartesian_oct_m
+  use coordinate_system_oct_m
   use cube_oct_m
-  use curvilinear_oct_m
+  use curv_briggs_oct_m
+  use curv_gygi_oct_m
+  use curv_modine_oct_m
   use derivatives_oct_m
-  use geometry_oct_m
   use global_oct_m
+  use ions_oct_m
   use mesh_oct_m
   use mesh_init_oct_m
   use messages_oct_m
@@ -42,6 +47,7 @@ module grid_oct_m
   use symmetries_oct_m
   use unit_oct_m
   use unit_system_oct_m
+  use varinfo_oct_m
 
   implicit none
 
@@ -57,57 +63,42 @@ module grid_oct_m
     ! Components are public by default
     type(simul_box_t)           :: sb
     type(mesh_t)                :: mesh
-    type(multigrid_level_t)     :: fine
     type(derivatives_t)         :: der
-    type(curvilinear_t)         :: cv
-    logical                     :: have_fine_mesh
+    class(coordinate_system_t), pointer :: coord_system
     type(stencil_t)             :: stencil
 
     type(symmetries_t)          :: symm
   end type grid_t
 
+  integer, parameter :: &
+    CURV_AFFINE  = 1,   &
+    CURV_GYGI    = 2,   &
+    CURV_BRIGGS  = 3,   &
+    CURV_MODINE  = 4
 
 contains
 
   !-------------------------------------------------------------------
-  subroutine grid_init_stage_1(gr, namespace, geo, space)
+  subroutine grid_init_stage_1(gr, namespace, ions, space)
     type(grid_t),      intent(inout) :: gr
     type(namespace_t), intent(in)    :: namespace
-    type(geometry_t),  intent(inout) :: geo
+    type(ions_t),      intent(inout) :: ions
     type(space_t),     intent(in)    :: space
 
     type(stencil_t) :: cube
     integer :: enlarge(1:MAX_DIM)
     type(block_t) :: blk
-    integer :: idir
+    integer :: idir, cv_method
     FLOAT :: def_h, def_rsize
     FLOAT :: grid_spacing(1:MAX_DIM)
 
     PUSH_SUB(grid_init_stage_1)
 
-    call simul_box_init(gr%sb, namespace, geo, space)
+    call simul_box_init(gr%sb, namespace, ions, space)
 
-    call symmetries_init(gr%symm, namespace, geo, space)
+    call symmetries_init(gr%symm, namespace, ions, space)
 
-
-    !%Variable UseFineMesh
-    !%Type logical
-    !%Default no
-    !%Section Mesh
-    !%Description
-    !% If enabled, <tt>Octopus</tt> will use a finer mesh for the calculation
-    !% of the forces or other sensitive quantities.
-    !% Experimental, and incompatible with domain-parallelization.
-    !%End
-    if (space%dim == 3) then 
-      call parse_variable(namespace, 'UseFineMesh', .false., gr%have_fine_mesh)
-    else
-      gr%have_fine_mesh = .false.
-    end if
-
-    if(gr%have_fine_mesh) call messages_experimental("UseFineMesh")
-
-    call geo%grid_defaults(def_h, def_rsize)
+    call ions%grid_defaults(def_h, def_rsize)
     
     ! initialize to -1
     grid_spacing = -M_ONE
@@ -165,7 +156,7 @@ contains
 
     if (any(grid_spacing(1:space%dim) < M_EPSILON)) then
       if (def_h > M_ZERO .and. def_h < huge(def_h)) then
-        call geo%grid_defaults_info()
+        call ions%grid_defaults_info()
         do idir = 1, space%dim
           grid_spacing(idir) = def_h
           write(message(1), '(a,i1,3a,f6.3)') "Info: Using default spacing(", idir, &
@@ -197,11 +188,60 @@ contains
       call messages_experimental('PeriodicBoundaryMask')
     end if
 
-    ! initialize curvilinear coordinates
-    call curvilinear_init(gr%cv, namespace, gr%sb, geo, grid_spacing)
+    ! Initialize coordinate system
+
+    !%Variable CurvMethod
+    !%Type integer
+    !%Default curv_uniform
+    !%Section Mesh::Curvilinear
+    !%Description
+    !% The relevant functions in octopus are represented on a mesh in real space.
+    !% This mesh may be an evenly spaced regular rectangular grid (standard mode),
+    !% or else an adaptive or curvilinear grid. We have implemented
+    !% three kinds of adaptive meshes, although only one is currently working,
+    !% the one invented by F. Gygi (<tt>curv_gygi</tt>). The code will stop if any of
+    !% the other two is invoked. All are experimental with domain parallelization.
+    !%Option curv_affine 1
+    !% Regular, uniform rectangular grid.
+    !%Option curv_gygi 2
+    !% The deformation of the grid is done according to the scheme described by
+    !% F. Gygi [F. Gygi and G. Galli, <i>Phys. Rev. B</i> <b>52</b>, R2229 (1995)].
+    !%Option curv_briggs 3
+    !% The deformation of the grid is done according to the scheme described by
+    !% Briggs [E.L. Briggs, D.J. Sullivan, and J. Bernholc, <i>Phys. Rev. B</i> <b>54</b> 14362 (1996)]
+    !% (NOT WORKING).
+    !%Option curv_modine 4
+    !% The deformation of the grid is done according to the scheme described by
+    !% Modine [N.A. Modine, G. Zumbach and E. Kaxiras, <i>Phys. Rev. B</i> <b>55</b>, 10289 (1997)]
+    !% (NOT WORKING).
+    !%End
+    call parse_variable(namespace, 'CurvMethod', CURV_AFFINE, cv_method)
+    if (.not. varinfo_valid_option('CurvMethod', cv_method)) call messages_input_error(namespace, 'CurvMethod')
+    call messages_print_var_option(stdout, "CurvMethod", cv_method)
+
+    ! FIXME: The other two methods are apparently not working
+    if (cv_method > CURV_GYGI) then
+      call messages_experimental('Selected curvilinear coordinates method')
+    end if
+
+    select case (cv_method)
+    case (CURV_BRIGGS)
+      gr%coord_system => curv_briggs_t(namespace, space%dim, gr%sb%lsize(1:space%dim), grid_spacing(1:space%dim))
+    case (CURV_GYGI)
+      gr%coord_system => curv_gygi_t(namespace, space%dim, ions%natoms, ions%pos)
+    case (CURV_MODINE)
+      gr%coord_system => curv_modine_t(namespace, space%dim, ions%natoms, ions%pos, gr%sb%lsize(1:space%dim), &
+        grid_spacing(1:space%dim))
+    case (CURV_AFFINE)
+      if (ions%latt%nonorthogonal) then
+        gr%coord_system => affine_coordinates_t(namespace, space%dim, ions%latt%rlattice_primitive)
+      else
+        gr%coord_system => cartesian_t(namespace, space%dim)
+      end if
+    end select
 
     ! initialize derivatives
-    call derivatives_init(gr%der, namespace, space, gr%sb, gr%cv%method /= CURV_METHOD_UNIFORM)
+    call derivatives_init(gr%der, namespace, space, gr%sb%latt, gr%coord_system%local_basis)
     ! the stencil used to generate the grid is a union of a cube (for
     ! multigrid) and the Laplacian.
     call stencil_cube_get_lapl(cube, space%dim, order = 2)
@@ -212,8 +252,8 @@ contains
     enlarge(1:space%dim) = 2
     enlarge = max(enlarge, gr%der%n_ghost)
 
-    call mesh_init_stage_1(gr%mesh, namespace, space, gr%sb, gr%cv, grid_spacing, enlarge)
-    call mesh_init_stage_2(gr%mesh, space, gr%sb, gr%cv, gr%stencil)
+    call mesh_init_stage_1(gr%mesh, namespace, space, gr%sb, gr%coord_system, grid_spacing, enlarge)
+    call mesh_init_stage_2(gr%mesh, space, gr%sb, gr%stencil)
 
     POP_SUB(grid_init_stage_1)
   end subroutine grid_init_stage_1
@@ -231,58 +271,12 @@ contains
     call mesh_init_stage_3(gr%mesh, namespace, space, gr%stencil, mc)
 
     call nl_operator_global_init(namespace)
-    if(gr%have_fine_mesh) then
-      message(1) = "Info: coarse mesh"
-      call messages_info(1)
-    end if
     call derivatives_build(gr%der, namespace, space, gr%mesh)
-
-    ! initialize a finer mesh to hold the density, for this we use the
-    ! multigrid routines
-    
-    if(gr%have_fine_mesh) then
-      if(gr%mesh%parallel_in_domains) then
-        message(1) = 'UseFineMesh does not work with domain parallelization.'
-        call messages_fatal(1)
-      end if
-
-      call initialize_fine_grid()
-    else
-      gr%fine%mesh => gr%mesh
-      gr%fine%der => gr%der
-    end if
 
     ! print info concerning the grid
     call grid_write_info(gr, stdout)
 
     POP_SUB(grid_init_stage_2)
-
-    contains
-      subroutine initialize_fine_grid()
-        PUSH_SUB(grid_init_stage_2.initialize_fine_grid)
-
-        SAFE_ALLOCATE(gr%fine%mesh)
-        SAFE_ALLOCATE(gr%fine%der)
-
-        call multigrid_mesh_double(space, gr%cv, gr%mesh, gr%fine%mesh, gr%stencil)
-
-        call derivatives_init(gr%fine%der, namespace, space, gr%sb, gr%cv%method /= CURV_METHOD_UNIFORM)
-
-        call mesh_init_stage_3(gr%fine%mesh, namespace, space, gr%stencil, mc)
-
-        call multigrid_get_transfer_tables(gr%fine%tt, gr%fine%mesh, gr%mesh)
-
-        message(1) = "Info: fine mesh"
-        call messages_info(1)
-        call derivatives_build(gr%fine%der, namespace, space, gr%fine%mesh)
-
-        gr%fine%der%coarser => gr%der
-        gr%der%finer =>  gr%fine%der
-        gr%fine%der%to_coarser => gr%fine%tt
-        gr%der%to_finer => gr%fine%tt
-
-        POP_SUB(grid_init_stage_2.initialize_fine_grid)
-      end subroutine initialize_fine_grid
   end subroutine grid_init_stage_2
 
 
@@ -290,25 +284,18 @@ contains
   subroutine grid_end(gr)
     type(grid_t), intent(inout) :: gr
 
+    class(coordinate_system_t), pointer :: coord_system
+
     PUSH_SUB(grid_end)
 
     call nl_operator_global_end()
 
-    if(gr%have_fine_mesh) then
-      call derivatives_end(gr%fine%der)
-      call mesh_end(gr%fine%mesh)
-      SAFE_DEALLOCATE_P(gr%fine%mesh)
-      SAFE_DEALLOCATE_P(gr%fine%der)
-      SAFE_DEALLOCATE_A(gr%fine%tt%to_coarse)
-      SAFE_DEALLOCATE_A(gr%fine%tt%to_fine1)
-      SAFE_DEALLOCATE_A(gr%fine%tt%to_fine2)
-      SAFE_DEALLOCATE_A(gr%fine%tt%to_fine4)
-      SAFE_DEALLOCATE_A(gr%fine%tt%to_fine8)
-      SAFE_DEALLOCATE_A(gr%fine%tt%fine_i)
-    end if
-
     call derivatives_end(gr%der)
-    call curvilinear_end(gr%cv)
+
+    ! We need to take a pointer here, otherwise we run into a gfortran bug.
+    coord_system => gr%coord_system
+    SAFE_DEALLOCATE_P(coord_system)
+
     call mesh_end(gr%mesh)
 
     call symmetries_end(gr%symm)
@@ -338,19 +325,12 @@ contains
     call messages_info(1, iunit)
     call gr%sb%write_info(iunit)
 
-    if(gr%have_fine_mesh) then
-      message(1) = "Wave-functions mesh:"
-      call messages_info(1, iunit)
-      call mesh_write_info(gr%mesh, iunit)
-      message(1) = "Density mesh:"
-    else
-      message(1) = "Main mesh:"
-    end if
+    message(1) = "Main mesh:"
     call messages_info(1, iunit)
-    call mesh_write_info(gr%fine%mesh, iunit)
+    call mesh_write_info(gr%mesh, iunit)
 
     if (gr%mesh%use_curvilinear) then
-      call curvilinear_write_info(gr%cv, iunit)
+      call gr%coord_system%write_info(iunit)
     end if
     
     call messages_print_stress(iunit)

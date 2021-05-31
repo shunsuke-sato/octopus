@@ -21,6 +21,7 @@
 
 module poisson_oct_m
   use batch_oct_m
+  use box_minimum_oct_m
   use comm_oct_m
   use cube_oct_m
   use cube_function_oct_m
@@ -475,13 +476,16 @@ contains
           call messages_fatal(2)
         end if
 
-        if( (der%mesh%sb%box_shape == MINIMUM) .and. (this%method == POISSON_CG_CORRECTED) ) then
-          message(1) = 'When using the "minimum" box shape and the "cg_corrected"'
-          message(2) = 'Poisson solver, we have observed "sometimes" some non-'
-          message(3) = 'negligible error. You may want to check that the "fft" or "cg"'
-          message(4) = 'solver are providing, in your case, the same results.'
-          call messages_warning(4)
-        end if
+        select type (box => der%mesh%sb%box)
+        type is (box_minimum_t)
+          if (this%method == POISSON_CG_CORRECTED) then
+            message(1) = 'When using the "minimum" box shape and the "cg_corrected"'
+            message(2) = 'Poisson solver, we have observed "sometimes" some non-'
+            message(3) = 'negligible error. You may want to check that the "fft" or "cg"'
+            message(4) = 'solver are providing, in your case, the same results.'
+            call messages_warning(4)
+          end if
+        end select
 
         if (this%method == POISSON_FMM) then
           call messages_experimental('FMM Poisson solver')
@@ -613,7 +617,7 @@ contains
 
     ! Create the cube
     if (need_cube) then
-      call cube_init(this%cube, box, der%mesh%sb, namespace, fft_type = fft_type, &
+      call cube_init(this%cube, box, namespace, space, fft_type = fft_type, &
                      need_partition=.not.der%mesh%parallel_in_domains)
       if (this%cube%parallel_in_domains .and. this%method == POISSON_FFT) then
         call mesh_cube_parallel_map_init(this%mesh_cube_map, der%mesh, this%cube)
@@ -999,10 +1003,9 @@ contains
     case(POISSON_ISF)
       !TODO: Add support for domain parrallelization
       ASSERT(.not. der%mesh%parallel_in_domains)
-      call submesh_get_cube_dim(sm, box, der%dim)
-      call submesh_init_cube_map(sm, der%dim)
-      call cube_init(this%cube, box, der%mesh%sb, namespace, fft_type = FFT_NONE, &
-                     need_partition=.not.der%mesh%parallel_in_domains)
+      call submesh_get_cube_dim(sm, space, box)
+      call submesh_init_cube_map(sm, space)
+      call cube_init(this%cube, box, namespace, space, fft_type = FFT_NONE, need_partition=.not.der%mesh%parallel_in_domains)
       call poisson_isf_init(this%isf_solver, namespace, der%mesh, this%cube, mpi_world%comm, init_world = this%all_nodes_default)
 
     case(POISSON_PSOLVER)
@@ -1013,10 +1016,9 @@ contains
       else
         this%cube%mpi_grp = this%der%mesh%mpi_grp
       end if
-      call submesh_get_cube_dim(sm, box, der%dim)
-      call submesh_init_cube_map(sm, der%dim)
-      call cube_init(this%cube, box, der%mesh%sb, namespace, fft_type = FFT_NONE, &
-                     need_partition=.not.der%mesh%parallel_in_domains)
+      call submesh_get_cube_dim(sm, space, box)
+      call submesh_init_cube_map(sm, space)
+      call cube_init(this%cube, box, namespace, space, fft_type = FFT_NONE, need_partition=.not.der%mesh%parallel_in_domains)
       qq = M_ZERO
       call poisson_psolver_init(this%psolver_solver, namespace, space, this%der%mesh, this%cube, M_ZERO, qq, force_isolated=.true.)
       call poisson_psolver_get_dims(this%psolver_solver, this%cube)
@@ -1026,21 +1028,19 @@ contains
       !We need to parse this, in case this routine is called before poisson_init
       call parse_variable(namespace, 'FFTLibrary', FFTLIB_FFTW, fft_default_lib)
 
-      call submesh_get_cube_dim(sm, box, der%dim)
-      call submesh_init_cube_map(sm, der%dim)
+      call submesh_get_cube_dim(sm, space, box)
+      call submesh_init_cube_map(sm, space)
       !We double the size of the cell
       !Maybe the factor of two should be controlled as a variable
-      do idir = 1, der%dim
+      do idir = 1, space%dim
         box(idir) = nint(M_TWO * (box(idir) - 1)) + 1
       end do
       if(optional_default(force_cmplx, .false.)) then
-        call cube_init(this%cube, box, der%mesh%sb, namespace, fft_type = FFT_COMPLEX, &
-                       need_partition=.not.der%mesh%parallel_in_domains)
+        call cube_init(this%cube, box, namespace, space, fft_type = FFT_COMPLEX, need_partition=.not.der%mesh%parallel_in_domains)
       else
-        call cube_init(this%cube, box, der%mesh%sb, namespace, fft_type = FFT_REAL, &
-                       need_partition=.not.der%mesh%parallel_in_domains)
+        call cube_init(this%cube, box, namespace, space, fft_type = FFT_REAL, need_partition=.not.der%mesh%parallel_in_domains)
       end if
-      call poisson_fft_init(this%fft_solver, namespace, this%der%mesh, this%cube, this%kernel)
+      call poisson_fft_init(this%fft_solver, namespace, space, this%der%mesh, this%cube, this%kernel)
     end select
 
     POP_SUB(poisson_init_sm)
@@ -1099,7 +1099,7 @@ contains
 
     rho = M_ZERO; vh = M_ZERO; vh_exact = M_ZERO
 
-    alpha = CNST(4.0)*mesh%spacing(1)
+    alpha = M_FOUR*mesh%spacing(1)
     write(message(1),'(a,f14.6)')  "Info: The alpha value is ", alpha
     write(message(2),'(a)')        "      Higher values of alpha lead to more physical densities and more reliable results."
     call messages_info(2)
@@ -1222,17 +1222,17 @@ contains
 
     call io_close(iunit)
 
-    call dio_function_output (io_function_fill_how('AxisX'), ".", "poisson_test_rho", namespace, &
+    call dio_function_output (io_function_fill_how('AxisX'), ".", "poisson_test_rho", namespace, space, &
       mesh, rho, unit_one, ierr)
-    call dio_function_output (io_function_fill_how('AxisX'), ".", "poisson_test_exact", namespace, &
+    call dio_function_output (io_function_fill_how('AxisX'), ".", "poisson_test_exact", namespace, space, &
       mesh, vh_exact, unit_one, ierr)
-    call dio_function_output (io_function_fill_how('AxisX'), ".", "poisson_test_numerical", namespace, &
+    call dio_function_output (io_function_fill_how('AxisX'), ".", "poisson_test_numerical", namespace, space, &
       mesh, vh, unit_one, ierr)
-    call dio_function_output (io_function_fill_how('AxisY'), ".", "poisson_test_rho", namespace, &
+    call dio_function_output (io_function_fill_how('AxisY'), ".", "poisson_test_rho", namespace, space, &
       mesh, rho, unit_one, ierr)
-    call dio_function_output (io_function_fill_how('AxisY'), ".", "poisson_test_exact", namespace, &
+    call dio_function_output (io_function_fill_how('AxisY'), ".", "poisson_test_exact", namespace, space, &
       mesh, vh_exact, unit_one, ierr)
-    call dio_function_output (io_function_fill_how('AxisY'), ".", "poisson_test_numerical", namespace, &
+    call dio_function_output (io_function_fill_how('AxisY'), ".", "poisson_test_numerical", namespace, space, &
       mesh, vh, unit_one, ierr)
     ! not dimensionless, but no need for unit conversion for a test routine
 
@@ -1432,7 +1432,7 @@ contains
         coulb%qq(1:space%periodic_dim) = qq(1:space%periodic_dim)
         !We must define the singularity if we specify a q vector and we do not use the short-range Coulomb potential
         coulb%singularity = optional_default(singul, M_ZERO)
-        call poisson_fft_get_kernel(namespace, this%der%mesh, this%cube, coulb, this%kernel, &
+        call poisson_fft_get_kernel(namespace, space, this%der%mesh, this%cube, coulb, this%kernel, &
           this%poisson_soft_coulomb_param)
       end if
     case default

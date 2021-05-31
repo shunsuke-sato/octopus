@@ -113,11 +113,11 @@ end subroutine X(output_me_ks_multipoles)
 !!
 !! The argument dir should be 1 (X) or 2 (Y).
 ! ---------------------------------------------------------
-subroutine X(output_me_ks_multipoles2d)(fname, namespace, st, gr, dir, ik)
+subroutine X(output_me_ks_multipoles2d)(fname, namespace, st, mesh, dir, ik)
   character(len=*),    intent(in) :: fname
   type(namespace_t),   intent(in) :: namespace
   type(states_elec_t), intent(in) :: st
-  type(grid_t),        intent(in) :: gr
+  type(mesh_t),        intent(in) :: mesh
   integer,             intent(in) :: dir, ik
     
   integer :: ist, jst, ip, iunit
@@ -127,8 +127,8 @@ subroutine X(output_me_ks_multipoles2d)(fname, namespace, st, gr, dir, ik)
 
   PUSH_SUB(X(output_me_ks_multipoles2d))
 
-  SAFE_ALLOCATE(psii(1:gr%mesh%np, 1:st%d%dim))
-  SAFE_ALLOCATE(psij(1:gr%mesh%np, 1:st%d%dim))
+  SAFE_ALLOCATE(psii(1:mesh%np, 1:st%d%dim))
+  SAFE_ALLOCATE(psij(1:mesh%np, 1:st%d%dim))
   
   iunit = io_open(fname, namespace, action = 'write')
 
@@ -141,25 +141,25 @@ subroutine X(output_me_ks_multipoles2d)(fname, namespace, st, gr, dir, ik)
   write(iunit, fmt = '(a,i4)')      '# ik =', ik
   write(iunit, fmt = '(a)')    '# Units = ['//trim(units_abbrev(units_out%length))//']'
   
-  SAFE_ALLOCATE(dipole(1:gr%mesh%np))
+  SAFE_ALLOCATE(dipole(1:mesh%np))
 
-  do ip = 1, gr%mesh%np
-    dipole(ip) = gr%mesh%x(ip, dir)
+  do ip = 1, mesh%np
+    dipole(ip) = mesh%x(ip, dir)
   end do
   
   ASSERT(.not. st%parallel_in_states)
   ! how to do this properly? states_elec_matrix
   do ist = 1, st%nst
 
-    call states_elec_get_state(st, gr%mesh, ist, 1, psii)
+    call states_elec_get_state(st, mesh, ist, 1, psii)
 
     do jst = 1, st%nst
 
-      call states_elec_get_state(st, gr%mesh, jst, 1, psij)
+      call states_elec_get_state(st, mesh, jst, 1, psij)
 
-      psij(1:gr%mesh%np, 1) = psij(1:gr%mesh%np, 1) * dipole(1:gr%mesh%np)
+      psij(1:mesh%np, 1) = psij(1:mesh%np, 1) * dipole(1:mesh%np)
 
-      dipole_element = X(mf_dotp)(gr%mesh, st%d%dim, psii, psij)
+      dipole_element = X(mf_dotp)(mesh, st%d%dim, psii, psij)
 
       dipole_element = units_from_atomic(units_out%length, dipole_element)
 
@@ -189,11 +189,11 @@ end subroutine X(output_me_ks_multipoles2d)
 !! It prints the moment of ll-th order, for single orbital states
 !! irreducible subspace ik.
 ! ---------------------------------------------------------
-subroutine X(output_me_ks_multipoles1d)(fname, namespace, st, gr, ll, ik)
+subroutine X(output_me_ks_multipoles1d)(fname, namespace, st, mesh, ll, ik)
   character(len=*),    intent(in) :: fname
   type(namespace_t),   intent(in) :: namespace
   type(states_elec_t), intent(in) :: st
-  type(grid_t),        intent(in) :: gr
+  type(mesh_t),        intent(in) :: mesh
   integer,             intent(in) :: ll, ik
 
   integer :: iunit, ip, ist, jst
@@ -203,8 +203,8 @@ subroutine X(output_me_ks_multipoles1d)(fname, namespace, st, gr, ll, ik)
 
   PUSH_SUB(X(output_me_ks_multipoles1d))
 
-  SAFE_ALLOCATE(psii(1:gr%mesh%np, 1:st%d%dim))
-  SAFE_ALLOCATE(psij(1:gr%mesh%np, 1:st%d%dim))
+  SAFE_ALLOCATE(psii(1:mesh%np, 1:st%d%dim))
+  SAFE_ALLOCATE(psij(1:mesh%np, 1:st%d%dim))
   
   iunit = io_open(fname, namespace, action = 'write')
 
@@ -217,24 +217,24 @@ subroutine X(output_me_ks_multipoles1d)(fname, namespace, st, gr, ll, ik)
     write(iunit, fmt = '(a)')    '# Units = ['//trim(units_abbrev(units_out%length))//']'
   end if
   
-  SAFE_ALLOCATE(dipole(1:gr%mesh%np))
+  SAFE_ALLOCATE(dipole(1:mesh%np))
 
-  do ip = 1, gr%mesh%np
-    dipole(ip) = gr%mesh%x(ip, 1)**ll
+  do ip = 1, mesh%np
+    dipole(ip) = mesh%x(ip, 1)**ll
   end do
   
   ASSERT(.not. st%parallel_in_states)
   do ist = 1, st%nst
 
-    call states_elec_get_state(st, gr%mesh, ist, 1, psii)
+    call states_elec_get_state(st, mesh, ist, 1, psii)
 
     do jst = 1, st%nst
 
-      call states_elec_get_state(st, gr%mesh, jst, 1, psij)
+      call states_elec_get_state(st, mesh, jst, 1, psij)
 
-      psij(1:gr%mesh%np, 1) = psij(1:gr%mesh%np, 1) * dipole (1:gr%mesh%np)
+      psij(1:mesh%np, 1) = psij(1:mesh%np, 1) * dipole (1:mesh%np)
 
-      dipole_element = X(mf_dotp)(gr%mesh, st%d%dim, psii, psij)
+      dipole_element = X(mf_dotp)(mesh, st%d%dim, psii, psij)
 
       dipole_element = units_from_atomic(units_out%length**ll, dipole_element)
 
@@ -261,7 +261,7 @@ end subroutine X(output_me_ks_multipoles1d)
 !! It prints the states to the file opened in iunit.
 !!
 ! ---------------------------------------------------------
-subroutine X(output_me_dipole)(this, fname, namespace, space, st, gr, hm, geo, ik)
+subroutine X(output_me_dipole)(this, fname, namespace, space, st, gr, hm, ions, ik)
   type(output_me_t),   intent(in) :: this
   character(len=*),    intent(in) :: fname
   type(namespace_t),   intent(in) :: namespace
@@ -269,7 +269,7 @@ subroutine X(output_me_dipole)(this, fname, namespace, space, st, gr, hm, geo, i
   type(states_elec_t), intent(in) :: st
   type(grid_t),        intent(in) :: gr
   type(hamiltonian_elec_t), intent(in) :: hm
-  type(geometry_t),    intent(in) :: geo
+  type(ions_t),        intent(in) :: ions
   integer,             intent(in) :: ik
   
   integer :: ist, jst, ip, iunit, idir, idim, ispin
@@ -339,7 +339,7 @@ subroutine X(output_me_dipole)(this, fname, namespace, space, st, gr, hm, geo, i
         end if
 
         !A nonlocal contribution from the pseudopotential must be included
-        call X(projector_commute_r_allatoms_alldir)(hm%ep%proj, geo, gr%mesh, st%d%dim, &
+        call X(projector_commute_r_allatoms_alldir)(hm%ep%proj, ions, gr%mesh, st%d%dim, &
                     gr%der%boundaries, ik, psii, gpsii) 
         
         !A nonlocal contribution from the scissor must be included

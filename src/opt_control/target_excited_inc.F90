@@ -19,9 +19,10 @@
 
   ! ----------------------------------------------------------------------
   !> 
-  subroutine target_init_excited(gr, namespace, tg, td, restart, kpoints)
-    type(grid_t),      intent(in)    :: gr
+  subroutine target_init_excited(mesh, namespace, space, tg, td, restart, kpoints)
+    type(mesh_t),      intent(in)    :: mesh
     type(namespace_t), intent(in)    :: namespace
+    type(space_t),     intent(in)    :: space
     type(target_t),    intent(inout) :: tg
     type(td_t),        intent(in)    :: td
     type(restart_t),   intent(in)    :: restart
@@ -34,7 +35,7 @@
     message(1) =  'Info: TargetOperator is a linear combination of Slater determinants.'
     call messages_info(1)
 
-    tg%move_ions = ion_dynamics_ions_move(td%ions)
+    tg%move_ions = ion_dynamics_ions_move(td%ions_dyn)
     tg%dt = td%dt
 
     call states_elec_look(restart, nik, dim, tg%st%nst, ierr)
@@ -56,10 +57,10 @@
       SAFE_DEALLOCATE_A(tg%st%spin)
       SAFE_ALLOCATE(tg%st%spin(1:3, 1:tg%st%nst, 1:tg%st%d%nik))
     end if
-    call states_elec_allocate_wfns(tg%st, gr%mesh, TYPE_CMPLX)
+    call states_elec_allocate_wfns(tg%st, mesh, TYPE_CMPLX)
     tg%st%node(:)  = 0
 
-    call states_elec_load(restart, namespace, tg%st, gr, kpoints, ierr)
+    call states_elec_load(restart, namespace, space, tg%st, mesh, kpoints, ierr)
     if (ierr /= 0) then
       message(1) = "Unable to read wavefunctions."
       call messages_fatal(1)
@@ -81,19 +82,20 @@
 
 
   ! ----------------------------------------------------------------------
-  subroutine target_output_excited(tg, namespace, gr, dir, geo, hm, outp)
+  subroutine target_output_excited(tg, namespace, space, gr, dir, ions, hm, outp)
     type(target_t),      intent(in)  :: tg
     type(namespace_t),   intent(in)  :: namespace
+    type(space_t),       intent(in)    :: space
     type(grid_t),        intent(in)  :: gr
     character(len=*),    intent(in)  :: dir
-    type(geometry_t),    intent(in)  :: geo
+    type(ions_t),        intent(in)  :: ions
     type(hamiltonian_elec_t), intent(in)  :: hm
     type(output_t),      intent(in)  :: outp
 
     PUSH_SUB(target_output_excited)
     
     call io_mkdir(trim(dir), namespace)
-    call output_states(outp, namespace, trim(dir)//'/st', tg%est%st, gr, geo, hm)
+    call output_states(outp, namespace, space, trim(dir)//'/st', tg%est%st, gr, ions, hm, -1)
     call excited_states_output(tg%est, trim(dir), namespace)
 
     POP_SUB(target_output_excited)

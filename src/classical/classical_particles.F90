@@ -25,13 +25,9 @@ module classical_particles_oct_m
   use force_interaction_oct_m
   use global_oct_m
   use interaction_oct_m
-  use gravity_oct_m
-  use lorentz_force_oct_m
-  use interactions_factory_oct_m
-  use io_oct_m
-  use iso_c_binding
   use messages_oct_m
   use mpi_oct_m
+  use multisystem_debug_oct_m
   use namespace_oct_m
   use parser_oct_m
   use profiling_oct_m
@@ -44,7 +40,6 @@ module classical_particles_oct_m
   use system_oct_m
   use unit_oct_m
   use unit_system_oct_m
-  use write_iter_oct_m
 
   implicit none
 
@@ -52,21 +47,27 @@ module classical_particles_oct_m
   public ::                                      &
     classical_particles_t,                       &
     classical_particles_init,                    &
+    classical_particles_copy,                    &
     classical_particles_end,                     &
     classical_particles_init_interaction,        &
     classical_particles_update_quantity,         &
-    classical_particles_update_exposed_quantity
+    classical_particles_update_exposed_quantity, &
+    classical_particles_init_interaction_as_partner
 
   type, extends(system_t), abstract :: classical_particles_t
-    integer :: np
-    FLOAT, allocatable :: mass(:)
-    FLOAT, allocatable :: pos(:,:)
-    FLOAT, allocatable :: vel(:,:)
-    FLOAT, allocatable :: acc(:,:)
+    private
+    integer, public :: np                        !< Number of particles in the system
+    FLOAT, allocatable, public :: mass(:)        !< Mass of the particles
+    FLOAT, allocatable, public :: pos(:,:)       !< Position of the particles
+    FLOAT, allocatable, public :: vel(:,:)       !< Velocity of the particles
+    FLOAT, allocatable, public :: tot_force(:,:) !< Total force acting on each particle
+    logical, allocatable, public :: fixed(:)     !< True if a giving particle is to be kept fixed during a propagation. The default is to let the particles move.
+
+    !> The following variables are work arrays used by the different propagators:
+    FLOAT, allocatable :: acc(:,:)        !< Acceleration of the particles
     FLOAT, allocatable :: prev_acc(:,:,:) !< A storage of the prior times.
     FLOAT, allocatable :: save_pos(:,:)   !< A storage for the SCF loops
     FLOAT, allocatable :: save_vel(:,:)   !< A storage for the SCF loops
-    FLOAT, allocatable :: tot_force(:,:)  !< Total force acting on each particle
     FLOAT, allocatable :: prev_tot_force(:,:) !< Used for the SCF convergence criterium
     FLOAT, allocatable :: prev_pos(:,:,:) !< Used for extrapolation
     FLOAT, allocatable :: prev_vel(:,:,:) !< Used for extrapolation
@@ -87,24 +88,19 @@ contains
   !! signatures for the initialization routines because they are not
   !! type-bound and thus also not inherited.
   ! ---------------------------------------------------------
-  subroutine classical_particles_init(this, namespace, np)
+  subroutine classical_particles_init(this, np)
     class(classical_particles_t), intent(inout) :: this
-    type(namespace_t),            intent(in)    :: namespace
     integer,                      intent(in)    :: np !< Number of particles
 
     PUSH_SUB(classical_particles_init)
-
-    this%namespace = namespace
-
-    call space_init(this%space, namespace)
 
     this%np = np
     SAFE_ALLOCATE(this%mass(1:np))
     SAFE_ALLOCATE(this%pos(1:this%space%dim, 1:np))
     SAFE_ALLOCATE(this%vel(1:this%space%dim, 1:np))
-    SAFE_ALLOCATE(this%acc(1:this%space%dim, 1:np))
-    SAFE_ALLOCATE(this%prev_tot_force(1:this%space%dim, 1:np))
     SAFE_ALLOCATE(this%tot_force(1:this%space%dim, 1:np))
+    SAFE_ALLOCATE(this%fixed(1:np))
+    this%fixed = .false. ! By default we let the particles move.
 
     this%quantities(POSITION)%required = .true.
     this%quantities(VELOCITY)%required = .true.
@@ -113,6 +109,36 @@ contains
 
     POP_SUB(classical_particles_init)
   end subroutine classical_particles_init
+
+  subroutine classical_particles_copy(this, cp_in)
+    class(classical_particles_t), intent(out) :: this
+    class(classical_particles_t), intent(in)  :: cp_in
+
+    PUSH_SUB(classical_particles_copy)
+
+    this%np = cp_in%np
+    SAFE_ALLOCATE_SOURCE_A(this%mass,      cp_in%mass)
+    SAFE_ALLOCATE_SOURCE_A(this%pos,       cp_in%pos)
+    SAFE_ALLOCATE_SOURCE_A(this%vel,       cp_in%vel)
+    SAFE_ALLOCATE_SOURCE_A(this%tot_force, cp_in%tot_force)
+    SAFE_ALLOCATE_SOURCE_A(this%fixed,     cp_in%fixed)
+
+    this%quantities(POSITION)%required = .true.
+    this%quantities(VELOCITY)%required = .true.
+    this%quantities(POSITION)%protected = .true.
+    this%quantities(VELOCITY)%protected = .true.
+
+    SAFE_ALLOCATE_SOURCE_A(this%acc,                  cp_in%acc)
+    SAFE_ALLOCATE_SOURCE_A(this%prev_acc,             cp_in%prev_acc)
+    SAFE_ALLOCATE_SOURCE_A(this%save_pos,             cp_in%save_pos)
+    SAFE_ALLOCATE_SOURCE_A(this%save_vel,             cp_in%save_vel)
+    SAFE_ALLOCATE_SOURCE_A(this%prev_tot_force,       cp_in%prev_tot_force)
+    SAFE_ALLOCATE_SOURCE_A(this%prev_pos,             cp_in%prev_pos)
+    SAFE_ALLOCATE_SOURCE_A(this%prev_vel,             cp_in%prev_vel)
+    SAFE_ALLOCATE_SOURCE_A(this%hamiltonian_elements, cp_in%hamiltonian_elements)
+
+    POP_SUB(classical_particles_copy)
+  end subroutine classical_particles_copy
 
   ! ---------------------------------------------------------
   subroutine classical_particles_init_interaction(this, interaction)
@@ -135,105 +161,132 @@ contains
     class(classical_particles_t),    intent(inout) :: this
     class(algorithmic_operation_t),  intent(in)    :: operation
 
-    integer :: ii, sdim, ip
+    integer :: ii, ip
     FLOAT, allocatable :: tmp_pos(:,:,:), tmp_vel(:,:,:)
     FLOAT :: factor
 
     PUSH_SUB(classical_particles_do_td)
 
-    sdim = this%space%dim
-
     select case (operation%id)
     case (SKIP)
       ! Do nothing
     case (STORE_CURRENT_STATUS)
-      this%save_pos(1:sdim, 1:this%np) = this%pos(1:sdim, 1:this%np)
-      this%save_vel(1:sdim, 1:this%np) = this%vel(1:sdim, 1:this%np)
+      this%save_pos(:, 1:this%np) = this%pos(:, 1:this%np)
+      this%save_vel(:, 1:this%np) = this%vel(:, 1:this%np)
 
     case (VERLET_START)
-      SAFE_ALLOCATE(this%prev_acc(1:sdim, 1:this%np, 1))
+      SAFE_ALLOCATE(this%acc(1:this%space%dim, 1:this%np))
+      SAFE_ALLOCATE(this%prev_tot_force(1:this%space%dim, 1:this%np))
+      SAFE_ALLOCATE(this%prev_acc(1:this%space%dim, 1:this%np, 1))
       do ip = 1, this%np
-        this%acc(1:sdim, ip) = this%tot_force(1:sdim, ip) / this%mass(ip)
+        if (this%fixed(ip)) then
+          this%acc(:, ip) = M_ZERO
+        else
+          this%acc(:, ip) = this%tot_force(:, ip) / this%mass(ip)
+        end if
       end do
 
     case (VERLET_FINISH)
+      SAFE_DEALLOCATE_A(this%acc)
+      SAFE_DEALLOCATE_A(this%prev_tot_force)
       SAFE_DEALLOCATE_A(this%prev_acc)
 
     case (BEEMAN_FINISH)
+      SAFE_DEALLOCATE_A(this%acc)
+      SAFE_DEALLOCATE_A(this%prev_tot_force)
       SAFE_DEALLOCATE_A(this%prev_acc)
       SAFE_DEALLOCATE_A(this%save_pos)
       SAFE_DEALLOCATE_A(this%save_vel)
 
     case (VERLET_UPDATE_POS)
-      this%pos(1:sdim, 1:this%np) = this%pos(1:sdim, 1:this%np) + &
-        this%prop%dt * this%vel(1:sdim, 1:this%np) &
-        + M_HALF * this%prop%dt**2 * this%acc(1:sdim, 1:this%np)
+      this%pos(:, 1:this%np) = this%pos(:, 1:this%np) + this%prop%dt * this%vel(:, 1:this%np) &
+        + M_HALF * this%prop%dt**2 * this%acc(:, 1:this%np)
 
       this%quantities(POSITION)%clock = this%quantities(POSITION)%clock + CLOCK_TICK
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", QUANTITY_LABEL(POSITION), & 
+                                          this%quantities(POSITION)%clock, "tick") )
+
 
     case (VERLET_COMPUTE_ACC, BEEMAN_COMPUTE_ACC)
       do ii = size(this%prev_acc, dim=3) - 1, 1, -1
-        this%prev_acc(1:sdim, 1:this%np, ii + 1) = this%prev_acc(1:sdim, 1:this%np, ii)
+        this%prev_acc(:, 1:this%np, ii + 1) = this%prev_acc(:, 1:this%np, ii)
       end do
       do ip = 1, this%np
-        this%prev_acc(1:sdim, ip, 1) = this%acc(1:sdim, ip)
-        this%acc(1:sdim, ip) = this%tot_force(1:sdim, ip) / this%mass(ip)
+        this%prev_acc(:, ip, 1) = this%acc(:, ip)
+        if (this%fixed(ip)) then
+          this%acc(:, ip) = M_ZERO
+        else
+          this%acc(:, ip) = this%tot_force(:, ip) / this%mass(ip)
+        end if
       end do
 
     case (VERLET_COMPUTE_VEL)
-      this%vel(1:sdim, 1:this%np) = this%vel(1:sdim, 1:this%np) &
-        + M_HALF * this%prop%dt * (this%prev_acc(1:sdim, 1:this%np, 1) + this%acc(1:sdim, 1:this%np))
+      this%vel(:, 1:this%np) = this%vel(:, 1:this%np) &
+        + M_HALF * this%prop%dt * (this%prev_acc(:, 1:this%np, 1) + this%acc(:, 1:this%np))
 
       this%quantities(VELOCITY)%clock = this%quantities(VELOCITY)%clock + CLOCK_TICK
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", &
+                                          QUANTITY_LABEL(VELOCITY), this%quantities(VELOCITY)%clock, "tick") )
 
     case (BEEMAN_START)
       if (this%prop%predictor_corrector) then
         SAFE_ALLOCATE(this%save_pos(1:this%space%dim, 1:this%np))
         SAFE_ALLOCATE(this%save_vel(1:this%space%dim, 1:this%np))
       end if
-      SAFE_ALLOCATE(this%prev_acc(1:sdim, 1:this%np, 1:2))
+      SAFE_ALLOCATE(this%acc(1:this%space%dim, 1:this%np))
+      SAFE_ALLOCATE(this%prev_tot_force(1:this%space%dim, 1:this%np))
+      SAFE_ALLOCATE(this%prev_acc(1:this%space%dim, 1:this%np, 1:2))
       do ip = 1, this%np
-        this%acc(1:sdim, ip) = this%tot_force(1:sdim, ip) / this%mass(ip)
-        this%prev_acc(1:sdim, ip, 1) = this%acc(1:sdim, ip)
+        if (this%fixed(ip)) then
+          this%acc(:, ip) = M_ZERO
+        else
+          this%acc(:, ip) = this%tot_force(:, ip) / this%mass(ip)
+        end if
+        this%prev_acc(:, ip, 1) = this%acc(:, ip)
       end do
 
     case (BEEMAN_PREDICT_POS)
-      this%pos(1:sdim, 1:this%np) = this%pos(1:sdim, 1:this%np) + this%prop%dt * this%vel(1:sdim, 1:this%np) + &
-        M_ONE/CNST(6.0) * this%prop%dt**2 * (M_FOUR*this%acc(1:sdim, 1:this%np) - this%prev_acc(1:sdim, 1:this%np, 1))
+      this%pos(:, 1:this%np) = this%pos(:, 1:this%np) + this%prop%dt * this%vel(:, 1:this%np) + &
+        M_ONE/CNST(6.0) * this%prop%dt**2 * (M_FOUR*this%acc(:, 1:this%np) - this%prev_acc(:, 1:this%np, 1))
 
       if (.not. this%prop%predictor_corrector) then
         this%quantities(POSITION)%clock = this%quantities(POSITION)%clock + CLOCK_TICK
-      end if
+        call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", QUANTITY_LABEL(POSITION), &
+                                                            this%quantities(POSITION)%clock, "tick") )
+end if
 
     case (BEEMAN_PREDICT_VEL)
-      this%vel(1:sdim, 1:this%np) = this%vel(1:sdim, 1:this%np)  &
-        + M_ONE/CNST(6.0) * this%prop%dt * ( M_TWO * this%acc(1:sdim, 1:this%np) + &
-        CNST(5.0) * this%prev_acc(1:sdim, 1:this%np, 1) - this%prev_acc(1:sdim, 1:this%np, 2))
+      this%vel(:, 1:this%np) = this%vel(:, 1:this%np) + M_ONE/CNST(6.0) * this%prop%dt * ( M_TWO * this%acc(:, 1:this%np) + &
+        CNST(5.0) * this%prev_acc(:, 1:this%np, 1) - this%prev_acc(:, 1:this%np, 2))
 
       this%quantities(VELOCITY)%clock = this%quantities(VELOCITY)%clock + CLOCK_TICK
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", &
+                                          QUANTITY_LABEL(VELOCITY), this%quantities(VELOCITY)%clock, "tick") )
 
     case (BEEMAN_CORRECT_POS)
-      this%pos(1:sdim, 1:this%np) = this%save_pos(1:sdim, 1:this%np) + this%prop%dt * this%save_vel(1:sdim, 1:this%np) &
-        + M_ONE/CNST(6.0) * this%prop%dt**2 * (this%acc(1:sdim, 1:this%np) + M_TWO * this%prev_acc(1:sdim, 1:this%np, 1))
+      this%pos(:, 1:this%np) = this%save_pos(:, 1:this%np) + this%prop%dt * this%save_vel(:, 1:this%np) &
+        + M_ONE/CNST(6.0) * this%prop%dt**2 * (this%acc(:, 1:this%np) + M_TWO * this%prev_acc(:, 1:this%np, 1))
 
       ! We set it to the propagation time to avoid double increment
       call this%quantities(POSITION)%clock%set_time(this%prop%clock)
 
     case (BEEMAN_CORRECT_VEL)
-      this%vel(1:sdim, 1:this%np) = this%save_vel(1:sdim, 1:this%np) &
-        + M_HALF * this%prop%dt * (this%acc(1:sdim, 1:this%np) + this%prev_acc(1:sdim, 1:this%np, 1))
+      this%vel(:, 1:this%np) = this%save_vel(:, 1:this%np) &
+        + M_HALF * this%prop%dt * (this%acc(:, 1:this%np) + this%prev_acc(:, 1:this%np, 1))
 
       ! We set it to the propagation time to avoid double increment
       call this%quantities(VELOCITY)%clock%set_time(this%prop%clock)
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", &
+                                          QUANTITY_LABEL(VELOCITY), this%quantities(VELOCITY)%clock, "set") )
 
     case (EXPMID_START)
       SAFE_ALLOCATE(this%save_pos(1:this%space%dim, 1:this%np))
       SAFE_ALLOCATE(this%save_vel(1:this%space%dim, 1:this%np))
-      SAFE_ALLOCATE(this%hamiltonian_elements(1:sdim, 1:this%np))
-      SAFE_ALLOCATE(this%prev_pos(1:sdim, 1:this%np, 1))
-      SAFE_ALLOCATE(this%prev_vel(1:sdim, 1:this%np, 1))
-      this%prev_pos(1:sdim, 1:this%np, 1) = this%pos(1:sdim, 1:this%np)
-      this%prev_vel(1:sdim, 1:this%np, 1) = this%vel(1:sdim, 1:this%np)
+      SAFE_ALLOCATE(this%hamiltonian_elements(1:this%space%dim, 1:this%np))
+      SAFE_ALLOCATE(this%prev_pos(1:this%space%dim, 1:this%np, 1))
+      SAFE_ALLOCATE(this%prev_vel(1:this%space%dim, 1:this%np, 1))
+      this%prev_pos(:, 1:this%np, 1) = this%pos(:, 1:this%np)
+      this%prev_vel(:, 1:this%np, 1) = this%vel(:, 1:this%np)
 
     case (EXPMID_FINISH)
       SAFE_DEALLOCATE_A(this%save_pos)
@@ -243,59 +296,75 @@ contains
       SAFE_DEALLOCATE_A(this%prev_vel)
 
     case (EXPMID_PREDICT_DT_2)
-      this%pos(1:sdim, 1:this%np) = CNST(1.5)*this%save_pos(1:sdim, 1:this%np) - CNST(0.5)*this%prev_pos(1:sdim, 1:this%np, 1)
-      this%vel(1:sdim, 1:this%np) = CNST(1.5)*this%save_vel(1:sdim, 1:this%np) - CNST(0.5)*this%prev_vel(1:sdim, 1:this%np, 1)
-      this%prev_pos(1:sdim, 1:this%np, 1) = this%save_pos(1:sdim, 1:this%np)
-      this%prev_vel(1:sdim, 1:this%np, 1) = this%save_vel(1:sdim, 1:this%np)
+      this%pos(:, 1:this%np) = CNST(1.5)*this%save_pos(:, 1:this%np) - M_HALF*this%prev_pos(:, 1:this%np, 1)
+      this%vel(:, 1:this%np) = CNST(1.5)*this%save_vel(:, 1:this%np) - M_HALF*this%prev_vel(:, 1:this%np, 1)
+      this%prev_pos(:, 1:this%np, 1) = this%save_pos(:, 1:this%np)
+      this%prev_vel(:, 1:this%np, 1) = this%save_vel(:, 1:this%np)
       this%quantities(POSITION)%clock = this%quantities(POSITION)%clock + CLOCK_TICK
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", QUANTITY_LABEL(POSITION), & 
+                                          this%quantities(POSITION)%clock, "tick") )
       this%quantities(VELOCITY)%clock = this%quantities(VELOCITY)%clock + CLOCK_TICK
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", QUANTITY_LABEL(VELOCITY), & 
+                                          this%quantities(VELOCITY)%clock, "tick") )
 
     case (UPDATE_HAMILTONIAN)
       do ip = 1, this%np
-        this%hamiltonian_elements(1:sdim, ip) = this%tot_force(1:sdim, ip) / (this%mass(ip) * this%pos(1:sdim, ip))
+        if (this%fixed(ip)) then
+          this%hamiltonian_elements(:, ip) = M_ZERO
+        else
+          this%hamiltonian_elements(:, ip) = this%tot_force(:, ip) / (this%mass(ip) * this%pos(:, ip))
+        end if
       end do
 
     case (EXPMID_PREDICT_DT)
-      SAFE_ALLOCATE(tmp_pos(1:sdim, 1:this%np, 2))
-      SAFE_ALLOCATE(tmp_vel(1:sdim, 1:this%np, 2))
+      SAFE_ALLOCATE(tmp_pos(1:this%space%dim, 1:this%np, 2))
+      SAFE_ALLOCATE(tmp_vel(1:this%space%dim, 1:this%np, 2))
       ! apply exponential - at some point this could use the machinery of
       !   exponential_apply (but this would require a lot of boilerplate code
       !   like a Hamiltonian class etc)
       ! save_pos/vel contain the state at t - this is the state we want to
       !   apply the Hamiltonian to
-      tmp_pos(1:sdim, 1:this%np, 1) = this%save_pos(1:sdim, 1:this%np)
-      tmp_vel(1:sdim, 1:this%np, 1) = this%save_vel(1:sdim, 1:this%np)
-      this%pos(1:sdim, 1:this%np) = this%save_pos(1:sdim, 1:this%np)
-      this%vel(1:sdim, 1:this%np) = this%save_vel(1:sdim, 1:this%np)
+      tmp_pos(:, 1:this%np, 1) = this%save_pos(:, 1:this%np)
+      tmp_vel(:, 1:this%np, 1) = this%save_vel(:, 1:this%np)
+      this%pos(:, 1:this%np) = this%save_pos(:, 1:this%np)
+      this%vel(:, 1:this%np) = this%save_vel(:, 1:this%np)
       ! compute exponential with Taylor expansion
       factor = M_ONE
       do ii = 1, 4
         factor = factor * this%prop%dt / ii
         do ip = 1, this%np          
           ! apply hamiltonian
-          tmp_pos(1:sdim, ip, 2) = tmp_vel(1:sdim, ip, 1)
-          tmp_vel(1:sdim, ip, 2) = this%hamiltonian_elements(1:sdim, ip) * tmp_pos(1:sdim, ip, 1)
+          tmp_pos(:, ip, 2) = tmp_vel(:, ip, 1)
+          tmp_vel(:, ip, 2) = this%hamiltonian_elements(:, ip) * tmp_pos(:, ip, 1)
           ! swap temporary variables
-          tmp_pos(1:sdim, ip, 1) = tmp_pos(1:sdim, ip, 2)
-          tmp_vel(1:sdim, ip, 1) = tmp_vel(1:sdim, ip, 2)
+          tmp_pos(:, ip, 1) = tmp_pos(:, ip, 2)
+          tmp_vel(:, ip, 1) = tmp_vel(:, ip, 2)
           ! accumulate components of Taylor expansion
-          this%pos(1:sdim, ip) = this%pos(1:sdim, ip) + factor * tmp_pos(1:sdim, ip, 1)
-          this%vel(1:sdim, ip) = this%vel(1:sdim, ip) + factor * tmp_vel(1:sdim, ip, 1)
+          this%pos(:, ip) = this%pos(:, ip) + factor * tmp_pos(:, ip, 1)
+          this%vel(:, ip) = this%vel(:, ip) + factor * tmp_vel(:, ip, 1)
         end do
       end do
       SAFE_DEALLOCATE_A(tmp_pos)
       SAFE_DEALLOCATE_A(tmp_vel)
       this%quantities(POSITION)%clock = this%quantities(POSITION)%clock + CLOCK_TICK
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", QUANTITY_LABEL(POSITION), & 
+                                          this%quantities(POSITION)%clock, "tick") )
       this%quantities(VELOCITY)%clock = this%quantities(VELOCITY)%clock + CLOCK_TICK
+      call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", QUANTITY_LABEL(VELOCITY), & 
+                                          this%quantities(VELOCITY)%clock, "tick") )
 
     case (EXPMID_CORRECT_DT_2)
       ! only correct for dt/2 if not converged yet
       if (.not. this%is_tolerance_reached(this%prop%scf_tol)) then
-        this%pos(1:sdim, 1:this%np) = CNST(0.5)*(this%pos(1:sdim, 1:this%np) + this%save_pos(1:sdim, 1:this%np))
-        this%vel(1:sdim, 1:this%np) = CNST(0.5)*(this%vel(1:sdim, 1:this%np) + this%save_vel(1:sdim, 1:this%np))
+        this%pos(:, 1:this%np) = M_HALF*(this%pos(:, 1:this%np) + this%save_pos(:, 1:this%np))
+        this%vel(:, 1:this%np) = M_HALF*(this%vel(:, 1:this%np) + this%save_vel(:, 1:this%np))
         this%quantities(POSITION)%clock = this%quantities(POSITION)%clock + CLOCK_TICK
+        call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", &
+                                            QUANTITY_LABEL(POSITION), this%quantities(POSITION)%clock, action="tick") )
         this%quantities(VELOCITY)%clock = this%quantities(VELOCITY)%clock + CLOCK_TICK
-      end if
+        call multisystem_debug_write_marker(this%namespace, event_clock_update_t("quantity", QUANTITY_LABEL(VELOCITY), & 
+                                            this%quantities(VELOCITY)%clock, "tick") )
+end if
 
     case default
       message(1) = "Unsupported TD operation."
@@ -314,6 +383,8 @@ contains
     FLOAT :: change, max_change
 
     PUSH_SUB(classical_particles_is_tolerance_reached)
+
+    ASSERT(this%prop%predictor_corrector)
 
     ! Here we put the criterion that maximum acceleration change is below the tolerance
     max_change = M_ZERO
@@ -381,6 +452,22 @@ contains
   end subroutine classical_particles_update_exposed_quantity
 
   ! ---------------------------------------------------------
+  subroutine classical_particles_init_interaction_as_partner(partner, interaction)
+    class(classical_particles_t), intent(in)    :: partner
+    class(interaction_t),         intent(inout) :: interaction
+
+    PUSH_SUB(classical_particles_init_interaction_as_partner)
+
+    select type (interaction)
+    class default
+      message(1) = "Unsupported interaction."
+      call messages_fatal(1)
+    end select
+
+    POP_SUB(classical_particles_init_interaction_as_partner)
+  end subroutine classical_particles_init_interaction_as_partner
+
+  ! ---------------------------------------------------------
   subroutine classical_particles_copy_quantities_to_interaction(partner, interaction)
     class(classical_particles_t),         intent(inout) :: partner
     class(interaction_t),                 intent(inout) :: interaction
@@ -403,7 +490,9 @@ contains
     PUSH_SUB(classical_particles_update_interactions_start)
 
     ! Store previous force, as it is used as SCF criterium
-    this%prev_tot_force(1:this%space%dim, 1:this%np) = this%tot_force(1:this%space%dim, 1:this%np)
+    if (this%prop%predictor_corrector) then
+      this%prev_tot_force(1:this%space%dim, 1:this%np) = this%tot_force(1:this%space%dim, 1:this%np)
+    end if
 
     POP_SUB(classical_particles_update_interactions_start)
   end subroutine classical_particles_update_interactions_start
@@ -439,11 +528,8 @@ contains
     SAFE_DEALLOCATE_A(this%mass)
     SAFE_DEALLOCATE_A(this%pos)
     SAFE_DEALLOCATE_A(this%vel)
-    SAFE_DEALLOCATE_A(this%acc)
-    SAFE_DEALLOCATE_A(this%prev_tot_force)
     SAFE_DEALLOCATE_A(this%tot_force)
-    SAFE_DEALLOCATE_A(this%save_pos)
-    SAFE_DEALLOCATE_A(this%save_vel)
+    SAFE_DEALLOCATE_A(this%fixed)
 
     call system_end(this)
 

@@ -29,10 +29,12 @@ module multisystem_oct_m
   use loct_oct_m
   use messages_oct_m
   use mpi_oct_m
+  use multisystem_debug_oct_m
   use namespace_oct_m
   use parser_oct_m
   use profiling_oct_m
   use propagator_oct_m
+  use propagator_static_oct_m
   use system_oct_m
   use system_factory_abst_oct_m
   implicit none
@@ -63,6 +65,7 @@ module multisystem_oct_m
     procedure :: is_tolerance_reached => multisystem_is_tolerance_reached
     procedure :: update_quantity => multisystem_update_quantity
     procedure :: update_exposed_quantity => multisystem_update_exposed_quantity
+    procedure :: init_interaction_as_partner => multisystem_init_interaction_as_partner
     procedure :: copy_quantities_to_interaction => multisystem_copy_quantities_to_interaction
     procedure :: process_is_slave => multisystem_process_is_slave
   end type multisystem_t
@@ -206,7 +209,16 @@ contains
     type(system_iterator_t) :: iter
     class(system_t), pointer :: system
 
+    type(event_handle_t) :: debug_handle
+
     PUSH_SUB(multisystem_dt_operation)
+
+    if (debug%info) then
+      write(message(1), '(a,a,1X,a)') "Debug: Start multisystem_dt_operation for '" + trim(this%namespace%get()) + "'"
+      call messages_info(1)
+    end if
+    debug_handle = multisystem_debug_write_event_in(this%namespace, event_function_call_t("multisystem_dt_operation"), &
+                                                    system_clock = this%clock, prop_clock = this%prop%clock)
 
     ! Multisystem
     call system_dt_operation(this)
@@ -217,6 +229,13 @@ contains
       system => iter%get_next()
       call system%dt_operation()
     end do
+
+    if (debug%info) then
+      write(message(1), '(a,a,1X,a)') "Debug: Finish multisystem_dt_operation for '" + trim(this%namespace%get()) + "'"
+      call messages_info(1)
+    end if
+
+    call multisystem_debug_write_event_out(debug_handle, system_clock = this%clock, prop_clock = this%prop%clock)
 
     POP_SUB(multisystem_dt_operation)
   end subroutine multisystem_dt_operation
@@ -262,10 +281,13 @@ contains
       call system%init_propagator()
     end do
 
-    ! Initialize the propagator of the multisystem
+    ! Initialize the propagator of the multisystem. By default the
+    ! multisystem itself and its own quantities are kept unchaged 
+    ! by using the static propagator. However, the subsystems are allowed to have
+    ! their own propagators and those do not have to be static.
     ! Needs to be done after initializing the subsystems propagators,
     ! as we use the smallest dt of the subsystems.
-    this%prop => propagator_t(this%smallest_algo_dt())
+    this%prop => propagator_static_t(this%smallest_algo_dt())
     this%interaction_timing = OPTION__INTERACTIONTIMING__TIMING_EXACT
     call this%prop%rewind()
 
@@ -297,7 +319,12 @@ contains
     type(system_iterator_t) :: iter
     class(system_t), pointer :: system
 
+    type(event_handle_t) :: debug_handle
+
     PUSH_SUB(multisystem_propagation_start)
+
+    debug_handle = multisystem_debug_write_event_in(this%namespace, event_function_call_t("multisystem_propagation_start"), &
+                                                    system_clock = this%clock, prop_clock = this%prop%clock)
 
     ! Start the propagation of the multisystem
     call system_propagation_start(this)
@@ -309,6 +336,8 @@ contains
       call system%propagation_start()
     end do
 
+    call multisystem_debug_write_event_out(debug_handle, system_clock = this%clock, prop_clock = this%prop%clock)
+
     POP_SUB(multisystem_propagation_start)
   end subroutine multisystem_propagation_start
 
@@ -319,7 +348,12 @@ contains
     type(system_iterator_t) :: iter
     class(system_t), pointer :: system
 
+    type(event_handle_t) :: debug_handle
+
     PUSH_SUB(multisystem_propagation_finish)
+
+    debug_handle = multisystem_debug_write_event_in(this%namespace, event_function_call_t("multisystem_propagation_finish"), &
+                                                    system_clock = this%clock, prop_clock = this%prop%clock)
 
     ! Finish the propagation of the multisystem
     call system_propagation_finish(this)
@@ -330,6 +364,8 @@ contains
       system => iter%get_next()
       call system%propagation_finish()
     end do
+
+    call multisystem_debug_write_event_out(debug_handle, system_clock = this%clock, prop_clock = this%prop%clock)
 
     POP_SUB(multisystem_propagation_finish)
   end subroutine multisystem_propagation_finish
@@ -373,6 +409,9 @@ contains
       select type (interaction)
       type is (ghost_interaction_t)
         ! Skip the ghost interactions
+      class is (interaction_with_partner_t)
+        call this%init_interaction(interaction)
+        call interaction%partner%init_interaction_as_partner(interaction)
       class default
         call this%init_interaction(interaction)
       end select
@@ -405,9 +444,10 @@ contains
   end subroutine multisystem_init_interaction
 
   ! ---------------------------------------------------------------------------------------
-  recursive subroutine multisystem_write_interaction_graph(this, iunit)
+  recursive subroutine multisystem_write_interaction_graph(this, iunit, include_ghosts)
     class(multisystem_t), intent(in) :: this
     integer,              intent(in) :: iunit
+    logical,              intent(in) :: include_ghosts
 
     class(system_t), pointer :: system
     class(interaction_t), pointer :: interaction
@@ -429,6 +469,10 @@ contains
         ! Write interaction to DOT graph if this interaction has a partner
         select type (interaction)
         type is (ghost_interaction_t)
+          if(include_ghosts) then
+            write(iunit, '(2x,a)') '"' + trim(system%namespace%get()) + '" -> "' + trim(interaction%partner%namespace%get()) + &
+            '" [label="'+ interaction%label + '"];'
+          endif
           ! Do not include systems connected by ghost interactions
         class is (interaction_with_partner_t)
           write(iunit, '(2x,a)') '"' + trim(system%namespace%get()) + '" -> "' + trim(interaction%partner%namespace%get()) + &
@@ -439,7 +483,7 @@ contains
       ! If this subsystem is also a multisystem, then we also need to traverse it
       select type (system)
       class is (multisystem_t)
-        call system%write_interaction_graph(iunit)
+        call system%write_interaction_graph(iunit, include_ghosts)
       end select
     end do
 
@@ -547,6 +591,22 @@ contains
 
     POP_SUB(multisystem_update_exposed_quantity)
   end subroutine multisystem_update_exposed_quantity
+
+  ! ---------------------------------------------------------
+  subroutine multisystem_init_interaction_as_partner(partner, interaction)
+    class(multisystem_t),         intent(in)    :: partner
+    class(interaction_t),         intent(inout) :: interaction
+
+    PUSH_SUB(multisystem_init_interaction_as_partner)
+
+    ! The multitystem class should never know about any specific interaction.
+    ! Only classes that extend it can know about specific interactions.
+    ! Such classes should override this method to add new supported interactions.
+    message(1) = "Trying to initialize an interaction as partner in the multisystem class"
+    call messages_fatal(1)
+
+    POP_SUB(multisystem_init_interaction_as_partner)
+  end subroutine multisystem_init_interaction_as_partner
 
   ! ---------------------------------------------------------
   subroutine multisystem_copy_quantities_to_interaction(partner, interaction)

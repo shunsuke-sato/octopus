@@ -33,21 +33,19 @@ module propagator_mxll_oct_m
   use fft_oct_m
   use fourier_space_oct_m
   use grid_oct_m
-  use geometry_oct_m
   use global_oct_m
   use hamiltonian_elec_oct_m
   use hamiltonian_mxll_oct_m
   use index_oct_m
   use io_oct_m
   use io_function_oct_m
-  use io_oct_m
+  use ions_oct_m
   use lalg_adv_oct_m
   use lalg_basic_oct_m
   use loct_math_oct_m
   use math_oct_m
   use maxwell_boundary_op_oct_m
   use maxwell_function_oct_m
-  use medium_mxll_oct_m
   use mesh_oct_m
   use mesh_cube_parallel_map_oct_m
   use mesh_function_oct_m
@@ -74,7 +72,8 @@ module propagator_mxll_oct_m
     mxll_propagation_step,                   &
     transform_rs_densities,                  &
     energy_mxll_calc,                        &
-    spatial_constant_calculation
+    spatial_constant_calculation,            &
+    set_medium_rs_state
 
   ! The following routines are currently unused, but will be used in the near future.
   ! In order not to generate warnings about them, we declared them as public
@@ -232,8 +231,6 @@ contains
       st%rs_state_const = M_z0
     end if
 
-    call medium_box_init(namespace, hm%medium_box, hm%calc_medium_box, gr)
-
     !%Variable MaxwellTDETRSApprox
     !%Type integer
     !%Default no
@@ -290,7 +287,6 @@ contains
     !% not doing any numerical propagation of Maxwells equations.
     !%End
     call parse_variable(namespace, 'MaxwellPlaneWavesInBox', .false., tr%plane_waves_in_box)
-    call set_medium_rs_state(st, gr, hm)
 
     call derivatives_boundary_mask(hm%bc, gr%mesh, hm)
 
@@ -526,28 +522,26 @@ contains
 
     PUSH_SUB(set_medium_rs_state)
 
+    ASSERT(allocated(st%ep) .and. allocated(st%mu))
+
     call profiling_in(prof, 'SET_MEDIUM_RS_STATE')
 
-    SAFE_ALLOCATE(st%ep(1:gr%mesh%np_part))
-    SAFE_ALLOCATE(st%mu(1:gr%mesh%np_part))
-    st%ep = P_ep
-    st%mu = P_mu
     if (hm%calc_medium_box) then
-      do il = 1, hm%medium_box%number
-        do ip_in = 1, hm%medium_box%points_number(il)
-          ip = hm%medium_box%points_map(ip_in, il)
-          st%ep(ip) = hm%medium_box%ep(ip_in, il)
-          st%mu(ip) = hm%medium_box%mu(ip_in, il)
+      do il = 1, size(hm%medium_boxes)
+        do ip_in = 1, hm%medium_boxes(il)%points_number
+          ip = hm%medium_boxes(il)%points_map(ip_in)
+          st%ep(ip) = hm%medium_boxes(il)%ep(ip_in)
+          st%mu(ip) = hm%medium_boxes(il)%mu(ip_in)
         end do
       end do
     end if
 
     do idim = 1, st%dim
       if (hm%bc%bc_type(idim) == MXLL_BC_MEDIUM) then
-        do ip_in = 1, hm%bc%medium%points_number(idim)
-          ip = hm%bc%medium%points_map(ip_in, idim)
-          st%ep(ip) = hm%bc%medium%ep(ip_in, idim)
-          st%mu(ip) = hm%bc%medium%mu(ip_in, idim)
+        do ip_in = 1, hm%bc%medium(idim)%points_number
+          ip = hm%bc%medium(idim)%points_map(ip_in)
+          st%ep(ip) = hm%bc%medium(idim)%ep(ip_in)
+          st%mu(ip) = hm%bc%medium(idim)%mu(ip_in)
         end do
       end if
     end do
@@ -757,7 +751,7 @@ contains
   end subroutine transform_rs_densities_to_4x4_rs_densities_backward
 
   !----------------------------------------------------------
-  subroutine calculate_matter_longitudinal_field(gr_mxll, st_mxll, hm_mxll, gr_elec, st_elec, hm_elec, rs_state_matter, geo)
+  subroutine calculate_matter_longitudinal_field(gr_mxll, st_mxll, hm_mxll, gr_elec, st_elec, hm_elec, rs_state_matter, ions)
     type(grid_t),                  intent(in)    :: gr_mxll
     type(states_mxll_t),           intent(in)    :: st_mxll
     type(hamiltonian_mxll_t),      intent(in)    :: hm_mxll
@@ -765,7 +759,7 @@ contains
     type(states_elec_t),           intent(in)    :: st_elec
     type(hamiltonian_elec_t),      intent(in)    :: hm_elec
     CMPLX,                         intent(inout) :: rs_state_matter(:,:)
-    type(geometry_t),    optional, intent(in)    :: geo
+    type(ions_t),        optional, intent(in)    :: ions
 
     CMPLX, allocatable :: tmp_pot_mx_gr(:,:), tmp_grad_mx_gr(:,:)
 
@@ -793,7 +787,7 @@ contains
 
   !----------------------------------------------------------
   subroutine get_vector_pot_and_transverse_field(trans_calc_method, gr_mxll, hm_mxll, st_mxll, tr_mxll, hm, st, &
-    poisson_solver, time, field, transverse_field, vector_potential, geo)
+    poisson_solver, time, field, transverse_field, vector_potential)
     integer,                    intent(in)    :: trans_calc_method
     type(grid_t),               intent(in)    :: gr_mxll
     type(hamiltonian_mxll_t),   intent(in)    :: hm_mxll
@@ -801,13 +795,11 @@ contains
     type(propagator_mxll_t),    intent(in)    :: tr_mxll
     type(hamiltonian_elec_t),   intent(in)    :: hm
     type(states_elec_t),        intent(in)    :: st
-!    type(propagator_base_t),    intent(in)    :: tr
     type(poisson_t),            intent(in)    :: poisson_solver
     FLOAT,                      intent(in)    :: time
     CMPLX,                      intent(inout) :: field(:,:)
     CMPLX,                      intent(inout) :: transverse_field(:,:)
     FLOAT,                      intent(inout) :: vector_potential(:,:)
-    type(geometry_t), optional, intent(in)    :: geo
 
     integer            :: np
 
@@ -849,11 +841,10 @@ contains
   end subroutine  get_vector_pot_and_transverse_field
 
   ! ---------------------------------------------------------
-  subroutine calculate_vector_potential(poisson_solver, gr, st, tr, field, vector_potential)
+  subroutine calculate_vector_potential(poisson_solver, gr, st, field, vector_potential)
     type(poisson_t),            intent(in)    :: poisson_solver
     type(grid_t),               intent(in)    :: gr
     type(states_mxll_t),        intent(in)    :: st
-    type(propagator_mxll_t),    intent(in)    :: tr
     CMPLX,                      intent(in)    :: field(:,:)
     FLOAT,                      intent(inout) :: vector_potential(:,:)
 
@@ -1290,7 +1281,7 @@ contains
       do istate = 1, hm%dim
         call batch_get_state(ff_rs_state_pmlb, istate, gr%mesh%np_part, ff_rs_state_pml(:, istate))
       end do
-      call cpml_conv_function_update_via_e_b_fields(hm, gr, ff_rs_state_pml, ff_dim)
+      call cpml_conv_function_update_via_e_b_fields(hm, gr, ff_rs_state_pml)
       SAFE_DEALLOCATE_A(ff_rs_state_pml)
     end if
 
@@ -1391,11 +1382,10 @@ contains
   end subroutine cpml_conv_function_update_via_riemann_silberstein
 
   ! ---------------------------------------------------------
-  subroutine cpml_conv_function_update_via_e_b_fields(hm, gr, ff_rs_state_pml, ff_dim)
+  subroutine cpml_conv_function_update_via_e_b_fields(hm, gr, ff_rs_state_pml)
     type(hamiltonian_mxll_t), intent(inout) :: hm
     type(grid_t),        intent(in)         :: gr
     CMPLX,               intent(in)         :: ff_rs_state_pml(:,:)
-    integer,             intent(in)         :: ff_dim
 
     integer :: ip, ip_in, np_part
     FLOAT, allocatable :: tmp_e(:,:), tmp_b(:,:), tmp_partial_e(:), tmp_partial_b(:)

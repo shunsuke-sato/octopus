@@ -19,10 +19,10 @@
 
 module lda_u_io_oct_m
   use atomic_orbital_oct_m
-  use geometry_oct_m
   use global_oct_m
   use io_oct_m
   use io_function_oct_m
+  use ions_oct_m
   use lalg_basic_oct_m
   use lda_u_oct_m
   use mesh_oct_m
@@ -33,6 +33,7 @@ module lda_u_io_oct_m
   use parser_oct_m
   use profiling_oct_m
   use restart_oct_m
+  use space_oct_m
   use species_oct_m
   use states_abst_oct_m
   use states_elec_oct_m
@@ -344,10 +345,10 @@ contains
 
 
  !--------------------------------------------------------- 
- subroutine lda_u_write_magnetization(dir, this, geo, mesh, st, namespace)
+ subroutine lda_u_write_magnetization(dir, this, ions, mesh, st, namespace)
    type(lda_u_t),       intent(in)    :: this
    character(len=*),    intent(in)    :: dir
-   type(geometry_t),    intent(in)    :: geo
+   type(ions_t),        intent(in)    :: ions
    type(mesh_t),        intent(in)    :: mesh
    type(states_elec_t), intent(in)    :: st
    type(namespace_t),   intent(in)    :: namespace
@@ -363,25 +364,25 @@ contains
     iunit = io_open(trim(dir)//"/magnetization.xsf", namespace, action='write', position='asis')
 
     if(this%nspins > 1) then
-      SAFE_ALLOCATE(mm(1:geo%natoms, 1:mesh%sb%dim))
-      mm(1:geo%natoms, 1:mesh%sb%dim) = M_ZERO
+      SAFE_ALLOCATE(mm(1:mesh%sb%dim, 1:ions%natoms))
+      mm = M_ZERO
       !We compute the magnetization vector for each orbital set
       do ios = 1, this%norbsets
         ia = this%orbsets(ios)%iatom
         do im = 1, this%orbsets(ios)%norbs
           if (states_are_real(st)) then
-            mm(ia, 3) = mm(ia, 3) + this%dn(im,im,1,ios) - this%dn(im,im,2,ios) 
+            mm(3, ia) = mm(3, ia) + this%dn(im,im,1,ios) - this%dn(im,im,2,ios) 
           else
-            mm(ia, 3) = mm(ia, 3) + TOFLOAT(this%zn(im,im,1,ios) - this%zn(im,im,2,ios))
+            mm(3, ia) = mm(3, ia) + TOFLOAT(this%zn(im,im,1,ios) - this%zn(im,im,2,ios))
             !Spinors
             if(this%nspins /= this%spin_channels) then
-              mm(ia, 1) = mm(ia, 1) + 2*TOFLOAT(this%zn(im,im,3,ios))
-              mm(ia, 2) = mm(ia, 2) - 2*aimag(this%zn(im,im,3,ios))
+              mm(1, ia) = mm(1, ia) + 2*TOFLOAT(this%zn(im,im,3,ios))
+              mm(2, ia) = mm(2, ia) - 2*aimag(this%zn(im,im,3,ios))
             end if
           end if  
         end do !im
       end do ! ios
-      call write_xsf_geometry(iunit, geo, mesh, forces = mm)
+      call write_xsf_geometry(iunit, ions, mesh, forces = mm)
       SAFE_DEALLOCATE_A(mm)
     end if
 
@@ -681,9 +682,10 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine lda_u_loadbasis(lda_u, namespace, st, mesh, mc, ierr)
+  subroutine lda_u_loadbasis(lda_u, namespace, space, st, mesh, mc, ierr)
     type(lda_u_t),        intent(inout) :: lda_u
-    type(namespace_t),    intent(in)  :: namespace
+    type(namespace_t),    intent(in)    :: namespace
+    type(space_t),        intent(in)    :: space
     type(states_elec_t),  intent(in)    :: st
     type(mesh_t),         intent(in)    :: mesh
     type(multicomm_t),    intent(in)    :: mc
@@ -782,9 +784,9 @@ contains
         end if
 
         if (states_are_real(st)) then
-          call drestart_read_mesh_function(restart_gs, restart_file(idim, ist), mesh, dpsi, err)
+          call drestart_read_mesh_function(restart_gs, space, restart_file(idim, ist), mesh, dpsi, err)
         else
-          call zrestart_read_mesh_function(restart_gs, restart_file(idim, ist), mesh, zpsi, err)
+          call zrestart_read_mesh_function(restart_gs, space, restart_file(idim, ist), mesh, zpsi, err)
         end if
 
         if(states_are_real(st)) then

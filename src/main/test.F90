@@ -45,6 +45,7 @@ module test_oct_m
   use messages_oct_m
   use mpi_oct_m
   use multicomm_oct_m
+  use multigrid_oct_m
   use namespace_oct_m
   use orbitalbasis_oct_m
   use orbitalset_oct_m
@@ -64,6 +65,7 @@ module test_oct_m
   use types_oct_m
   use v_ks_oct_m
   use wfs_elec_oct_m
+  use unit_system_oct_m
 
   implicit none
 
@@ -136,6 +138,8 @@ contains
     !% Tests for cgal interface
     !%Option dense_eigensolver 21
     !% Tests for dense eigensolvers (especially parallel ones)
+    !%Option grid_interpolation 22
+    !% Tests for grid interpolation and multigrid methods.
     !%End
     call parse_variable(namespace, 'TestMode', OPTION__TESTMODE__HARTREE, test_mode)
 
@@ -244,6 +248,8 @@ contains
       call test_cgal()
     case(OPTION__TESTMODE__DENSE_EIGENSOLVER)
       call test_dense_eigensolver()
+    case(OPTION__TESTMODE__GRID_INTERPOLATION)
+      call test_grid_interpolation()
     end select
 
     POP_SUB(test_run)
@@ -298,7 +304,7 @@ contains
 
     ! Here we put a Gaussian as the right-hand side of the linear solver
     ! Values are taken from the poisson_test routine
-    alpha = CNST(4.0)*sys%gr%mesh%spacing(1)
+    alpha = M_FOUR*sys%gr%mesh%spacing(1)
     beta = M_ONE / ( alpha**sys%space%dim * sqrt(M_PI)**sys%space%dim )
     ! The Gaussian is centered around the origin
     center = M_ZERO
@@ -384,7 +390,7 @@ contains
     call test_batch_set_gaussian(sys%st%group%psib(1, 1), sys%gr%mesh)
 
     ! Initialize external potential
-    call hamiltonian_elec_epot_generate(sys%hm, sys%namespace, sys%gr, sys%geo, sys%st)
+    call hamiltonian_elec_epot_generate(sys%hm, sys%namespace, sys%space, sys%gr, sys%ions, sys%st)
 
     call sys%st%group%psib(1, 1)%copy_to(epsib)
 
@@ -455,11 +461,11 @@ contains
     ! Initialize the orbital basis
     call orbitalbasis_init(basis, sys%namespace, sys%space%periodic_dim)
     if (states_are_real(sys%st)) then
-      call dorbitalbasis_build(basis, sys%geo, sys%gr%mesh, sys%st%d%kpt, sys%st%d%dim, .false., .false.)
+      call dorbitalbasis_build(basis, sys%ions, sys%gr%mesh, sys%st%d%kpt, sys%st%d%dim, .false., .false.)
       SAFE_ALLOCATE(dweight(1:basis%orbsets(1)%norbs, 1:epsib%nst_linear))
       SAFE_ALLOCATE(ddot(1:sys%st%d%dim, 1:basis%orbsets(1)%norbs, 1:epsib%nst))
     else
-      call zorbitalbasis_build(basis, sys%geo, sys%gr%mesh, sys%st%d%kpt, sys%st%d%dim, .false., .false.)
+      call zorbitalbasis_build(basis, sys%ions, sys%gr%mesh, sys%st%d%kpt, sys%st%d%dim, .false., .false.)
       call orbitalset_update_phase(basis%orbsets(1), sys%space%dim, sys%st%d%kpt, sys%kpoints, (sys%st%d%ispin==SPIN_POLARIZED))
       SAFE_ALLOCATE(zweight(1:basis%orbsets(1)%norbs, 1:epsib%nst_linear))
       SAFE_ALLOCATE(zdot(1:sys%st%d%dim, 1:basis%orbsets(1)%norbs, 1:epsib%nst))
@@ -551,9 +557,9 @@ contains
 
     ! Initialize external potential
     if(sys%st%d%pack_states .and. hamiltonian_elec_apply_packed(sys%hm)) call sys%st%pack()
-    call hamiltonian_elec_epot_generate(sys%hm, sys%namespace, sys%gr, sys%geo, sys%st)
+    call hamiltonian_elec_epot_generate(sys%hm, sys%namespace, sys%space, sys%gr, sys%ions, sys%st)
     call density_calc(sys%st, sys%gr, sys%st%rho)
-    call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%geo)
+    call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%ions)
 
     call boundaries_set(sys%gr%der%boundaries, sys%st%group%psib(1, 1))
 
@@ -689,9 +695,9 @@ contains
 
     ! Initialize external potential
     if(sys%st%d%pack_states .and. hamiltonian_elec_apply_packed(sys%hm)) call sys%st%pack()
-    call hamiltonian_elec_epot_generate(sys%hm, sys%namespace, sys%gr, sys%geo, sys%st)
+    call hamiltonian_elec_epot_generate(sys%hm, sys%namespace, sys%space, sys%gr, sys%ions, sys%st)
     call density_calc(sys%st, sys%gr, sys%st%rho)
-    call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%geo)
+    call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%ions)
 
     call exponential_init(te, namespace)
 
@@ -700,7 +706,7 @@ contains
     end if
 
     do itime = 1, param%repetitions
-      call exponential_apply_batch(te, sys%namespace, sys%gr%mesh, sys%hm, sys%st%group%psib(1, 1), CNST(1.0))
+      call exponential_apply_batch(te, sys%namespace, sys%gr%mesh, sys%hm, sys%st%group%psib(1, 1), M_ONE)
     end do
 
     call test_prints_info_batch(sys%st, sys%gr, sys%st%group%psib(1, 1))
@@ -720,6 +726,7 @@ contains
     type(electrons_t), pointer :: sys
     integer :: itime
     type(subspace_t) :: sdiag
+    FLOAT, allocatable :: diff(:)
 
     PUSH_SUB(test_subspace_diagonalization)
 
@@ -737,19 +744,23 @@ contains
     call test_batch_set_gaussian(sys%st%group%psib(1, 1), sys%gr%mesh)
 
     if(sys%st%d%pack_states .and. hamiltonian_elec_apply_packed(sys%hm)) call sys%st%pack()
-    call hamiltonian_elec_epot_generate(sys%hm, sys%namespace, sys%gr, sys%geo, sys%st)
+    call hamiltonian_elec_epot_generate(sys%hm, sys%namespace, sys%space, sys%gr, sys%ions, sys%st)
     call density_calc(sys%st, sys%gr, sys%st%rho)
-    call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%geo)
+    call v_ks_calc(sys%ks, sys%namespace, sys%space, sys%hm, sys%st, sys%ions)
 
-    call subspace_init(sdiag, sys%namespace, sys%st, no_sd = .false.)
+    call subspace_init(sdiag, sys%namespace, sys%st)
+
+    SAFE_ALLOCATE(diff(1:sys%st%nst))
 
     do itime = 1, param%repetitions
       if(states_are_real(sys%st)) then
-        call dsubspace_diag(sdiag, sys%namespace, sys%gr%mesh, sys%st, sys%hm, 1, sys%st%eigenval(:, 1))
+        call dsubspace_diag(sdiag, sys%namespace, sys%gr%mesh, sys%st, sys%hm, 1, sys%st%eigenval(:, 1), diff)
       else
-        call zsubspace_diag(sdiag, sys%namespace, sys%gr%mesh, sys%st, sys%hm, 1, sys%st%eigenval(:, 1))
+        call zsubspace_diag(sdiag, sys%namespace, sys%gr%mesh, sys%st, sys%hm, 1, sys%st%eigenval(:, 1), diff)
       end if
     end do
+
+    SAFE_DEALLOCATE_A(diff)
 
     call test_prints_info_batch(sys%st, sys%gr, sys%st%group%psib(1, 1))
 
@@ -1107,8 +1118,8 @@ contains
     sys => electrons_t(namespace, generate_epot=.false.)
     call sys%init_parallelization(mpi_world)
 
-    call ion_interaction_test(sys%space, sys%geo%latt, sys%geo%atom, sys%geo%natoms, sys%geo%catom, sys%geo%ncatoms, &
-      sys%gr%sb%lsize, namespace, sys%mc)
+    call ion_interaction_test(sys%space, sys%ions%latt, sys%ions%atom, sys%ions%natoms, sys%ions%pos, sys%ions%catom, &
+      sys%ions%ncatoms, sys%gr%sb%lsize, namespace, sys%mc)
 
     SAFE_DEALLOCATE_P(sys)
 
@@ -1168,8 +1179,8 @@ contains
 
     PUSH_SUB(test_clock)
 
-    test_clock_a = clock_t(time_step=CNST(2.0), initial_tick=100)
-    test_clock_b = clock_t(time_step=CNST(1.0))
+    test_clock_a = clock_t(time_step=M_TWO, initial_tick=100)
+    test_clock_b = clock_t(time_step=M_ONE)
     call test_clock_a%print()
     call test_clock_b%print()
 
@@ -1303,7 +1314,7 @@ contains
     PUSH_SUB(test_batch_set_gaussian)
 
     ! use a similar function as in the derivatives test
-    da = CNST(1.0)/mesh%sb%lsize(1)
+    da = M_ONE/mesh%sb%lsize(1)
     db = CNST(10.0)
     dc = CNST(100.0)
 
@@ -1340,6 +1351,29 @@ contains
 
     POP_SUB(test_batch_set_gaussian)
   end subroutine test_batch_set_gaussian
+
+  ! ---------------------------------------------------------
+  subroutine test_grid_interpolation()
+    type(electrons_t), pointer :: sys
+    type(multigrid_t) :: mgrid
+
+    PUSH_SUB(test_grid_interpolation)
+
+    sys => electrons_t(global_namespace, generate_epot=.false.)
+    call sys%init_parallelization(mpi_world)
+
+    call multigrid_init(mgrid, global_namespace, sys%space, sys%gr%mesh, sys%gr%der, &
+                          sys%gr%stencil, sys%mc, used_for_preconditioner = .true.)
+
+    call multigrid_test_interpolation(mgrid, sys%space)
+
+    call multigrid_end(mgrid)
+
+    SAFE_DEALLOCATE_P(sys)
+
+    POP_SUB(test_grid_interpolation)
+  end subroutine test_grid_interpolation
+
 
 end module test_oct_m
 

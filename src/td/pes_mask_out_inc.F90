@@ -430,11 +430,12 @@ end subroutine pes_mask_map_from_state
 ! ---------------------------------------------------------
 !> Write the photoelectron wavefunctions in real space
 ! ---------------------------------------------------------
-subroutine pes_mask_output_states(namespace, st, gr, geo, dir, outp, mask)
+subroutine pes_mask_output_states(namespace, space, st, gr, ions, dir, outp, mask)
   type(namespace_t),     intent(in)    :: namespace
+  type(space_t),         intent(in)    :: space
   type(states_elec_t),   intent(in)    :: st
   type(grid_t),          intent(in)    :: gr
-  type(geometry_t),      intent(in)    :: geo
+  type(ions_t),          intent(in)    :: ions
   character(len=*),      intent(in)    :: dir
   type(output_t),        intent(in)    :: outp
   type(pes_mask_t),      intent(inout) :: mask
@@ -494,22 +495,22 @@ subroutine pes_mask_output_states(namespace, st, gr, geo, dir, outp, mask)
   call density_calc_end(dens_calc)
 
   ! THE OUTPUT 
-  if(bitand(outp%what, OPTION__OUTPUT__PES_DENSITY) /= 0) then
-    fn_unit = units_out%length**(-gr%sb%dim)
+  if (outp%what(OPTION__OUTPUT__PES_DENSITY)) then
+    fn_unit = units_out%length**(-space%dim)
     do is = 1, st%d%nspin
       if(st%d%nspin == 1) then
         write(fname, '(a)') 'pes_den'
       else
         write(fname, '(a,i1)') 'pes_den-sp', is
       end if
-      call dio_function_output(outp%how, dir, fname, namespace, gr%fine%mesh, &
-        RhoAB(:, is), fn_unit, ierr, geo = geo, grp = st%dom_st_kpt_mpi_grp)
+      call dio_function_output(outp%how(OPTION__OUTPUT__PES_DENSITY), dir, fname, namespace, space, gr%mesh, &
+        RhoAB(:, is), fn_unit, ierr, ions = ions, grp = st%dom_st_kpt_mpi_grp)
     end do
   end if
 
 
-  if(bitand(outp%what, OPTION__OUTPUT__PES_WFS) /= 0) then
-    fn_unit = sqrt(units_out%length**(-gr%sb%dim))
+  if (outp%what(OPTION__OUTPUT__PES_WFS)) then
+    fn_unit = sqrt(units_out%length**(-space%dim))
     do ist = st%st_start, st%st_end
 !        if(loct_isinstringlist(ist, outp%wfs_list)) then
         do ik = st%d%kpt%start, st%d%kpt%end
@@ -528,8 +529,8 @@ subroutine pes_mask_output_states(namespace, st, gr, geo, dir, outp, mask)
               end if
             end if
               
-            call zio_function_output(outp%how, dir, fname, namespace, gr%mesh, &
-              PsiAB(1:, idim, ist, ik), fn_unit, ierr, geo = geo)
+            call zio_function_output(outp%how(OPTION__OUTPUT__PES_WFS), dir, fname, namespace, space, gr%mesh, &
+              PsiAB(1:, idim, ist, ik), fn_unit, ierr, ions = ions)
 
           end do
         end do
@@ -777,14 +778,14 @@ end subroutine pes_mask_interpolator_end
 
 
 ! ---------------------------------------------------------
-subroutine pes_mask_output_full_mapM(pesK, file, namespace, Lk, ll, how, sb, pmesh)
+subroutine pes_mask_output_full_mapM(pesK, file, namespace, space, Lk, ll, how, pmesh)
   FLOAT,             intent(in) :: pesK(:,:,:)
   character(len=*),  intent(in) :: file
   type(namespace_t), intent(in) :: namespace
+  type(space_t),     intent(in) :: space
   FLOAT,             intent(in) :: Lk(:,:)
   integer,           intent(in) :: ll(:)  
   integer,           intent(in) :: how
-  type(simul_box_t), intent(in) :: sb 
   FLOAT, optional,   intent(in) :: pmesh(:,:,:,:)  
   
   integer :: iunit
@@ -797,7 +798,7 @@ subroutine pes_mask_output_full_mapM(pesK, file, namespace, Lk, ll, how, sb, pme
 
   PUSH_SUB(pes_mask_output_full_mapM)
 
-  call cube_init(cube, ll, sb, namespace)
+  call cube_init(cube, ll, namespace, space)
   call dcube_function_alloc_RS(cube, cf, force_alloc = .true.)
   cf%dRS = pesK
   
@@ -805,8 +806,8 @@ subroutine pes_mask_output_full_mapM(pesK, file, namespace, Lk, ll, how, sb, pme
   if (.not. present(pmesh) ) then
     ! Ignore Lk and use pmesh
     dk(:) = M_ZERO
-    dk(1:sb%dim) = abs(Lk(2,1:sb%dim)-Lk(1,1:sb%dim))
-    do ii = 1, sb%dim
+    dk(1:space%dim) = abs(Lk(2,1:space%dim)-Lk(1,1:space%dim))
+    do ii = 1, space%dim
       dk(ii) = units_from_atomic(sqrt(units_out%energy), dk(ii))
     end do
   end if
@@ -818,8 +819,7 @@ subroutine pes_mask_output_full_mapM(pesK, file, namespace, Lk, ll, how, sb, pme
     write(message(1), '(a)') 'Writing netcdf format file: '
     call messages_info(1)
   
-    call dout_cf_netcdf(filename, ierr, cf, cube, sb%dim, dk(:) , & 
-          .false., sqrt(units_out%energy)**sb%dim)
+    call dout_cf_netcdf(filename, ierr, cf, cube, space, dk(:), .false., sqrt(units_out%energy)**space%dim)
 
   end if
 
@@ -832,10 +832,10 @@ subroutine pes_mask_output_full_mapM(pesK, file, namespace, Lk, ll, how, sb, pme
     
     if (present(pmesh)) then          
       call dvtk_out_cf_structured(filename, namespace, 'PES_mapM', ierr, cf, cube,& 
-        sqrt(units_out%energy)**sb%dim, pmesh, ascii = .false.)
+        sqrt(units_out%energy)**space%dim, pmesh, ascii = .false.)
     else 
       call dvtk_out_cf(filename, namespace, 'PES_mapM', ierr, cf, cube, dk(:),& 
-        sqrt(units_out%energy)**sb%dim)
+        sqrt(units_out%energy)**space%dim)
     end if        
       
    else
@@ -1872,7 +1872,7 @@ end subroutine pes_mask_write_power_total
 !! of PES data
 !
 ! ---------------------------------------------------------
-subroutine pes_mask_output(mask, mesh, st, outp, namespace, space, file, gr, geo, iter)
+subroutine pes_mask_output(mask, mesh, st, outp, namespace, space, file, gr, ions, iter)
   type(pes_mask_t),    intent(inout)    :: mask
   type(mesh_t),        intent(in)       :: mesh
   type(states_elec_t), intent(in)       :: st
@@ -1881,7 +1881,7 @@ subroutine pes_mask_output(mask, mesh, st, outp, namespace, space, file, gr, geo
   type(space_t),       intent(in)       :: space
   character(len=*),    intent(in)       :: file
   type(grid_t),        intent(in)       :: gr
-  type(geometry_t),    intent(in)       :: geo
+  type(ions_t),        intent(in)       :: ions
   integer,             intent(in)       :: iter
 
   CMPLX, allocatable :: wfAk(:,:,:,:,:,:), psi(:)
@@ -1901,9 +1901,9 @@ subroutine pes_mask_output(mask, mesh, st, outp, namespace, space, file, gr, geo
  
 
   !Photoelectron wavefunction and density in real space
-  if(bitand(outp%what, OPTION__OUTPUT__PES_WFS) /= 0  .or.  bitand(outp%what, OPTION__OUTPUT__PES_DENSITY) /= 0 ) then
+  if (outp%what(OPTION__OUTPUT__PES_WFS) .or. outp%what(OPTION__OUTPUT__PES_DENSITY)) then
     write(dir, '(a,i7.7)') "td.", iter  ! name of directory
-    call  pes_mask_output_states(namespace, st, gr, geo, dir, outp, mask)
+    call  pes_mask_output_states(namespace, space, st, gr, ions, dir, outp, mask)
   end if
   
   if (space%is_periodic()) then
@@ -1916,7 +1916,7 @@ subroutine pes_mask_output(mask, mesh, st, outp, namespace, space, file, gr, geo
 
   !Write the output in the td.00iter directories
   dir = file 
-  if(bitand(outp%what, OPTION__OUTPUT__PES) /= 0 ) then
+  if (outp%what(OPTION__OUTPUT__PES)) then
     write(dir, '(a,i7.7,a)') "td.", iter,"/PESM"  ! name of directory
   end if
 
@@ -1975,7 +1975,7 @@ subroutine pes_mask_output(mask, mesh, st, outp, namespace, space, file, gr, geo
          
       ! Total power spectrum 
       write(fn, '(a,a)') trim(dir), '_power.sum'
-      call pes_mask_output_power_totalM(pesK,fn, namespace, mask%Lk, mask%ll, mask%mesh%sb%dim, & 
+      call pes_mask_output_power_totalM(pesK,fn, namespace, mask%Lk, mask%ll, space%dim, & 
                                        mask%energyMax, mask%energyStep, .false.)
       end if
 
@@ -1986,7 +1986,7 @@ subroutine pes_mask_output(mask, mesh, st, outp, namespace, space, file, gr, geo
         write(fn, '(a,a)') trim(dir), '_map.pz=0'
       end if
       pol = (/M_ZERO, M_ZERO, M_ONE/)
-      call pes_mask_output_full_mapM_cut(pesK, fn, namespace, mask%ll, mask%mesh%sb%dim, &
+      call pes_mask_output_full_mapM_cut(pesK, fn, namespace, mask%ll, space%dim, &
         pol = pol, dir = 3, integrate = INTEGRATE_NONE, Lk = mask%Lk)
                                      
     end if

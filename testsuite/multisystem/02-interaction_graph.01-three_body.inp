@@ -42,6 +42,7 @@ Sun.ParticleMass = 1.98855e30
  0.0 | 0.0 | 0.0
 %
 
+TDSystemPropagator = verlet
 TDPropagationTime = 1
 
 Debug = interaction_graph

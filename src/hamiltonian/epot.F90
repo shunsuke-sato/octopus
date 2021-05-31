@@ -19,17 +19,17 @@
 #include "global.h"
 
 module epot_oct_m
-  use atom_oct_m
   use comm_oct_m
   use derivatives_oct_m
   use gauge_field_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use ion_interaction_oct_m
+  use ions_oct_m
   use kick_oct_m
   use kpoints_oct_m
   use lalg_basic_oct_m
+  use lattice_vectors_oct_m
   use mesh_oct_m
   use messages_oct_m
   use mpi_oct_m
@@ -127,11 +127,12 @@ module epot_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine epot_init(ep, namespace, gr, geo, psolver, ispin, xc_family, mc, kpoints)
+  subroutine epot_init(ep, namespace, space, gr, ions, psolver, ispin, xc_family, mc, kpoints)
     type(epot_t),                       intent(out)   :: ep
     type(namespace_t),                  intent(in)    :: namespace
+    type(space_t),                      intent(in)    :: space
     type(grid_t),                       intent(in)    :: gr
-    type(geometry_t),                   intent(inout) :: geo
+    type(ions_t),                       intent(inout) :: ions
     type(poisson_t),  target,           intent(in)    :: psolver
     integer,                            intent(in)    :: ispin
     integer,                            intent(in)    :: xc_family
@@ -169,8 +170,8 @@ contains
       call messages_not_implemented("FilterPotentials different from filter_none with MGGA", namespace=namespace)
 
     if(filter == PS_FILTER_TS) call spline_filter_mask_init()
-    do ispec = 1, geo%nspecies
-      call species_pot_init(geo%species(ispec), namespace, mesh_gcutoff(gr%mesh), filter)
+    do ispec = 1, ions%nspecies
+      call species_pot_init(ions%species(ispec), namespace, mesh_gcutoff(gr%mesh), filter)
     end do
 
     SAFE_ALLOCATE(ep%vpsl(1:gr%mesh%np))
@@ -178,9 +179,9 @@ contains
     ep%vpsl(1:gr%mesh%np) = M_ZERO
 
     ep%classical_pot = 0
-    if(geo%ncatoms > 0) then
+    if(ions%ncatoms > 0) then
 
-      if (geo%space%is_periodic()) then
+      if (ions%space%is_periodic()) then
         call messages_not_implemented("classical atoms in periodic systems", namespace=namespace)
       end if
 
@@ -212,11 +213,11 @@ contains
         call messages_info(1)
 
         SAFE_ALLOCATE(ep%Vclassical(1:gr%mesh%np))
-        call epot_generate_classical(ep, gr%mesh, geo)
+        call epot_generate_classical(ep, gr%mesh, ions)
       end if
     end if
 
-    call kick_init(ep%kick, namespace, gr%sb, kpoints, ispin)
+    call kick_init(ep%kick, namespace, space, kpoints, ispin)
 
     ! No more "UserDefinedTDPotential" from this version on.
     call messages_obsolete_variable(namespace, 'UserDefinedTDPotential', 'TDExternalFields')
@@ -276,16 +277,16 @@ contains
       ep%so_strength = M_ONE
     end if
 
-    SAFE_ALLOCATE(ep%proj(1:geo%natoms))
+    SAFE_ALLOCATE(ep%proj(1:ions%natoms))
 
-    ep%natoms = geo%natoms
+    ep%natoms = ions%natoms
     ep%non_local = .false.
 
     ep%eii = M_ZERO
-    SAFE_ALLOCATE(ep%fii(1:gr%sb%dim, 1:geo%natoms))
+    SAFE_ALLOCATE(ep%fii(1:ions%space%dim, 1:ions%natoms))
     ep%fii = M_ZERO
 
-    SAFE_ALLOCATE(ep%vdw_forces(1:geo%space%dim, 1:geo%natoms))
+    SAFE_ALLOCATE(ep%vdw_forces(1:ions%space%dim, 1:ions%natoms))
     ep%vdw_forces = M_ZERO
 
     SAFE_ALLOCATE(ep%photon_forces(1:gr%sb%dim))
@@ -295,8 +296,8 @@ contains
     
 
     ep%have_density = .false.
-    do ia = 1, geo%natoms
-      if (local_potential_has_density(geo%space, geo%atom(ia))) then
+    do ia = 1, ions%nspecies
+      if (local_potential_has_density(ions%space, ions%species(ia))) then
         ep%have_density = .true.
         exit
       end if
@@ -310,8 +311,8 @@ contains
 
     ! find out if we need non-local core corrections
     ep%nlcc = .false.
-    do ia = 1, geo%nspecies
-      ep%nlcc = (ep%nlcc.or.species_has_nlcc(geo%species(ia)))
+    do ia = 1, ions%nspecies
+      ep%nlcc = (ep%nlcc.or.species_has_nlcc(ions%species(ia)))
     end do
 
     POP_SUB(epot_init)
@@ -364,56 +365,51 @@ contains
   end subroutine epot_end
 
   ! ---------------------------------------------------------
-  subroutine epot_generate(ep, namespace, gr, geo, st_d)
+  subroutine epot_generate(ep, namespace, mesh, ions, st_d)
     type(epot_t),             intent(inout) :: ep
     type(namespace_t),        intent(in)    :: namespace
-    type(grid_t),     target, intent(in)    :: gr
-    type(geometry_t), target, intent(inout) :: geo
+    type(mesh_t),     target, intent(in)    :: mesh
+    type(ions_t),     target, intent(inout) :: ions
     type(states_elec_dim_t),  intent(inout) :: st_d
 
     integer :: ia
-    type(mesh_t),      pointer :: mesh
-    type(simul_box_t), pointer :: sb
     type(profile_t), save :: epot_generate_prof
     type(ps_t), pointer :: ps
     
     call profiling_in(epot_generate_prof, "EPOT_GENERATE")
     PUSH_SUB(epot_generate)
 
-    sb   => gr%sb
-    mesh => gr%mesh
-
     ! Local part
     ep%vpsl = M_ZERO
 
     ! we assume that we need to recalculate the ion-ion energy
-    call ion_interaction_calculate(geo%ion_interaction, geo%space, geo%latt, geo%atom, geo%natoms, geo%catom, geo%ncatoms, &
-      sb%lsize, ep%eii, ep%fii)
+    call ion_interaction_calculate(ions%ion_interaction, ions%space, ions%latt, ions%atom, ions%natoms, ions%pos, &
+      ions%catom, ions%ncatoms, mesh%sb%lsize, ep%eii, ep%fii)
 
     ! the pseudopotential part.
-    do ia = 1, geo%natoms
-      if (.not. species_is_ps(geo%atom(ia)%species)) cycle
+    do ia = 1, ions%natoms
+      if (.not. species_is_ps(ions%atom(ia)%species)) cycle
       call projector_end(ep%proj(ia))
-      call projector_init(ep%proj(ia), geo%atom(ia), namespace, st_d%dim, ep%reltype)
+      call projector_init(ep%proj(ia), ions%atom(ia), namespace, st_d%dim, ep%reltype)
     end do
 
-    do ia = geo%atoms_dist%start, geo%atoms_dist%end
+    do ia = ions%atoms_dist%start, ions%atoms_dist%end
       if(ep%proj(ia)%type == PROJ_NONE) cycle
-      ps => species_ps(geo%atom(ia)%species)
-      call submesh_init(ep%proj(ia)%sphere, geo%space, mesh%sb, mesh, geo%atom(ia)%x, ps%rc_max + mesh%spacing(1))
+      ps => species_ps(ions%atom(ia)%species)
+      call submesh_init(ep%proj(ia)%sphere, ions%space, mesh, ions%latt, ions%pos(:, ia), ps%rc_max + mesh%spacing(1))
     end do
 
-    if(geo%atoms_dist%parallel) then
-      do ia = 1, geo%natoms
+    if(ions%atoms_dist%parallel) then
+      do ia = 1, ions%natoms
         if(ep%proj(ia)%type == PROJ_NONE) cycle
-        ps => species_ps(geo%atom(ia)%species)
-        call submesh_broadcast(ep%proj(ia)%sphere, mesh, geo%atom(ia)%x, ps%rc_max + mesh%spacing(1), &
-          geo%atoms_dist%node(ia), geo%atoms_dist%mpi_grp)
+        ps => species_ps(ions%atom(ia)%species)
+        call submesh_broadcast(ep%proj(ia)%sphere, ions%space, mesh, ions%pos(:, ia), ps%rc_max + mesh%spacing(1), &
+          ions%atoms_dist%node(ia), ions%atoms_dist%mpi_grp)
       end do
     end if
     
-    do ia = 1, geo%natoms
-      call projector_build(ep%proj(ia), geo%atom(ia), ep%so_strength)
+    do ia = 1, ions%natoms
+      call projector_build(ep%proj(ia), ions%atom(ia), ep%so_strength)
       if(.not. projector_is(ep%proj(ia), PROJ_NONE)) ep%non_local = .true.
     end do
 
@@ -423,26 +419,28 @@ contains
 
   ! ---------------------------------------------------------
 
-  logical pure function local_potential_has_density(space, atom) result(has_density)
+  logical pure function local_potential_has_density(space, species) result(has_density)
     type(space_t),        intent(in)    :: space
-    type(atom_t),         intent(in)    :: atom
+    type(species_t),         intent(in)    :: species
     
-    has_density = species_has_density(atom%species) .or. (species_is_ps(atom%species) .and. space%is_periodic())
+    has_density = species_has_density(species) .or. (species_is_ps(species) .and. space%is_periodic())
 
   end function local_potential_has_density
   
   ! ---------------------------------------------------------
-  subroutine epot_local_potential(ep, namespace, space, mesh, atom, iatom, vpsl)
+  subroutine epot_local_potential(ep, namespace, space, latt, mesh, species, pos, iatom, vpsl)
     type(epot_t),             intent(in)    :: ep
     type(namespace_t),        intent(in)    :: namespace
     type(space_t),            intent(in)    :: space
+    type(lattice_vectors_t),  intent(in)    :: latt
     type(mesh_t),             intent(in)    :: mesh
-    type(atom_t),             intent(in)    :: atom
+    type(species_t),          intent(in)    :: species
+    FLOAT,                    intent(in)    :: pos(1:space%dim)
     integer,                  intent(in)    :: iatom
     FLOAT,                    intent(inout) :: vpsl(:)
 
     integer :: ip
-    FLOAT :: radius, r
+    FLOAT :: radius
     FLOAT, allocatable :: vl(:), rho(:)
     type(submesh_t)  :: sphere
     type(profile_t), save :: prof
@@ -462,10 +460,10 @@ contains
       !(for all-electron species or pseudopotentials in periodic
       !systems) or by applying it directly to the grid
 
-      if(local_potential_has_density(space, atom)) then
+      if(local_potential_has_density(space, species)) then
         SAFE_ALLOCATE(rho(1:mesh%np))
 
-        call species_get_long_range_density(atom%species, space, namespace, atom%x, mesh, rho)
+        call species_get_long_range_density(species, namespace, space, latt, pos, mesh, rho)
 
         SAFE_ALLOCATE(vl(1:mesh%np))
           
@@ -482,7 +480,7 @@ contains
       else
 
         SAFE_ALLOCATE(vl(1:mesh%np))
-        call species_get_local(atom%species, space, mesh, namespace, atom%x(1:mesh%sb%dim), vl)
+        call species_get_local(species, namespace, space, latt, pos, mesh, vl)
 
       end if
 
@@ -492,18 +490,17 @@ contains
       end if
 
       !the localized part
-      if(species_is_ps(atom%species)) then
+      if(species_is_ps(species)) then
 
-        ps => species_ps(atom%species)
+        ps => species_ps(species)
 
         radius = spline_cutoff_radius(ps%vl, ps%projectors_sphere_threshold) + mesh%spacing(1)
 
-        call submesh_init(sphere, space, mesh%sb, mesh, atom%x, radius)
+        call submesh_init(sphere, space, mesh, latt, pos, radius)
         SAFE_ALLOCATE(vl(1:sphere%np))
 
         do ip = 1, sphere%np
-          r = sphere%x(ip, 0)
-          vl(ip) = spline_eval(ps%vl, r)
+          vl(ip) = spline_eval(ps%vl, sphere%r(ip))
         end do
 
         call submesh_add_to_mesh(sphere, vl, vpsl)
@@ -522,10 +519,10 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine epot_generate_classical(ep, mesh, geo)
+  subroutine epot_generate_classical(ep, mesh, ions)
     type(epot_t),     intent(inout) :: ep
     type(mesh_t),     intent(in)    :: mesh
-    type(geometry_t), intent(in)    :: geo
+    type(ions_t),     intent(in)    :: ions
 
     integer ip, ia
     FLOAT :: rr, rc
@@ -533,15 +530,15 @@ contains
     PUSH_SUB(epot_generate_classical)
 
     ep%Vclassical = M_ZERO
-    do ia = 1, geo%ncatoms
+    do ia = 1, ions%ncatoms
       do ip = 1, mesh%np
-        call mesh_r(mesh, ip, rr, origin=geo%catom(ia)%x)
+        call mesh_r(mesh, ip, rr, origin=ions%catom(ia)%x)
         select case(ep%classical_pot)
         case(CLASSICAL_POINT)
           if(rr < R_SMALL) rr = R_SMALL
-          ep%Vclassical(ip) = ep%Vclassical(ip) - geo%catom(ia)%charge/rr
+          ep%Vclassical(ip) = ep%Vclassical(ip) - ions%catom(ia)%charge/rr
         case(CLASSICAL_GAUSSIAN)
-          select case(geo%catom(ia)%label(1:1)) ! covalent radii
+          select case(ions%catom(ia)%label(1:1)) ! covalent radii
           case('H')
             rc = CNST(0.4) * P_Ang
           case('C')
@@ -550,7 +547,7 @@ contains
             rc = CNST(0.7) * P_Ang
           end select
           if(abs(rr - rc) < R_SMALL) rr = rc + sign(R_SMALL, rr - rc)
-          ep%Vclassical(ip) = ep%Vclassical(ip) - geo%catom(ia)%charge * (rr**4 - rc**4) / (rr**5 - rc**5)
+          ep%Vclassical(ip) = ep%Vclassical(ip) - ions%catom(ia)%charge * (rr**4 - rc**4) / (rr**5 - rc**5)
         case default
           message(1) = 'Unknown type of classical potential in epot_generate_classical'
           call messages_fatal(1)
@@ -562,26 +559,26 @@ contains
   end subroutine epot_generate_classical
 
   ! ---------------------------------------------------------
-  subroutine epot_precalc_local_potential(ep, namespace, gr, geo)
+  subroutine epot_precalc_local_potential(ep, namespace, gr, ions)
     type(epot_t),      intent(inout) :: ep
     type(namespace_t), intent(in)    :: namespace
     type(grid_t),      intent(in)    :: gr
-    type(geometry_t),  intent(in)    :: geo
+    type(ions_t),      intent(in)    :: ions
 
     integer :: iatom
     
     PUSH_SUB(epot_precalc_local_potential)
     
     if(.not. allocated(ep%local_potential)) then
-      SAFE_ALLOCATE(ep%local_potential(1:gr%mesh%np, 1:geo%natoms))
+      SAFE_ALLOCATE(ep%local_potential(1:gr%mesh%np, 1:ions%natoms))
     end if
 
     ep%local_potential_precalculated = .false.
 
-    do iatom = 1, geo%natoms
+    do iatom = 1, ions%natoms
       ep%local_potential(1:gr%mesh%np, iatom) = M_ZERO 
-      call epot_local_potential(ep, namespace, geo%space, gr%mesh, geo%atom(iatom), iatom, &
-                ep%local_potential(1:gr%mesh%np, iatom))!, time)
+      call epot_local_potential(ep, namespace, ions%space, ions%latt, gr%mesh, ions%atom(iatom)%species, &
+        ions%pos(:, iatom), iatom, ep%local_potential(1:gr%mesh%np, iatom))!, time)
     end do
     ep%local_potential_precalculated = .true.
 

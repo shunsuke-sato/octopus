@@ -34,7 +34,7 @@ module propagator_oct_m
   public ::                       &
     propagator_t
 
-  type, extends(algorithm_t) :: propagator_t
+  type, extends(algorithm_t), abstract :: propagator_t
     private
 
     type(algorithm_iterator_t) :: iter
@@ -81,47 +81,22 @@ module propagator_oct_m
   type(algorithmic_operation_t), public, parameter :: &
     OP_SKIP                 = algorithmic_operation_t(SKIP, 'Skipping propagation step'), &
     OP_FINISHED             = algorithmic_operation_t(FINISHED,             'Propagation step finished'), &
-    OP_UPDATE_INTERACTIONS  = algorithmic_operation_t(UPDATE_INTERACTIONS,  'Updating interactions'),     &
+    OP_UPDATE_INTERACTIONS  = algorithmic_operation_t(UPDATE_INTERACTIONS,  'Propagation step - Updating interactions'),     &
     OP_START_SCF_LOOP       = algorithmic_operation_t(START_SCF_LOOP,       'Starting SCF loop'),         &
     OP_END_SCF_LOOP         = algorithmic_operation_t(END_SCF_LOOP,         'End of SCF iteration'),      &
-    OP_STORE_CURRENT_STATUS = algorithmic_operation_t(STORE_CURRENT_STATUS, '')
+    OP_STORE_CURRENT_STATUS = algorithmic_operation_t(STORE_CURRENT_STATUS, 'Store current status')
 
 
   ! Known multisystem propagators
   integer, public, parameter ::        &
+    PROP_STATIC                  = 0,  &
     PROP_VERLET                  = 1,  &
     PROP_BEEMAN                  = 2,  &
     PROP_BEEMAN_SCF              = 3,  &
     PROP_EXPMID                  = 4,  &
     PROP_EXPMID_SCF              = 5
 
-  interface propagator_t
-    procedure propagator_constructor
-  end interface propagator_t
-
 contains
-
-  ! ---------------------------------------------------------
-  function propagator_constructor(dt) result(this)
-    FLOAT,              intent(in) :: dt
-    type(propagator_t), pointer    :: this
-
-    PUSH_SUB(propagator_constructor)
-
-    SAFE_ALLOCATE(this)
-
-    this%start_step = OP_SKIP
-    this%final_step = OP_SKIP
-
-    call this%add_operation(OP_UPDATE_INTERACTIONS)
-    call this%add_operation(OP_FINISHED)
-
-    this%algo_steps = 1
-
-    this%dt = dt
-
-    POP_SUB(propagator_constructor)
-  end function propagator_constructor
 
   ! ---------------------------------------------------------
   subroutine propagator_rewind(this)

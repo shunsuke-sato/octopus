@@ -47,7 +47,7 @@ else
   match ;  Exchange energy     ; GREPFIELD(static/info, 'Exchange    =', 3) ; -194.95878258
   Precision: 2.e-06
   match ;  Correlation energy  ; GREPFIELD(static/info, 'Correlation =', 3) ; -27.294241585
-  Precision: 1.5e-04
+  Precision: 2.0e-04
   match ;  Kinetic energy      ; GREPFIELD(static/info, 'Kinetic     =', 3) ; 386.905041055
   Precision: 3.e-04
   match ;  External energy     ; GREPFIELD(static/info, 'External    =', 3) ; -543.671482215

@@ -34,7 +34,10 @@ DFTUDoubleCounting = dft_u_amf
 SCFCalculateForces = no
 AOLoewdin = yes
 UseAllAtomicOrbitals = yes
-OutputLDA_U = occ_matrices + effectiveU
+%Output
+  occ_matrices
+  effectiveU
+%
 AOThreshold = 0.1
 MaximumIter = 1
 
@@ -43,3 +46,5 @@ ACBN0IntersiteCutoff = 7
 StatesPack = yes
 
 LCAOStart = lcao_full
+
+DFTUPoissonSolver = dft_u_poisson_direct

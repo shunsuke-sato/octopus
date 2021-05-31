@@ -25,11 +25,12 @@ module nlcc_oct_m
   use density_interaction_oct_m
   use distributed_oct_m
   use epot_oct_m
-  use geometry_oct_m
   use global_oct_m
   use interaction_with_partner_oct_m
   use interaction_partner_oct_m
+  use ions_oct_m
   use lalg_basic_oct_m
+  use lattice_vectors_oct_m
   use mesh_oct_m
   use messages_oct_m
   use namespace_oct_m
@@ -59,6 +60,8 @@ module nlcc_oct_m
     ! This is a temporary change here
     type(distributed_t), pointer, public :: atoms_dist
     type(atom_t), pointer, public :: atom(:)
+    FLOAT, pointer, public :: pos(:,:)
+    type(lattice_vectors_t), pointer :: latt
 
   contains
     procedure :: init => nlcc_init
@@ -95,10 +98,10 @@ contains
   end function nlcc_constructor
 
   ! ---------------------------------------------------------
-  subroutine nlcc_init(this, mesh, geo)
+  subroutine nlcc_init(this, mesh, ions)
     class(nlcc_t),         intent(inout) :: this
     type(mesh_t),     target, intent(in) :: mesh
-    type(geometry_t), target, intent(in) :: geo
+    type(ions_t),     target, intent(in) :: ions
 
 
     PUSH_SUB(nlcc_init)
@@ -107,9 +110,11 @@ contains
 
     SAFE_ALLOCATE(this%density(1:mesh%np,1:1))
 
-    this%atoms_dist => geo%atoms_dist
-    this%atom => geo%atom
-    this%space => geo%space
+    this%atoms_dist => ions%atoms_dist
+    this%atom => ions%atom
+    this%space => ions%space
+    this%pos => ions%pos
+    this%latt => ions%latt
 
     POP_SUB(nlcc_init)
   end subroutine nlcc_init
@@ -129,7 +134,7 @@ contains
 
     do ia = this%atoms_dist%start, this%atoms_dist%end
       if(species_has_nlcc(this%atom(ia)%species) .and. species_is_ps(this%atom(ia)%species)) then
-        call species_get_nlcc(this%atom(ia)%species, this%space, this%atom(ia)%x, this%mesh, &
+        call species_get_nlcc(this%atom(ia)%species, this%space, this%latt, this%pos(:, ia), this%mesh, &
               this%density(:,1), accumulate=.true.)
       endif
     end do

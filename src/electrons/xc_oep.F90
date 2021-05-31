@@ -42,7 +42,6 @@ module xc_oep_oct_m
   use photon_mode_oct_m
   use poisson_oct_m
   use profiling_oct_m
-  use simul_box_oct_m
   use space_oct_m
   use states_abst_oct_m
   use states_elec_oct_m
@@ -234,7 +233,7 @@ contains
       if ((st%d%ispin==3) .or. oep%level == XC_OEP_FULL) then
         SAFE_ALLOCATE(oep%vxc(1:gr%mesh%np,st%d%nspin))
       else
-        SAFE_ALLOCATE(oep%vxc(1:gr%mesh%np,1:1))
+        SAFE_ALLOCATE(oep%vxc(1:gr%mesh%np,1:min(st%d%nspin, 2)))
       end if
       oep%vxc = M_ZERO
 

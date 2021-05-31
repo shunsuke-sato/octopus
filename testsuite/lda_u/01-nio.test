@@ -33,8 +33,9 @@ else
   Precision: 2.e-06
   match ;  Fermi energy        ; GREPFIELD(static/info, 'Fermi energy =', 4) ; 0.417533
 
-  Precision: 2.42e-05
+  Precision: 4.e-05
   match ;  Total Magnetic Moment  ; GREPFIELD(static/info, 'mz = ', 3) ; 2.8000000000000003e-05
+  Precision: 2.42e-05
   match ;  Local Magnetic Moment (Ni1)  ; GREPFIELD(static/info, '1        Ni', 3) ; 3.3432155
   match ;  Local Magnetic Moment (Ni2)  ; GREPFIELD(static/info, '2        Ni', 3) ; -3.3432165
   match ;  Local Magnetic Moment (O1)  ; GREPFIELD(static/info, '3         O', 3) ; 2e-06
@@ -52,8 +53,8 @@ else
 
   Precision: 2.e-06
   match ;  Occupation Ni2 down 3d4  ; LINEFIELD(static/occ_matrices, -2, 7) ; 0.871377465
-  match ;  Occupation Ni2 down 3d5  ; LINEFIELD(static/occ_matrices, -1, 9) ; 0.8864645099999999
-
+  Precision: 2.29e-06
+  match ;  Occupation Ni2 down 3d5  ; LINEFIELD(static/occ_matrices, -1, 9) ; 0.88646451
 endif
 
 Input      : 01-nio.02-unocc.inp

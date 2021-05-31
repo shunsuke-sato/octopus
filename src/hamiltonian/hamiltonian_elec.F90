@@ -21,7 +21,6 @@
 
 module hamiltonian_elec_oct_m
   use accel_oct_m
-  use atom_oct_m
   use batch_oct_m
   use batch_ops_oct_m
   use boundaries_oct_m
@@ -34,17 +33,18 @@ module hamiltonian_elec_oct_m
   use hamiltonian_elec_base_oct_m
   use epot_oct_m
   use gauge_field_oct_m
-  use geometry_oct_m
   use global_oct_m
   use grid_oct_m
   use hamiltonian_abst_oct_m
   use interaction_oct_m
   use interaction_partner_oct_m
   use ion_electron_local_potential_oct_m
+  use ions_oct_m
   use kick_oct_m
   use kpoints_oct_m
   use lalg_basic_oct_m
   use lasers_oct_m
+  use lattice_vectors_oct_m
   use lda_u_oct_m
   use linked_list_oct_m
   use mesh_oct_m
@@ -65,6 +65,7 @@ module hamiltonian_elec_oct_m
   use scissor_oct_m
   use simul_box_oct_m
   use space_oct_m
+  use species_oct_m
   use states_abst_oct_m
   use states_elec_oct_m
   use states_elec_dim_oct_m
@@ -131,11 +132,10 @@ module hamiltonian_elec_oct_m
 
     type(derivatives_t), pointer, private :: der !< pointer to derivatives
     
-    type(geometry_t), pointer :: geo
+    type(ions_t),     pointer :: ions
     FLOAT :: exx_coef !< how much of EXX to mix
 
     type(poisson_t)          :: psolver      !< Poisson solver
-    type(poisson_t), pointer :: psolver_fine !< Poisson solver on the fine grid
 
     !> The self-induced vector potential and magnetic field
     logical :: self_induced_magnetic
@@ -216,12 +216,12 @@ module hamiltonian_elec_oct_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine hamiltonian_elec_init(hm, namespace, space, gr, geo, st, theory_level, xc, mc, kpoints, need_exchange)
+  subroutine hamiltonian_elec_init(hm, namespace, space, gr, ions, st, theory_level, xc, mc, kpoints, need_exchange)
     type(hamiltonian_elec_t),           target, intent(inout) :: hm
     type(namespace_t),                          intent(in)    :: namespace
     type(space_t),                              intent(in)    :: space
     type(grid_t),                       target, intent(inout) :: gr
-    type(geometry_t),                   target, intent(inout) :: geo
+    type(ions_t),                       target, intent(inout) :: ions
     type(states_elec_t),                target, intent(inout) :: st
     integer,                                    intent(in)    :: theory_level
     type(xc_t),                         target, intent(in)    :: xc
@@ -272,7 +272,7 @@ contains
     !%End
     call parse_variable(namespace, 'RashbaSpinOrbitCoupling', M_ZERO, rashba_coupling, units_inp%energy*units_inp%length)
     if(parse_is_defined(namespace, 'RashbaSpinOrbitCoupling')) then
-      if(gr%sb%dim .ne. 2) then
+      if (space%dim /= 2) then
         write(message(1),'(a)') 'Rashba spin-orbit coupling can only be used for two-dimensional systems.'
         call messages_fatal(1, namespace=namespace)
       end if
@@ -288,7 +288,7 @@ contains
 
     !Keep pointers to derivatives, geometry and xc
     hm%der => gr%der
-    hm%geo => geo
+    hm%ions => ions
     hm%xc => xc
 
     ! allocate potentials and density of the cores
@@ -317,26 +317,17 @@ contains
 
     if(poisson_is_multigrid(hm%psolver)) then
       SAFE_ALLOCATE(hm%psolver%mgrid)
-      call multigrid_init(hm%psolver%mgrid, namespace, space, gr%cv, gr%mesh, gr%der, gr%stencil, mc)
+      call multigrid_init(hm%psolver%mgrid, namespace, space, gr%mesh, gr%der, gr%stencil, mc)
     end if
 
-
-    nullify(hm%psolver_fine)
-    if (gr%have_fine_mesh) then
-      SAFE_ALLOCATE(hm%psolver_fine)
-      call poisson_init(hm%psolver_fine, namespace, space, gr%fine%der, mc, st%qtot, label = " (fine mesh)")
-    else
-      hm%psolver_fine => hm%psolver
-    end if
-  
     ! Initialize external potential
-    call epot_init(hm%ep, namespace, gr, hm%geo, hm%psolver, hm%d%ispin, hm%xc%family, mc, hm%kpoints)
+    call epot_init(hm%ep, namespace, space, gr, hm%ions, hm%psolver, hm%d%ispin, hm%xc%family, mc, hm%kpoints)
 
     !Temporary construction of the ion-electron interactions
-    call hm%v_ie_loc%init(gr%mesh, hm%psolver, hm%geo, namespace)
+    call hm%v_ie_loc%init(gr%mesh, hm%psolver, hm%ions, namespace)
     if(hm%ep%nlcc) then
-      call hm%nlcc%init(gr%mesh, hm%geo)
-      SAFE_ALLOCATE(st%rho_core(1:gr%fine%mesh%np))
+      call hm%nlcc%init(gr%mesh, hm%ions)
+      SAFE_ALLOCATE(st%rho_core(1:gr%mesh%np))
       st%rho_core(:) = M_ZERO
     end if
 
@@ -378,14 +369,14 @@ contains
     !%End
     call parse_variable(namespace, 'CalculateSelfInducedMagneticField', .false., hm%self_induced_magnetic)
     if(hm%self_induced_magnetic) then
-      SAFE_ALLOCATE(hm%a_ind(1:gr%mesh%np_part, 1:gr%sb%dim))
-      SAFE_ALLOCATE(hm%b_ind(1:gr%mesh%np_part, 1:gr%sb%dim))
+      SAFE_ALLOCATE(hm%a_ind(1:gr%mesh%np_part, 1:space%dim))
+      SAFE_ALLOCATE(hm%b_ind(1:gr%mesh%np_part, 1:space%dim))
 
       !(for dim = we could save some memory, but it is better to keep it simple)
     end if
 
     ! Boundaries
-    call bc_init(hm%bc, namespace, gr%mesh, gr%sb, hm%geo)
+    call bc_init(hm%bc, namespace, space, gr%mesh, gr%sb%box)
 
     !%Variable MassScaling
     !%Type block
@@ -403,10 +394,10 @@ contains
     !% in this case an electron and 2 protons.
     !%
     !%End
-    hm%mass_scaling(1:gr%sb%dim) = M_ONE
+    hm%mass_scaling(1:space%dim) = M_ONE
     if(parse_block(namespace, 'MassScaling', blk) == 0) then
       ncols = parse_block_cols(blk, 0)
-      if(ncols > gr%sb%dim) then
+      if(ncols > space%dim) then
         call messages_input_error(namespace, "MassScaling")
       end if
       iline = 1 ! just deal with 1 line - should be generalized
@@ -441,7 +432,7 @@ contains
     call messages_print_var_option(stdout,  'DFTULevel', hm%lda_u_level)
     if(hm%lda_u_level /= DFT_U_NONE) then
       call messages_experimental('DFT+U')
-      call lda_u_init(hm%lda_u, namespace, space, hm%lda_u_level, gr, geo, st, hm%psolver, hm%kpoints)
+      call lda_u_init(hm%lda_u, namespace, space, hm%lda_u_level, gr, ions, st, hm%psolver, hm%kpoints)
 
       !In the present implementation of DFT+U, in case of spinors, we have off-diagonal terms
       !in spin space which break the assumption of the generalized Bloch theorem
@@ -509,14 +500,12 @@ contains
          .or. bitand(hm%xc%family, XC_FAMILY_OEP) /= 0) then
       !We test Slater before OEP, as Slater is treated as OEP for the moment....
       if(hm%xc%functional(FUNC_X,1)%id == XC_OEP_X_SLATER) then 
-        call exchange_operator_init(hm%exxop, namespace, space, st, gr%sb%latt, gr%der, mc, hm%kpoints, &
-                 M_ZERO, M_ONE, M_ZERO)
+        call exchange_operator_init(hm%exxop, namespace, space, st, gr%der, mc, hm%kpoints, M_ZERO, M_ONE, M_ZERO)
       else if(bitand(hm%xc%family, XC_FAMILY_OEP) /= 0 .or. hm%theory_level == RDMFT) then
-        call exchange_operator_init(hm%exxop, namespace, space, st, gr%sb%latt, gr%der, mc, hm%kpoints, &
-                 hm%xc%cam_omega, hm%xc%cam_alpha, hm%xc%cam_beta)
+        call exchange_operator_init(hm%exxop, namespace, space, st, gr%der, mc, hm%kpoints, hm%xc%cam_omega, hm%xc%cam_alpha, &
+          hm%xc%cam_beta)
       else
-        call exchange_operator_init(hm%exxop, namespace, space, st, gr%sb%latt, gr%der, mc, hm%kpoints, &
-                                     M_ONE, M_ZERO, M_ZERO)
+        call exchange_operator_init(hm%exxop, namespace, space, st, gr%der, mc, hm%kpoints, M_ONE, M_ZERO, M_ZERO)
       end if
     end if
 
@@ -588,7 +577,7 @@ contains
     ! ---------------------------------------------------------
     subroutine init_phase
       integer :: ip, ik, sp, ip_inner_global
-      FLOAT   :: kpoint(1:MAX_DIM), x_global(1:gr%sb%dim)
+      FLOAT   :: kpoint(1:MAX_DIM), x_global(1:space%dim)
       
 
       PUSH_SUB(hamiltonian_elec_init.init_phase)
@@ -613,9 +602,9 @@ contains
           ip_inner_global = mesh_periodic_point(gr%mesh, space, ip)
           x_global = mesh_x_global(gr%mesh, ip_inner_global)
           hm%hm_base%phase_spiral(ip-sp, 1) = &
-            exp(M_zI * sum((gr%mesh%x(ip, 1:gr%sb%dim)-x_global(1:gr%sb%dim)) * gr%der%boundaries%spiral_q(1:gr%sb%dim)))
+            exp(M_zI * sum((gr%mesh%x(ip, 1:space%dim)-x_global(1:space%dim)) * gr%der%boundaries%spiral_q(1:space%dim)))
           hm%hm_base%phase_spiral(ip-sp, 2) = &
-            exp(-M_zI * sum((gr%mesh%x(ip, 1:gr%sb%dim)-x_global(1:gr%sb%dim)) * gr%der%boundaries%spiral_q(1:gr%sb%dim)))
+            exp(-M_zI * sum((gr%mesh%x(ip, 1:space%dim)-x_global(1:space%dim)) * gr%der%boundaries%spiral_q(1:space%dim)))
         end do
 
         if(accel_is_enabled()) then
@@ -625,11 +614,11 @@ contains
       end if
 
 
-      kpoint(1:gr%sb%dim) = M_ZERO
+      kpoint(1:space%dim) = M_ZERO
       do ik = hm%d%kpt%start, hm%d%kpt%end
-        kpoint(1:gr%sb%dim) = hm%kpoints%get_point(hm%d%get_kpoint_index(ik))
+        kpoint(1:space%dim) = hm%kpoints%get_point(hm%d%get_kpoint_index(ik))
         do ip = 1, gr%mesh%np_part
-          hm%hm_base%phase(ip, ik) = exp(-M_zI * sum(gr%mesh%x(ip, 1:gr%sb%dim) * kpoint(1:gr%sb%dim)))
+          hm%hm_base%phase(ip, ik) = exp(-M_zI * sum(gr%mesh%x(ip, 1:space%dim) * kpoint(1:space%dim)))
         end do
 
         ! loop over boundary points
@@ -642,7 +631,7 @@ contains
           ! compute phase correction from global coordinate (opposite sign!)
           x_global = mesh_x_global(gr%mesh, ip_inner_global)
           hm%hm_base%phase_corr(ip, ik) = hm%hm_base%phase(ip, ik)* &
-            exp(M_zI * sum(x_global(1:gr%sb%dim) * kpoint(1:gr%sb%dim)))
+            exp(M_zI * sum(x_global(1:space%dim) * kpoint(1:space%dim)))
         end do
       end do
 
@@ -654,8 +643,7 @@ contains
 
       ! We rebuild the phase for the orbital projection, similarly to the one of the pseudopotentials
       if(hm%lda_u_level /= DFT_U_NONE) then
-        call lda_u_build_phase_correction(hm%lda_u, gr%sb%dim, gr%sb%periodic_dim, &
-                hm%d, gr%der%boundaries, namespace, hm%kpoints)
+        call lda_u_build_phase_correction(hm%lda_u, space, hm%d, gr%der%boundaries, namespace, hm%kpoints)
       end if
 
       POP_SUB(hamiltonian_elec_init.init_phase)
@@ -687,23 +675,23 @@ contains
 
           case(EXTERNAL_POT_STATIC_BFIELD)
             if (.not. allocated(hm%ep%B_field)) then
-              SAFE_ALLOCATE(hm%ep%B_field(1:3)) !Cannot be gr%sb%dim
+              SAFE_ALLOCATE(hm%ep%B_field(1:3)) !Cannot be space%dim
               hm%ep%B_field(1:3) = M_ZERO
             end if
             hm%ep%B_field(1:3) = hm%ep%B_field(1:3) + potential%B_field(1:3)
             
             if (.not. allocated(hm%ep%A_static)) then
-              SAFE_ALLOCATE(hm%ep%A_static(1:gr%mesh%np, 1:gr%sb%dim))
-              hm%ep%A_static(1:gr%mesh%np, 1:gr%sb%dim) = M_ZERO
+              SAFE_ALLOCATE(hm%ep%A_static(1:gr%mesh%np, 1:space%dim))
+              hm%ep%A_static(1:gr%mesh%np, 1:space%dim) = M_ZERO
             end if
-            call lalg_axpy(gr%mesh%np, gr%sb%dim, M_ONE, potential%A_static, hm%ep%A_static)
+            call lalg_axpy(gr%mesh%np, space%dim, M_ONE, potential%A_static, hm%ep%A_static)
 
           case(EXTERNAL_POT_STATIC_EFIELD)
             if (.not. allocated(hm%ep%E_field)) then
-              SAFE_ALLOCATE(hm%ep%E_field(1:gr%sb%dim))
-              hm%ep%E_field(1:gr%sb%dim) = M_ZERO
+              SAFE_ALLOCATE(hm%ep%E_field(1:space%dim))
+              hm%ep%E_field(1:space%dim) = M_ZERO
             end if
-            hm%ep%E_field(1:gr%sb%dim) = hm%ep%E_field(1:gr%sb%dim) + potential%E_field(1:gr%sb%dim)
+            hm%ep%E_field(1:space%dim) = hm%ep%E_field(1:space%dim) + potential%E_field(1:space%dim)
 
             !In the fully periodic case, we use Berry phases
             if (space%periodic_dim < space%dim) then
@@ -780,10 +768,9 @@ contains
 
       kick_present = epot_have_kick(hm%ep)
 
-      call pcm_init(hm%pcm, namespace, geo, gr, st%qtot, st%val_charge, external_potentials_present, kick_present )  !< initializes PCM
+      call pcm_init(hm%pcm, namespace, space, ions, gr, st%qtot, st%val_charge, external_potentials_present, kick_present )  !< initializes PCM
       if (hm%pcm%run_pcm) then
         if (hm%theory_level /= KOHN_SHAM_DFT) call messages_not_implemented("PCM for TheoryLevel /= kohn_sham", namespace=namespace)
-        if (gr%have_fine_mesh) call messages_not_implemented("PCM with UseFineMesh", namespace=namespace)
       end if
 
       POP_SUB(hamiltonian_elec_init.build_interactions)
@@ -829,12 +816,6 @@ contains
       SAFE_DEALLOCATE_A(hm%vtau)
     end if
 
-    if (associated(hm%psolver_fine, hm%psolver)) then
-      nullify(hm%psolver_fine)
-    else
-      call poisson_end(hm%psolver_fine)
-      SAFE_DEALLOCATE_P(hm%psolver_fine)
-    end if
     call poisson_end(hm%psolver)
 
     nullify(hm%xc)
@@ -846,7 +827,7 @@ contains
 
 
     call epot_end(hm%ep)
-    nullify(hm%geo)
+    nullify(hm%ions)
 
     call bc_end(hm%bc)
 
@@ -976,10 +957,11 @@ contains
 
   ! ---------------------------------------------------------
   !> (re-)build the Hamiltonian for the next application:
-  subroutine hamiltonian_elec_update(this, mesh, namespace, time)
+  subroutine hamiltonian_elec_update(this, mesh, namespace, space, time)
     type(hamiltonian_elec_t), intent(inout) :: this
     type(mesh_t),             intent(in)    :: mesh
     type(namespace_t),        intent(in)    :: namespace
+    type(space_t),            intent(in)    :: space
     FLOAT, optional,          intent(in)    :: time
 
     integer :: ispin, ip, idir, iatom, ilaser
@@ -1018,25 +1000,25 @@ contains
           call hamiltonian_elec_base_allocate(this%hm_base, mesh, FIELD_VECTOR_POTENTIAL + FIELD_UNIFORM_MAGNETIC_FIELD, &
             .false.)
           ! get the vector potential
-          SAFE_ALLOCATE(vp(1:mesh%np, 1:mesh%sb%dim))
-          vp(1:mesh%np, 1:mesh%sb%dim) = M_ZERO
+          SAFE_ALLOCATE(vp(1:mesh%np, 1:space%dim))
+          vp(1:mesh%np, 1:space%dim) = M_ZERO
           call laser_vector_potential(this%ext_lasers%lasers(ilaser), mesh, vp, time_)
           !$omp parallel do schedule(static)
           do ip = 1, mesh%np
-            do idir = 1, mesh%sb%dim
+            do idir = 1, space%dim
               this%hm_base%vector_potential(idir, ip) = this%hm_base%vector_potential(idir, ip) - vp(ip, idir)/P_C
             end do
           end do
           ! and the magnetic field
-          call laser_field(this%ext_lasers%lasers(ilaser), this%hm_base%uniform_magnetic_field(1:mesh%sb%dim), time_)
+          call laser_field(this%ext_lasers%lasers(ilaser), this%hm_base%uniform_magnetic_field(1:space%dim), time_)
           SAFE_DEALLOCATE_A(vp)
         case(E_FIELD_VECTOR_POTENTIAL)
           call hamiltonian_elec_base_allocate(this%hm_base, mesh, FIELD_UNIFORM_VECTOR_POTENTIAL, .false.)
           ! get the uniform vector potential associated with a magnetic field
           aa = M_ZERO
-          call laser_field(this%ext_lasers%lasers(ilaser), aa(1:mesh%sb%dim), time_)
-          this%hm_base%uniform_vector_potential(1:mesh%sb%dim) = this%hm_base%uniform_vector_potential(1:mesh%sb%dim) &
-            - aa(1:mesh%sb%dim)/P_C
+          call laser_field(this%ext_lasers%lasers(ilaser), aa(1:space%dim), time_)
+          this%hm_base%uniform_vector_potential(1:space%dim) = this%hm_base%uniform_vector_potential(1:space%dim) &
+            - aa(1:space%dim)/P_C
         end select
       end do
 
@@ -1044,14 +1026,14 @@ contains
       if(gauge_field_is_applied(this%ep%gfield)) then
         call hamiltonian_elec_base_allocate(this%hm_base, mesh, FIELD_UNIFORM_VECTOR_POTENTIAL, .false.)
         call gauge_field_get_vec_pot(this%ep%gfield, aa)
-        this%hm_base%uniform_vector_potential(1:mesh%sb%dim) = this%hm_base%uniform_vector_potential(1:mesh%sb%dim)  &
-          - aa(1:mesh%sb%dim)/P_c
+        this%hm_base%uniform_vector_potential(1:space%dim) = this%hm_base%uniform_vector_potential(1:space%dim)  &
+          - aa(1:space%dim)/P_c
       end if
 
       ! the electric field for a periodic system through the gauge field
       if (allocated(this%ep%e_field) .and. gauge_field_is_applied(this%ep%gfield)) then
-        this%hm_base%uniform_vector_potential(1:mesh%sb%periodic_dim) = &
-          this%hm_base%uniform_vector_potential(1:mesh%sb%periodic_dim) - time_*this%ep%e_field(1:mesh%sb%periodic_dim)
+        this%hm_base%uniform_vector_potential(1:space%periodic_dim) = &
+          this%hm_base%uniform_vector_potential(1:space%periodic_dim) - time_*this%ep%e_field(1:space%periodic_dim)
       end if
       
     end if
@@ -1061,7 +1043,7 @@ contains
       call hamiltonian_elec_base_allocate(this%hm_base, mesh, FIELD_VECTOR_POTENTIAL, .false.)
       !$omp parallel do schedule(static)
       do ip = 1, mesh%np
-        do idir = 1, mesh%sb%dim
+        do idir = 1, space%dim
           this%hm_base%vector_potential(idir, ip) = this%hm_base%vector_potential(idir, ip) + this%ep%a_static(ip, idir)
         end do
       end do
@@ -1090,7 +1072,7 @@ contains
     subroutine build_phase()
       integer :: ik, imat, nmat, max_npoints, offset
       integer :: ip, ip_inner_global, sp
-      FLOAT   :: kpoint(1:MAX_DIM), x_global(1:mesh%sb%dim)
+      FLOAT   :: kpoint(1:MAX_DIM), x_global(1:space%dim)
       integer :: iphase, nphase
 
       PUSH_SUB(hamiltonian_elec_update.build_phase)
@@ -1100,7 +1082,7 @@ contains
         call profiling_in(prof_phases, 'UPDATE_PHASES')
         ! now regenerate the phases for the pseudopotentials
         do iatom = 1, this%ep%natoms
-          call projector_init_phases(this%ep%proj(iatom), mesh%sb%dim, this%d, this%der%boundaries, this%kpoints, &
+          call projector_init_phases(this%ep%proj(iatom), space%dim, this%d, this%der%boundaries, this%kpoints, &
             vec_pot = this%hm_base%uniform_vector_potential, vec_pot_var = this%hm_base%vector_potential)
         end do
 
@@ -1120,15 +1102,15 @@ contains
           SAFE_ALLOCATE(this%hm_base%phase_corr(mesh%np+1:mesh%np_part, this%d%kpt%start:this%d%kpt%end))
         end if
 
-        kpoint(1:mesh%sb%dim) = M_ZERO
+        kpoint(1:space%dim) = M_ZERO
         do ik = this%d%kpt%start, this%d%kpt%end
-          kpoint(1:mesh%sb%dim) = this%kpoints%get_point(this%d%get_kpoint_index(ik))
+          kpoint(1:space%dim) = this%kpoints%get_point(this%d%get_kpoint_index(ik))
           !We add the vector potential
-          kpoint(1:mesh%sb%dim) = kpoint(1:mesh%sb%dim) + this%hm_base%uniform_vector_potential(1:mesh%sb%dim)
+          kpoint(1:space%dim) = kpoint(1:space%dim) + this%hm_base%uniform_vector_potential(1:space%dim)
 
           !$omp parallel do schedule(static)
           do ip = 1, mesh%np_part
-            this%hm_base%phase(ip, ik) = exp(-M_zI*sum(mesh%x(ip, 1:mesh%sb%dim)*kpoint(1:mesh%sb%dim)))
+            this%hm_base%phase(ip, ik) = exp(-M_zI*sum(mesh%x(ip, 1:space%dim)*kpoint(1:space%dim)))
           end do
 
           ! loop over boundary points
@@ -1143,7 +1125,7 @@ contains
             ! compute phase correction from global coordinate (opposite sign!)
             x_global = mesh_x_global(mesh, ip_inner_global)
 
-            this%hm_base%phase_corr(ip, ik) = M_zI * sum(x_global(1:mesh%sb%dim) * kpoint(1:mesh%sb%dim))
+            this%hm_base%phase_corr(ip, ik) = M_zI * sum(x_global(1:space%dim) * kpoint(1:space%dim))
             this%hm_base%phase_corr(ip, ik) = exp(this%hm_base%phase_corr(ip, ik))*this%hm_base%phase(ip, ik)
           end do
           
@@ -1155,9 +1137,8 @@ contains
 
         ! We rebuild the phase for the orbital projection, similarly to the one of the pseudopotentials
         if(this%lda_u_level /= DFT_U_NONE) then
-          call lda_u_build_phase_correction(this%lda_u, mesh%sb%dim, mesh%sb%periodic_dim, &
-               this%d, this%der%boundaries, namespace, this%kpoints,  &
-               vec_pot = this%hm_base%uniform_vector_potential, vec_pot_var = this%hm_base%vector_potential)
+          call lda_u_build_phase_correction(this%lda_u, space, this%d, this%der%boundaries, namespace, this%kpoints, &
+            vec_pot = this%hm_base%uniform_vector_potential, vec_pot_var = this%hm_base%vector_potential)
         end if
       end if
 
@@ -1272,18 +1253,19 @@ contains
   end subroutine hamiltonian_elec_update_pot
 
   ! ---------------------------------------------------------
-  subroutine hamiltonian_elec_epot_generate(this, namespace, gr, geo, st, time)
+  subroutine hamiltonian_elec_epot_generate(this, namespace, space, gr, ions, st, time)
     type(hamiltonian_elec_t), intent(inout) :: this
     type(namespace_t),        intent(in)    :: namespace
+    type(space_t),            intent(in)    :: space
     type(grid_t),             intent(in)    :: gr
-    type(geometry_t), target, intent(inout) :: geo
+    type(ions_t),     target, intent(inout) :: ions
     type(states_elec_t),      intent(inout) :: st
     FLOAT,          optional, intent(in)    :: time
 
     PUSH_SUB(hamiltonian_elec_epot_generate)
 
-    this%geo => geo
-    call epot_generate(this%ep, namespace, gr, this%geo, this%d)
+    this%ions => ions
+    call epot_generate(this%ep, namespace, gr%mesh, this%ions, this%d)
 
     ! Interation terms are treated below
 
@@ -1292,14 +1274,14 @@ contains
       call lalg_axpy(gr%mesh%np, M_ONE, this%ep%Vclassical, this%ep%vpsl)
     end if
 
-    if (allocated(this%ep%e_field) .and. gr%sb%periodic_dim < gr%sb%dim) then
+    if (allocated(this%ep%e_field) .and. space%periodic_dim < space%dim) then
       call lalg_axpy(gr%mesh%np, M_ONE, this%v_static, this%ep%vpsl)
     end if
 
     ! Here we need to pass this again, else test are failing.
     ! This is not a real problem, as the multisystem framework will indeed to this anyway
-    this%v_ie_loc%atoms_dist => geo%atoms_dist
-    this%v_ie_loc%atom => geo%atom
+    this%v_ie_loc%atoms_dist => ions%atoms_dist
+    this%v_ie_loc%atom => ions%atom
     call this%v_ie_loc%calculate()
 
     ! At the moment we need to add this to ep%vpsl, to keep the behavior of the code
@@ -1308,14 +1290,14 @@ contains
     ! Here we need to pass this again, else test are failing.
     ! This is not a real problem, as the multisystem framework will indeed to this anyway
     if(this%ep%nlcc) then
-      this%nlcc%atoms_dist => geo%atoms_dist
-      this%nlcc%atom => geo%atom
+      this%nlcc%atoms_dist => ions%atoms_dist
+      this%nlcc%atom => ions%atom
       call this%nlcc%calculate()
       call lalg_copy(gr%mesh%np, this%nlcc%density(:,1), st%rho_core)
     end if
 
-    call hamiltonian_elec_base_build_proj(this%hm_base, gr%mesh, this%ep)
-    call hamiltonian_elec_update(this, gr%mesh, namespace, time)
+    call hamiltonian_elec_base_build_proj(this%hm_base, space, gr%mesh, this%ep)
+    call hamiltonian_elec_update(this, gr%mesh, namespace, space, time)
 
     ! Check if projectors are still compatible with apply_packed on GPU
     if (this%apply_packed .and. accel_is_enabled()) then
@@ -1348,7 +1330,7 @@ contains
      !> Generates the real-space PCM potential due to nuclei which do not change
      !! during the SCF calculation.
      if (this%pcm%solute) &
-       call pcm_calc_pot_rs(this%pcm, gr%mesh, this%psolver, geo = geo)
+       call pcm_calc_pot_rs(this%pcm, gr%mesh, this%psolver, ions = ions)
 
       !> Local field effects due to static electrostatic potentials (if they were).
       !! The laser and the kick are included in subroutine v_ks_hartree (module v_ks).
@@ -1359,7 +1341,7 @@ contains
 
     end if
 
-    call lda_u_update_basis(this%lda_u, gr, geo, st, this%psolver, namespace, this%kpoints, &
+    call lda_u_update_basis(this%lda_u, space, gr, ions, st, this%psolver, namespace, this%kpoints, &
                                 allocated(this%hm_base%phase))
 
     POP_SUB(hamiltonian_elec_epot_generate)
@@ -1384,13 +1366,15 @@ contains
 
 
   ! -----------------------------------------------------------------
-  subroutine zhamiltonian_elec_apply_atom (hm, namespace, space, atom, mesh, ia, psi, vpsi)
+  subroutine zhamiltonian_elec_apply_atom (hm, namespace, space, latt, species, pos, ia, mesh, psi, vpsi)
     type(hamiltonian_elec_t), intent(in)  :: hm
     type(namespace_t),        intent(in)  :: namespace
     type(space_t),            intent(in)  :: space
-    type(atom_t),             intent(in)  :: atom
-    type(mesh_t),             intent(in)  :: mesh
+    type(lattice_vectors_t),  intent(in)  :: latt
+    type(species_t),          intent(in)  :: species
+    FLOAT,                    intent(in)  :: pos(1:space%dim)
     integer,                  intent(in)  :: ia
+    type(mesh_t),             intent(in)  :: mesh
     CMPLX,                    intent(in)  :: psi(:,:)  !< (gr%mesh%np_part, hm%d%dim)
     CMPLX,                    intent(out) :: vpsi(:,:) !< (gr%mesh%np, hm%d%dim)
 
@@ -1400,7 +1384,7 @@ contains
 
     SAFE_ALLOCATE(vlocal(1:mesh%np_part))
     vlocal = M_ZERO
-    call epot_local_potential(hm%ep, namespace, space, mesh, atom, ia, vlocal)
+    call epot_local_potential(hm%ep, namespace, space, latt, mesh, species, pos, ia, vlocal)
 
     do idim = 1, hm%d%dim
       vpsi(1:mesh%np, idim) = vlocal(1:mesh%np) * psi(1:mesh%np, idim)
@@ -1412,11 +1396,12 @@ contains
 
 
   ! -----------------------------------------------------------------
-  subroutine hamiltonian_elec_dump_vhxc(restart, hm, mesh, ierr)
-    type(restart_t),     intent(in)  :: restart
+  subroutine hamiltonian_elec_dump_vhxc(restart, hm, space, mesh, ierr)
+    type(restart_t),          intent(in)  :: restart
     type(hamiltonian_elec_t), intent(in)  :: hm
-    type(mesh_t),        intent(in)  :: mesh
-    integer,             intent(out) :: ierr
+    type(space_t),            intent(in)  :: space
+    type(mesh_t),             intent(in)  :: mesh
+    integer,                  intent(out) :: ierr
 
     integer :: iunit, err, err2(2), isp
     character(len=12) :: filename
@@ -1454,7 +1439,7 @@ contains
       call restart_write(restart, iunit, lines, 1, err)
       if (err /= 0) err2(1) = err2(1) + 1
 
-      call drestart_write_mesh_function(restart, filename, mesh, hm%vhxc(:,isp), err)
+      call drestart_write_mesh_function(restart, space, filename, mesh, hm%vhxc(:,isp), err)
       if (err /= 0) err2(2) = err2(2) + 1
 
     end do
@@ -1483,7 +1468,7 @@ contains
         call restart_write(restart, iunit, lines, 1, err)
         if (err /= 0) err2(1) = err2(1) + 16
 
-        call drestart_write_mesh_function(restart, filename, mesh, hm%vtau(:,isp), err)
+        call drestart_write_mesh_function(restart, space, filename, mesh, hm%vtau(:,isp), err)
         if (err /= 0) err2(1) = err2(1) + 1
 
       end do
@@ -1507,11 +1492,12 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine hamiltonian_elec_load_vhxc(restart, hm, mesh, ierr)
-    type(restart_t),     intent(in)    :: restart
+  subroutine hamiltonian_elec_load_vhxc(restart, hm, space, mesh, ierr)
+    type(restart_t),          intent(in)    :: restart
     type(hamiltonian_elec_t), intent(inout) :: hm
-    type(mesh_t),        intent(in)    :: mesh
-    integer,             intent(out)   :: ierr
+    type(space_t),            intent(in)    :: space
+    type(mesh_t),             intent(in)    :: mesh
+    integer,                  intent(out)   :: ierr
 
     integer :: err, err2, isp
     character(len=12) :: filename
@@ -1539,7 +1525,7 @@ contains
         write(filename, fmt='(a,i1)') 'vhxc-sp', isp
       end if
 
-      call drestart_read_mesh_function(restart, filename, mesh, hm%vhxc(:,isp), err)
+      call drestart_read_mesh_function(restart, space, filename, mesh, hm%vhxc(:,isp), err)
       if (err /= 0) err2 = err2 + 1
 
     end do
@@ -1555,7 +1541,7 @@ contains
           write(filename, fmt='(a,i1)') 'vtau-sp', isp
         end if
 
-        call drestart_read_mesh_function(restart, filename, mesh, hm%vtau(:,isp), err)
+        call drestart_read_mesh_function(restart, space, filename, mesh, hm%vtau(:,isp), err)
         if (err /= 0) err2 = err2 + 1
 
       end do
@@ -1576,11 +1562,12 @@ contains
   ! CFM4 propagator. It updates the Hamiltonian by considering a
   ! weighted sum of the external potentials at times time(1) and time(2),
   ! weighted by alpha(1) and alpha(2).
-  subroutine hamiltonian_elec_update2(this, mesh, time, mu)
+  subroutine hamiltonian_elec_update2(this, mesh, space, time, mu)
     type(hamiltonian_elec_t), intent(inout) :: this
-    type(mesh_t),        intent(in)    :: mesh
-    FLOAT,               intent(in)    :: time(1:2)
-    FLOAT,               intent(in)    :: mu(1:2)
+    type(space_t),            intent(in)    :: space
+    type(mesh_t),             intent(in)    :: mesh
+    FLOAT,                    intent(in)    :: time(1:2)
+    FLOAT,                    intent(in)    :: mu(1:2)
 
     integer :: ispin, ip, idir, iatom, ilaser, itime
     type(profile_t), save :: prof, prof_phases
@@ -1623,10 +1610,10 @@ contains
         case(E_FIELD_MAGNETIC)
           call hamiltonian_elec_base_allocate(this%hm_base, mesh, FIELD_VECTOR_POTENTIAL + FIELD_UNIFORM_MAGNETIC_FIELD, .false.)
           ! get the vector potential
-          SAFE_ALLOCATE(vp(1:mesh%np, 1:mesh%sb%dim))
-          vp(1:mesh%np, 1:mesh%sb%dim) = M_ZERO
+          SAFE_ALLOCATE(vp(1:mesh%np, 1:space%dim))
+          vp(1:mesh%np, 1:space%dim) = M_ZERO
           call laser_vector_potential(this%ext_lasers%lasers(ilaser), mesh, vp, time_)
-          do idir = 1, mesh%sb%dim
+          do idir = 1, space%dim
             !$omp parallel do schedule(static)
             do ip = 1, mesh%np
               this%hm_base%vector_potential(idir, ip) = this%hm_base%vector_potential(idir, ip) &
@@ -1634,15 +1621,15 @@ contains
             end do
           end do
           ! and the magnetic field
-          call laser_field(this%ext_lasers%lasers(ilaser), this%hm_base%uniform_magnetic_field(1:mesh%sb%dim), time_)
+          call laser_field(this%ext_lasers%lasers(ilaser), this%hm_base%uniform_magnetic_field(1:space%dim), time_)
           SAFE_DEALLOCATE_A(vp)
         case(E_FIELD_VECTOR_POTENTIAL)
           call hamiltonian_elec_base_allocate(this%hm_base, mesh, FIELD_UNIFORM_VECTOR_POTENTIAL, .false.)
           ! get the uniform vector potential associated with a magnetic field
           aa = M_ZERO
-          call laser_field(this%ext_lasers%lasers(ilaser), aa(1:mesh%sb%dim), time_)
-          this%hm_base%uniform_vector_potential(1:mesh%sb%dim) = this%hm_base%uniform_vector_potential(1:mesh%sb%dim) &
-            - mu(itime) * aa(1:mesh%sb%dim)/P_C
+          call laser_field(this%ext_lasers%lasers(ilaser), aa(1:space%dim), time_)
+          this%hm_base%uniform_vector_potential(1:space%dim) = this%hm_base%uniform_vector_potential(1:space%dim) &
+            - mu(itime) * aa(1:space%dim)/P_C
         end select
       end do
 
@@ -1650,14 +1637,14 @@ contains
       if(gauge_field_is_applied(this%ep%gfield)) then
         call hamiltonian_elec_base_allocate(this%hm_base, mesh, FIELD_UNIFORM_VECTOR_POTENTIAL, .false.)
         call gauge_field_get_vec_pot(this%ep%gfield, aa)
-        this%hm_base%uniform_vector_potential(1:mesh%sb%dim) = this%hm_base%uniform_vector_potential(1:mesh%sb%dim)  &
-          - aa(1:mesh%sb%dim)/P_c
+        this%hm_base%uniform_vector_potential(1:space%dim) = this%hm_base%uniform_vector_potential(1:space%dim)  &
+          - aa(1:space%dim)/P_c
       end if
 
       ! the electric field for a periodic system through the gauge field
       if (allocated(this%ep%e_field) .and. gauge_field_is_applied(this%ep%gfield)) then
-        this%hm_base%uniform_vector_potential(1:mesh%sb%periodic_dim) = &
-          this%hm_base%uniform_vector_potential(1:mesh%sb%periodic_dim) - time_*this%ep%e_field(1:mesh%sb%periodic_dim)
+        this%hm_base%uniform_vector_potential(1:space%periodic_dim) = &
+          this%hm_base%uniform_vector_potential(1:space%periodic_dim) - time_*this%ep%e_field(1:space%periodic_dim)
       end if
 
     end do
@@ -1665,7 +1652,7 @@ contains
     ! the vector potential of a static magnetic field
     if (allocated(this%ep%a_static)) then
       call hamiltonian_elec_base_allocate(this%hm_base, mesh, FIELD_VECTOR_POTENTIAL, .false.)
-      do idir = 1, mesh%sb%dim
+      do idir = 1, space%dim
         !$omp parallel do schedule(static)
         do ip = 1, mesh%np
           this%hm_base%vector_potential(idir, ip) = this%hm_base%vector_potential(idir, ip) + this%ep%a_static(ip, idir)
@@ -1704,7 +1691,7 @@ contains
         call profiling_in(prof_phases, 'UPDATE_PHASES')
         ! now regenerate the phases for the pseudopotentials
         do iatom = 1, this%ep%natoms
-          call projector_init_phases(this%ep%proj(iatom), mesh%sb%dim, this%d, this%der%boundaries, this%kpoints,  &
+          call projector_init_phases(this%ep%proj(iatom), space%dim, this%d, this%der%boundaries, this%kpoints,  &
             vec_pot = this%hm_base%uniform_vector_potential, vec_pot_var = this%hm_base%vector_potential)
         end do
 
@@ -1719,14 +1706,14 @@ contains
           end if
         end if
 
-        kpoint(1:mesh%sb%dim) = M_ZERO
+        kpoint(1:space%dim) = M_ZERO
         do ik = this%d%kpt%start, this%d%kpt%end
-          kpoint(1:mesh%sb%dim) = this%kpoints%get_point(this%d%get_kpoint_index(ik))
+          kpoint(1:space%dim) = this%kpoints%get_point(this%d%get_kpoint_index(ik))
 
           !$omp parallel do schedule(static)
           do ip = 1, mesh%np_part
-            this%hm_base%phase(ip, ik) = exp(-M_zI*sum(mesh%x(ip, 1:mesh%sb%dim)*(kpoint(1:mesh%sb%dim) &
-              + this%hm_base%uniform_vector_potential(1:mesh%sb%dim))))
+            this%hm_base%phase(ip, ik) = exp(-M_zI*sum(mesh%x(ip, 1:space%dim)*(kpoint(1:space%dim) &
+              + this%hm_base%uniform_vector_potential(1:space%dim))))
           end do
         end do
         if(accel_is_enabled()) then

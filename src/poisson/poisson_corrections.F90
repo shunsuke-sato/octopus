@@ -265,7 +265,7 @@ contains
       call dderivatives_lapl(der, vh_correction, rho_corrected, set_bc = .false.)
 
       do ip = 1, der%mesh%np
-        rho_corrected(ip) = rho(ip) + CNST(1.0)/(CNST(4.0)*M_PI)*rho_corrected(ip)
+        rho_corrected(ip) = rho(ip) + M_ONE/(M_FOUR*M_PI)*rho_corrected(ip)
       end do
 
     end select

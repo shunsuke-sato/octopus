@@ -24,11 +24,12 @@ module ion_electron_local_potential_oct_m
   use comm_oct_m
   use distributed_oct_m
   use epot_oct_m
-  use geometry_oct_m
   use global_oct_m
   use interaction_with_partner_oct_m
   use interaction_partner_oct_m
+  use ions_oct_m
   use lalg_basic_oct_m
+  use lattice_vectors_oct_m
   use mesh_oct_m
   use messages_oct_m
   use namespace_oct_m
@@ -60,6 +61,8 @@ module ion_electron_local_potential_oct_m
     ! This is a temporary change here
     type(distributed_t), pointer, public :: atoms_dist
     type(atom_t), pointer, public :: atom(:)
+    FLOAT, pointer, public :: pos(:,:)
+    type(lattice_vectors_t), pointer :: latt
 
     ! Temporary pointer to namespace
     type(namespace_t), pointer :: namespace
@@ -102,11 +105,11 @@ contains
   end function ion_electron_local_potential_constructor
 
   ! ---------------------------------------------------------
-  subroutine ion_electron_local_potential_init(this, mesh, psolver, geo, namespace)
+  subroutine ion_electron_local_potential_init(this, mesh, psolver, ions, namespace)
     class(ion_electron_local_potential_t),    intent(inout) :: this
     type(mesh_t),                     target, intent(in)    :: mesh
     type(poisson_t),                  target, intent(in)    :: psolver
-    type(geometry_t),                 target, intent(in)    :: geo
+    type(ions_t),                     target, intent(in)    :: ions
     type(namespace_t),                target, intent(in)    :: namespace
 
     integer :: ia
@@ -119,16 +122,18 @@ contains
     SAFE_ALLOCATE(this%potential(1:mesh%np, 1:1))
 
     this%have_density = .false.
-    do ia = 1, geo%natoms
-      if(local_potential_has_density(geo%space, geo%atom(ia))) then
+    do ia = 1, ions%nspecies
+      if(local_potential_has_density(ions%space, ions%species(ia))) then
         this%have_density = .true.
         exit
       end if
     end do
 
-    this%atoms_dist => geo%atoms_dist
-    this%atom => geo%atom
-    this%space => geo%space
+    this%atoms_dist => ions%atoms_dist
+    this%atom => ions%atom
+    this%space => ions%space
+    this%pos => ions%pos
+    this%latt => ions%latt
 
     this%namespace => namespace
 
@@ -144,7 +149,7 @@ contains
     type(submesh_t) :: sphere
     type(ps_t), pointer :: ps
     integer :: ia, ip
-    FLOAT :: radius, r
+    FLOAT :: radius
     type(profile_t), save :: prof
 
     PUSH_SUB(ion_electron_local_potential_calculate)
@@ -163,19 +168,19 @@ contains
       ! (for all-electron species or pseudopotentials in periodic
       ! systems) or by applying it directly to the grid
 
-      if(local_potential_has_density(this%space, this%atom(ia))) then
+      if(local_potential_has_density(this%space, this%atom(ia)%species)) then
         
         SAFE_ALLOCATE(rho(1:this%mesh%np))
-        call species_get_long_range_density(this%atom(ia)%species, this%space, this%namespace, &
-                                               this%atom(ia)%x, this%mesh, rho)
+        call species_get_long_range_density(this%atom(ia)%species, this%namespace, this%space, this%latt, &
+          this%pos(:, ia), this%mesh, rho)
         call lalg_axpy(this%mesh%np, M_ONE, rho, density)
         SAFE_DEALLOCATE_A(rho)
 
       else
 
         SAFE_ALLOCATE(vl(1:this%mesh%np))
-        call species_get_local(this%atom(ia)%species, this%space, this%mesh, this%namespace, &
-                                               this%atom(ia)%x(1:this%mesh%sb%dim), vl)
+        call species_get_local(this%atom(ia)%species, this%namespace, this%space, this%latt, &
+          this%pos(:, ia), this%mesh, vl)
         call lalg_axpy(this%mesh%np, M_ONE, vl, this%potential(:,1))
         SAFE_DEALLOCATE_A(vl)
 
@@ -188,12 +193,11 @@ contains
 
         radius = spline_cutoff_radius(ps%vl, ps%projectors_sphere_threshold) + this%mesh%spacing(1)
 
-        call submesh_init(sphere, this%space, this%mesh%sb, this%mesh, this%atom(ia)%x, radius)
+        call submesh_init(sphere, this%space, this%mesh, this%latt, this%pos(:, ia), radius)
         SAFE_ALLOCATE(vl(1:sphere%np))
 
         do ip = 1, sphere%np
-          r = sphere%x(ip, 0)
-          vl(ip) = spline_eval(ps%vl, r)
+          vl(ip) = spline_eval(ps%vl, sphere%r(ip))
         end do
 
         call submesh_add_to_mesh(sphere, vl, this%potential(:,1))

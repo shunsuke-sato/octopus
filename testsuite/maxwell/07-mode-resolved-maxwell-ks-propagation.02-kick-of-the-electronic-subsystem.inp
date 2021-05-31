@@ -1,6 +1,8 @@
 CalculationMode = td 
 
 FromScratch = yes
+Debug = Trace
+DEbugTrapSignals = no
 
 Dimensions = 1
 DerivativesOrder = 4
@@ -24,7 +26,11 @@ TDTimeStep = 0.001
 TDMaxSteps = 20
 TDDeltaStrength = 0.01/angstrom
 TDPolarizationDirection = 1
-TDOutput = multipoles + photons_q
+
+%TDOutput
+ multipoles
+ photons_q
+%
 
 EnablePhotons = yes
 ExperimentalFeatures = yes

@@ -29,11 +29,11 @@ program oct_local_multipoles
   use box_union_oct_m
   use calc_mode_par_oct_m
   use comm_oct_m
-  use geometry_oct_m
   use global_oct_m
   use hamiltonian_elec_oct_m
   use io_oct_m
   use io_function_oct_m
+  use ions_oct_m
   use kick_oct_m
   use loct_oct_m
   use local_write_oct_m
@@ -69,7 +69,7 @@ program oct_local_multipoles
   end type local_domain_t
 
   type(electrons_t), pointer :: sys
-  integer, parameter    :: BADER = 512
+  integer, parameter         :: BADER = 9  ! should be = OPTION__OUTPUT__BADER
 
   ! Initialize stuff
   call global_init(is_serial = .false.)
@@ -147,7 +147,7 @@ contains
 
     default_dt = M_ZERO
     call parse_variable(global_namespace, 'TDTimeStep', default_dt, dt, unit = units_inp%time)
-    if (dt <= M_ZERO) then
+    if (dt < M_ZERO) then
       write(message(1),'(a)') 'Input: TDTimeStep must be positive.'
       write(message(2),'(a)') 'Input: TDTimeStep reset to 0. Check input file.'
       call messages_info(2)
@@ -162,11 +162,11 @@ contains
     !% fragmented into domains.
     !%End
     call parse_variable(global_namespace, 'LDFilename', 'density', basename)
-    if ( basename == " " ) basename = ""
+    if (basename == " ") basename = ""
     ! Delete the extension if present
     length = len_trim(basename)
-    if ( length > 4) then
-      if ( basename(length-3:length) == '.obf' ) then
+    if (length > 4) then
+      if (basename(length-3:length) == '.obf') then
         basename = trim(basename(1:length-4))
       end if
     end if
@@ -204,7 +204,7 @@ contains
       if(n_spec_def > 0) n_spec_def = n_spec_def - 1 ! First line is a comment
      
       ! get parameters from file
-      do ia = 1, sys%geo%nspecies
+      do ia = 1, sys%ions%nspecies
         read_data = 0
         iunit = io_open(radiifile, global_namespace, action='read', status='old', die=.false.)
         if(iunit > 0) then
@@ -215,8 +215,8 @@ contains
           read(iunit,*)
           default_file: do ispec = 1, n_spec_def
             read(iunit,*) lab
-            if (trim(lab) == trim(species_label(sys%geo%species(ia)))) then
-              call read_from_default_file(iunit, read_data, sys%geo%species(ia))
+            if (trim(lab) == trim(species_label(sys%ions%species(ia)))) then
+              call read_from_default_file(iunit, read_data, sys%ions%species(ia))
               exit default_file
             end if
           end do default_file
@@ -297,14 +297,14 @@ contains
     message(2) = ''
     call messages_info(2)
 
-    call local_init(sys%space, sys%gr%mesh, sys%geo, nd, loc_domains)
+    call local_init(sys%space, sys%gr%mesh, sys%ions, nd, loc_domains)
 
     ! Starting loop over selected densities.
     if (any(loc_domains(:)%dshape == BADER)) then
       call messages_experimental('Bader volumes in oct-local_multipoles')
     end if
 
-    call kick_init(kick, global_namespace, sys%gr%sb, sys%kpoints, sys%st%d%ispin)
+    call kick_init(kick, global_namespace, sys%space, sys%kpoints, sys%st%d%ispin)
     do id = 1, nd
       call local_write_init(loc_domains(id)%writ, global_namespace, loc_domains(id)%lab, 0, dt)
     end do
@@ -315,7 +315,7 @@ contains
       !TODO: check for domains & mesh compatibility 
       call restart_init(restart_ld, global_namespace, RESTART_UNDEFINED, RESTART_TYPE_LOAD, sys%mc, err, &
                         dir=trim(ldrestart_folder), mesh = sys%gr%mesh)
-      call local_restart_read(sys%gr%mesh, sys%geo, nd, loc_domains, restart_ld)
+      call local_restart_read(sys%space, sys%gr%mesh, sys%ions, nd, loc_domains, restart_ld)
       call restart_end(restart_ld)
     end if
 
@@ -358,7 +358,7 @@ contains
       ! FIXME: why only real functions? Please generalize.
       ! TODO: up to know the local_multipoles utlity acts over density functions, which are real.
       if (err == 0) then
-        call drestart_read_mesh_function(restart, trim(filename), sys%gr%mesh, sys%st%rho(:,1), err)
+        call drestart_read_mesh_function(restart, sys%space, trim(filename), sys%gr%mesh, sys%st%rho(:,1), err)
       end if
       if (err /= 0 ) then
         write(message(1),*) 'While reading density: "', trim(filename), '", error code:', err
@@ -367,13 +367,13 @@ contains
 
       ! Look for the mesh points inside local domains
       if ((iter == l_start .and. .not. ldrestart) .or. ldupdate) then
-        call local_inside_domain(sys%gr%mesh, sys%geo, nd, loc_domains, global_namespace, sys%st%rho(:,1))
-        call local_restart_write(global_namespace, sys%gr%mesh, sys%mc, nd, loc_domains)
+        call local_inside_domain(sys%space, sys%gr%mesh, sys%ions, nd, loc_domains, global_namespace, sys%st%rho(:,1))
+        call local_restart_write(global_namespace, sys%space, sys%gr%mesh, sys%mc, nd, loc_domains)
       end if
 
       do id = 1, nd
         call local_write_iter(loc_domains(id)%writ, global_namespace, sys%space, loc_domains(id)%lab, loc_domains(id)%ions_mask, &
-          loc_domains(id)%mesh_mask, sys%gr%mesh, sys%st, sys%hm, sys%ks, sys%geo, kick, iter, l_start, ldoverwrite)
+          loc_domains(id)%mesh_mask, sys%gr%mesh, sys%st, sys%hm, sys%ks, sys%ions, kick, iter, l_start, ldoverwrite)
       end do
       call loct_progress_bar(iter-l_start, l_end-l_start) 
     end do
@@ -397,10 +397,10 @@ contains
   !> Initialize local_domain_t variable, allocating variable 
   !! and reading parameters from input file. 
   ! ---------------------------------------------------------
-  subroutine local_init(space, mesh, geo, nd, loc_domains)
+  subroutine local_init(space, mesh, ions, nd, loc_domains)
     type(space_t),    intent(in)  :: space
     type(mesh_t),     intent(in)  :: mesh
-    type(geometry_t), intent(in)  :: geo
+    type(ions_t),     intent(in)  :: ions
     integer,          intent(out) :: nd
     type(local_domain_t), allocatable, intent(out) :: loc_domains(:)
 
@@ -452,9 +452,9 @@ contains
 
     block: do id = 1, nd
       SAFE_ALLOCATE(loc_domains(id)%mesh_mask(1:mesh%np))
-      SAFE_ALLOCATE(loc_domains(id)%ions_mask(1:geo%natoms))
+      SAFE_ALLOCATE(loc_domains(id)%ions_mask(1:ions%natoms))
       call parse_block_string(blk, id-1, 0, loc_domains(id)%lab)
-      call local_read_from_block(loc_domains(id), space, geo, blk, id-1, global_namespace)
+      call local_read_from_block(loc_domains(id), space, ions, blk, id-1, global_namespace)
     end do block
     call parse_block_end(blk)
     message(1) = ''
@@ -486,10 +486,10 @@ contains
   end subroutine local_end
 
   ! ---------------------------------------------------------
-  subroutine local_read_from_block(domain, space, geo, blk, row, namespace)
+  subroutine local_read_from_block(domain, space, ions, blk, row, namespace)
     type(local_domain_t), intent(inout) :: domain 
     type(space_t),        intent(in)    :: space
-    type(geometry_t),     intent(in)    :: geo
+    type(ions_t),         intent(in)    :: ions
     type(block_t),        intent(in)    :: blk
     integer,              intent(in)    :: row
     type(namespace_t),    intent(in)    :: namespace
@@ -509,21 +509,21 @@ contains
       call parse_block_string(blk, row, 3, domain%clist)
 
       minimum_box => box_union_t(space%dim)
-      do ia = 1, geo%natoms
+      do ia = 1, ions%natoms
         if (loct_isinstringlist(ia, domain%clist)) then
           if (radius < M_EPSILON) then
-            radius = species_def_rsize(geo%atom(ia)%species)
+            radius = species_def_rsize(ions%atom(ia)%species)
           end if
-          call minimum_box%add_box(box_sphere_t(space%dim, geo%atom(ia)%x(1:space%dim), radius))
+          call minimum_box%add_box(box_sphere_t(space%dim, ions%pos(:, ia), radius))
         end if
       end do
       domain%box => minimum_box
 
       ic = 0
-      do ia = 1, geo%natoms
-        if (domain%box%contains_point(geo%atom(ia)%x) .and. .not. loct_isinstringlist(ia, domain%clist)) then
+      do ia = 1, ions%natoms
+        if (domain%box%contains_point(ions%pos(:, ia)) .and. .not. loct_isinstringlist(ia, domain%clist)) then
           ic = ic + 1
-          if(ic <= 20) write(message(ic),'(a,a,I0,a,a)')'Atom: ',trim(species_label(geo%atom(ia)%species)), ia, &
+          if(ic <= 20) write(message(ic),'(a,a,I0,a,a)')'Atom: ',trim(species_label(ions%atom(ia)%species)), ia, &
             ' is inside the union box BUT not in list: ', trim(domain%clist)
         end if
       end do
@@ -580,8 +580,9 @@ contains
 
   ! ---------------------------------------------------------
   !> Write restart files for local domains
-  subroutine local_restart_write(namespace, mesh, mc, nd, loc_domains)
+  subroutine local_restart_write(namespace, space, mesh, mc, nd, loc_domains)
     type(namespace_t),    intent(in) :: namespace
+    type(space_t),        intent(in) :: space
     type(mesh_t),         intent(in) :: mesh
     type(multicomm_t),    intent(in) :: mc
     integer,              intent(in) :: nd
@@ -619,7 +620,7 @@ contains
         if (loc_domains(id)%mesh_mask(ip)) ff(ip, 1) = ff(ip, 1) + 2**TOFLOAT(id)
       end do
     end do
-    call drestart_write_mesh_function(restart, "ldomains", mesh, ff(1:mesh%np, 1), ierr)
+    call drestart_write_mesh_function(restart, space, "ldomains", mesh, ff(1:mesh%np, 1), ierr)
     SAFE_DEALLOCATE_A(ff)
 
     call restart_end(restart)
@@ -628,9 +629,10 @@ contains
   end subroutine local_restart_write
 
   ! ---------------------------------------------------------
-  subroutine local_restart_read(mesh, geo, nd, loc_domains, restart)
+  subroutine local_restart_read(space, mesh, ions, nd, loc_domains, restart)
+    type(space_t),        intent(in)    :: space
     type(mesh_t),         intent(in)    :: mesh
-    type(geometry_t),     intent(in)    :: geo
+    type(ions_t),         intent(in)    :: ions
     integer,              intent(in)    :: nd
     type(local_domain_t), intent(inout) :: loc_domains(:)
     type(restart_t),      intent(in)    :: restart
@@ -652,7 +654,7 @@ contains
     read(line(1),'(a25,1x,i5)') tmp, ierr
     call restart_close(restart, iunit)
 
-    call drestart_read_mesh_function(restart, "ldomains", mesh, mask, ierr) 
+    call drestart_read_mesh_function(restart, space, "ldomains", mesh, mask, ierr) 
 
     do id = 1, nd
       loc_domains(id)%mesh_mask = .false.
@@ -661,7 +663,7 @@ contains
       end do
 
       !Check for atom list inside each domain
-      call local_ions_mask(loc_domains(id)%mesh_mask, geo, mesh, loc_domains(id)%ions_mask)
+      call local_ions_mask(loc_domains(id)%mesh_mask, ions, mesh, loc_domains(id)%ions_mask)
     end do
 
     SAFE_DEALLOCATE_A(mask)
@@ -670,9 +672,10 @@ contains
   end subroutine local_restart_read
 
   ! ---------------------------------------------------------
-  subroutine local_inside_domain(mesh, geo, nd, loc_domains, namespace, ff)
+  subroutine local_inside_domain(space, mesh, ions, nd, loc_domains, namespace, ff)
+    type(space_t),          intent(in)    :: space
     type(mesh_t),           intent(in)    :: mesh
-    type(geometry_t),       intent(in)    :: geo
+    type(ions_t),           intent(in)    :: ions
     integer,                intent(in)    :: nd
     type(local_domain_t),   intent(inout) :: loc_domains(:)
     type(namespace_t),      intent(in)    :: namespace
@@ -696,20 +699,20 @@ contains
         write(message(1),'(a)') 'Bader volumes can only be computed in serial'
         call messages_fatal(1)
       end if
-      call create_basins(namespace, mesh, geo, ff, basins)
+      call create_basins(namespace, space, mesh, ions, ff, basins)
     end if
 
     do id = 1, nd
       ! Create the mask that tells which mesh points are inside the domain
       select case (loc_domains(id)%dshape)
       case (BADER)
-        call bader_domain_create_mask(loc_domains(id), basins, mesh, geo)
+        call bader_domain_create_mask(loc_domains(id), basins, mesh, ions)
       case default
         call box_domain_create_mask(loc_domains(id), mesh)
       end select
 
       !Check for atom list inside each domain
-      call local_ions_mask(loc_domains(id)%mesh_mask, geo, mesh, loc_domains(id)%ions_mask)
+      call local_ions_mask(loc_domains(id)%mesh_mask, ions, mesh, loc_domains(id)%ions_mask)
     end do
 
     if (any(loc_domains(:)%dshape == BADER)) then
@@ -737,11 +740,12 @@ contains
         end do
 
         write(filename,'(a,a)') 'domain.', trim(loc_domains(id)%lab)
-        call dio_function_output(how, 'local.general', trim(filename), namespace, mesh, dble_domain_map, unit_one, ierr, &
-          geo = geo)
+        call dio_function_output(how, 'local.general', trim(filename), namespace, space, mesh, dble_domain_map, unit_one, ierr, &
+          ions = ions)
       end do
 
-      call dio_function_output(how, 'local.general', 'domain.mesh', namespace, mesh, domain_mesh, unit_one, ierr, geo = geo)
+      call dio_function_output(how, 'local.general', 'domain.mesh', namespace, space, mesh, domain_mesh, unit_one, ierr, &
+        ions = ions)
 
       SAFE_DEALLOCATE_A(dble_domain_map)
       SAFE_DEALLOCATE_A(domain_mesh)
@@ -751,10 +755,11 @@ contains
   end subroutine local_inside_domain
 
   ! ---------------------------------------------------------
-  subroutine create_basins(namespace, mesh, geo, ff, basins)
+  subroutine create_basins(namespace, space, mesh, ions, ff, basins)
     type(namespace_t),  intent(in)    :: namespace
+    type(space_t),      intent(in)    :: space
     type(mesh_t),       intent(in)    :: mesh
-    type(geometry_t),   intent(in)    :: geo
+    type(ions_t),       intent(in)    :: ions
     FLOAT,              intent(in)    :: ff(:)
     type(basins_t),     intent(inout) :: basins
 
@@ -783,8 +788,9 @@ contains
 
     ! Add long range density from atoms
     SAFE_ALLOCATE(ffs(1:mesh%np))
-    do ia = 1, geo%natoms
-      call species_get_long_range_density(geo%atom(ia)%species, geo%space, namespace, geo%atom(ia)%x, mesh, ffs)
+    do ia = 1, ions%natoms
+      call species_get_long_range_density(ions%atom(ia)%species, ions%namespace, ions%space, ions%latt, &
+        ions%pos(:, ia), mesh, ffs)
       do is = 1, ubound(ff2, dim=2)
         ff2(1:mesh%np, is) = ff2(1:mesh%np, is) - ffs(1:mesh%np)
       end do
@@ -800,9 +806,9 @@ contains
         call messages_input_error(namespace, 'LDOutputFormat')
       end if
 
-      call dio_function_output(how, 'local.general', 'basinsmap', namespace, mesh, TOFLOAT(basins%map(1:mesh%np)), unit_one, ierr, &
-        geo = geo)
-      call dio_function_output(how, 'local.general', 'dens_ff2', namespace, mesh, ff2(:,1), unit_one, ierr, geo = geo)
+      call dio_function_output(how, 'local.general', 'basinsmap', namespace, space, mesh, TOFLOAT(basins%map(1:mesh%np)), &
+        unit_one, ierr, ions = ions)
+      call dio_function_output(how, 'local.general', 'dens_ff2', namespace, space, mesh, ff2(:,1), unit_one, ierr, ions = ions)
     end if
     SAFE_DEALLOCATE_A(ff2)
 
@@ -816,20 +822,19 @@ contains
     call parse_variable(global_namespace, 'LDUseAtomicRadii', .false., use_atomic_radii)
 
     if (use_atomic_radii) then
-      SAFE_ALLOCATE(ion_map(geo%natoms))
+      SAFE_ALLOCATE(ion_map(ions%natoms))
       ion_map = 0
-      do ia = 1, geo%natoms
-        ion_map(ia) = basins%map(mesh_nearest_point(mesh, geo%atom(ia)%x, dmin, rankmin))
+      do ia = 1, ions%natoms
+        ion_map(ia) = basins%map(mesh_nearest_point(mesh, ions%pos(:, ia), dmin, rankmin))
       end do
 
       do ip = 1, mesh%np
         ! Check if lonely pair has no ions assigned to it
         if (all(ion_map(:) /= basins%map(ip)) ) then
           ! Assign lonely pair to ion in a atomic radii distance
-          do ia = 1, geo%natoms
-            dd = sum((mesh%x(ip, 1:geo%space%dim) - geo%atom(ia)%x(1:geo%space%dim))**2)
-            dd = sqrt(dd)
-            if (dd <= species_vdw_radius(geo%atom(ia)%species)) basins%map(ip) = ion_map(ia)
+          do ia = 1, ions%natoms
+            dd = norm2(mesh%x(ip, :) - ions%pos(:, ia))
+            if (dd <= species_vdw_radius(ions%atom(ia)%species)) basins%map(ip) = ion_map(ia)
           end do
         end if
       end do
@@ -853,11 +858,11 @@ contains
   end subroutine box_domain_create_mask
   
   ! ---------------------------------------------------------
-  subroutine bader_domain_create_mask(domain, basins, mesh, geo)
+  subroutine bader_domain_create_mask(domain, basins, mesh, ions)
     class(local_domain_t), intent(inout) :: domain
     type(basins_t),        intent(in)    :: basins
     type(mesh_t),          intent(in)    :: mesh
-    type(geometry_t),      intent(in)    :: geo
+    type(ions_t),          intent(in)    :: ions
 
     integer               :: ia, ib, ip, ix, n_basins, rankmin
     FLOAT                 :: dmin, xi(MAX_DIM)
@@ -867,7 +872,7 @@ contains
 
     ! Count then number of basins to consider. That is the number of ions specified in the input by the user
     n_basins = 0
-    do ia = 1, geo%natoms
+    do ia = 1, ions%natoms
       if (loct_isinstringlist(ia, domain%clist)) n_basins = n_basins + 1
     end do
 
@@ -876,10 +881,10 @@ contains
     ! Assign basins to ions
     domain_map = 0
     ib = 0
-    do ia = 1, geo%natoms
+    do ia = 1, ions%natoms
       if (.not. loct_isinstringlist(ia, domain%clist)) cycle
       ib = ib + 1
-      xi(1:geo%space%dim) = geo%atom(ia)%x(1:geo%space%dim)
+      xi(1:ions%space%dim) = ions%pos(:, ia)
       ix = mesh_nearest_point(mesh, xi, dmin, rankmin)
       domain_map(ib) = basins%map(ix)
     end do
@@ -897,30 +902,31 @@ contains
 
   ! ---------------------------------------------------------
   !Check for the ions inside each local domain.
-  subroutine local_ions_mask(mesh_mask, geo, mesh, ions_mask)
+  subroutine local_ions_mask(mesh_mask, ions, mesh, ions_mask)
     logical,            intent(in)  :: mesh_mask(:)
-    type(geometry_t),   intent(in)  :: geo
+    type(ions_t),       intent(in)  :: ions
     type(mesh_t),       intent(in)  :: mesh
     logical,            intent(out) :: ions_mask(:)
 
     integer              :: ia, ix
     integer, allocatable :: mask_tmp(:)
     integer              :: rankmin
-    FLOAT                :: dmin
+    FLOAT                :: dmin, xi(MAX_DIM)
 
     PUSH_SUB(local_ions_mask)
 
-    SAFE_ALLOCATE(mask_tmp(geo%natoms))
+    SAFE_ALLOCATE(mask_tmp(ions%natoms))
     mask_tmp = 0
 
-    do ia = 1, geo%natoms
-      ix = mesh_nearest_point(mesh, geo%atom(ia)%x, dmin, rankmin )
+    do ia = 1, ions%natoms
+      xi(1:ions%space%dim) = ions%pos(:, ia)
+      ix = mesh_nearest_point(mesh, xi, dmin, rankmin )
       if (rankmin /= mesh%mpi_grp%rank) cycle
       if (mesh_mask(ix)) mask_tmp(ia) = 1
     end do
 
     if(mesh%parallel_in_domains) then
-      call mesh%allreduce(mask_tmp, geo%natoms)
+      call mesh%allreduce(mask_tmp, ions%natoms)
     end if                               
     ions_mask = mask_tmp == 1
 
