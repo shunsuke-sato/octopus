@@ -794,7 +794,7 @@ contains
       end do
     end do
     call derivatives_make_discretization(this%dim, this%mesh, this%masses, &
-             polynomials, rhs, 1, op(1:1), name, force_orthogonal = .true.)
+             polynomials, rhs, 1, op(1:1), name)
     SAFE_DEALLOCATE_A(polynomials)
     SAFE_DEALLOCATE_A(rhs)
 
