@@ -316,6 +316,20 @@ subroutine X(boundaries_set_batch)(boundaries, ffb, phase_correction)
   
   ASSERT(ffb%type() == R_TYPE_VAL)
 
+  ! If the batch has a phase, this would be wrong to set the boundary conditions
+  ! without the phase correction. On the other side, setting the phase correction for a 
+  ! batch that does not have a phase is also not correct.
+  select type(ffb)
+  class is(wfs_elec_t)
+    if(present(phase_correction)) then
+      ASSERT(ffb%has_phase)
+    else
+      ASSERT(.not. ffb%has_phase)
+    end if
+  class default
+    ASSERT(.not. present(phase_correction))
+  end select
+
   ! The boundary points are at different locations depending on the presence
   ! of ghost points due to domain parallelization.
   bndry_start = boundaries%mesh%np + 1
