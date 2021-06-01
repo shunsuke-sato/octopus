@@ -1594,265 +1594,325 @@ contains
    case(2)
      call fill_s_orbs(val, 2, 1) ! He 1s^2
    case(3) 
+     if(val > 1) call fill_s_orbs(val, 2, 1)
      call fill_s_orbs(val, 1, 2) ! Li 1s^2 2s^1
    case(4) 
+     if(val > 2) call fill_s_orbs(val, 2, 1)
      call fill_s_orbs(val, 2, 2) ! Be 1s^2 ; 2s^2
    case(5)
+     if(val > 3) call fill_s_orbs(val, 2, 1)
      if(val > 1) call fill_s_orbs(val, 2, 2)
      call fill_p_orbs(val, 1, 2) ! B  1s^2 ; 2s^2 2p^1
    case(13)
+     if(val > 3) call fill_s_orbs(val, 2, 2)
      if(val > 1) call fill_s_orbs(val, 2, 3)
      call fill_p_orbs(val, 1, 3) ! Al      1s^2 2s^2 2p^6 ; 3s^2 3p^1 
    case(6)
+     if(val > 4) call fill_s_orbs(val, 2, 1)
      if(val > 2) call fill_s_orbs(val, 2, 2)
      call fill_p_orbs(val, 2, 2) ! C       1s^2 ; 2s^2 2p^2
    case(14)
+     if(val > 4) call fill_s_orbs(val, 2, 2)
      if(val > 2) call fill_s_orbs(val, 2, 3)
      call fill_p_orbs(val, 2, 3) ! Si      1s^2 2s^2 2p^6 ; 3s^2 3p^2
    case(7)
+     if(val > 5) call fill_s_orbs(val, 2, 1)
      if(val > 3) call fill_s_orbs(val, 2, 2)
      call fill_p_orbs(val, 3, 2) ! N       1s^2 ; 2s^2 2p^3
    case(15)
+     if(val > 5) call fill_s_orbs(val, 2, 2)
      if(val > 3) call fill_s_orbs(val, 2, 3)
      call fill_p_orbs(val, 3, 3) ! P       1s^2 2s^2 2p^6 ; 3s^2 3p^3
    case(8)
+     if(val > 6) call fill_s_orbs(val, 2, 1)
      if(val > 4) call fill_s_orbs(val, 2, 2)
      call fill_p_orbs(val, 4, 2) ! O  1s^2 ; 2s^2 2p^4
    case(16)
+     if(val > 6) call fill_s_orbs(val, 2, 2)
      if(val > 4) call fill_s_orbs(val, 2, 3)
      call fill_p_orbs(val, 4, 3) ! S       1s^2 2s^2 2p^6 ; 3s^2 3p^4
    case(9)
+     if(val > 7) call fill_s_orbs(val, 2, 1)
      if(val > 5) call fill_s_orbs(val, 2, 2)
      call fill_p_orbs(val, 5, 2) ! F       1s^2 ; 2s^2 2p^5
    case(17)
+     if(val > 7) call fill_s_orbs(val, 2, 2)
      if(val > 5) call fill_s_orbs(val, 2, 3)
      call fill_p_orbs(val, 5, 3) ! Cl      1s^2 2s^2 2p^6 ; 3s^2 3p^5
    case(10)
+     if(val > 8) call fill_s_orbs(val, 2, 1)
      if(val > 6) call fill_s_orbs(val, 2, 2)
      call fill_p_orbs(val, 6, 2) ! Ne       1s^2 ; 2s^2 2p^6
    case(18)
+     if(val > 8) call fill_s_orbs(val, 2, 2)
      if(val > 6) call fill_s_orbs(val, 2, 3)
      call fill_p_orbs(val, 6, 3) ! Ar      1s^2 2s^2 2p^6 ; 3s^2 3p^6
    case(11)
+     if(val > 7) call fill_s_orbs(val, 2, 2)
      if(val > 1) call fill_p_orbs(val, 6, 2)
      call fill_s_orbs(val, 1, 3) ! Na      1s^2 2s^2 2p^6 ; 3s^1
    case(19)
+     if(val > 7) call fill_s_orbs(val, 2, 3)
      if(val > 1) call fill_p_orbs(val, 6, 3)
      call fill_s_orbs(val, 1, 4) ! K       1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^1
    case(12)
+     if(val > 8) call fill_s_orbs(val, 2, 2)
      if(val > 2) call fill_p_orbs(val, 6, 2)
      call fill_s_orbs(val, 2, 3) ! Mg      1s^2 2s^2 2p^6 ; 3s^2
    case(20)
+     if(val > 8) call fill_s_orbs(val, 2, 3)
      if(val > 2) call fill_p_orbs(val, 6, 3)
      call fill_s_orbs(val, 2, 4) ! Ca      1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2
    case(21)
+     if(val > 9) call fill_s_orbs(val, 2, 3)
      if(val > 3) call fill_p_orbs(val, 6, 3)
      if(val > 1) call fill_s_orbs(val, 2, 4)
      call fill_d_orbs(val, 1, 3) ! Sc      1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2 3d^1
    case(22)
+     if(val > 10) call fill_s_orbs(val, 2, 3)
      if(val > 4) call fill_p_orbs(val, 6, 3)
      if(val > 2) call fill_s_orbs(val, 2, 4)
      call fill_d_orbs(val, 2, 3) ! Ti      1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2 3d^2
    case(23)
+     if(val > 11) call fill_s_orbs(val, 2, 3)
      if(val > 5) call fill_p_orbs(val, 6, 3)
      if(val > 3) call fill_s_orbs(val, 2, 4)
      call fill_d_orbs(val, 3, 3) ! V       1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2 3d^3
    case(24)
+     if(val > 12) call fill_s_orbs(val, 2, 3)
      if(val > 6) call fill_p_orbs(val, 6, 3)
      if(val > 4) call fill_s_orbs(val, 2, 4)
      call fill_d_orbs(val, 4, 3) ! Cr      1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2 3d^4
    case(25)
+     if(val > 13) call fill_s_orbs(val, 2, 3)
      if(val > 7) call fill_p_orbs(val, 6, 3)
      if(val > 5) call fill_s_orbs(val, 2, 4)
      call fill_d_orbs(val, 5, 3) ! Mn      1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2 3d^5
    case(26)
+     if(val > 14) call fill_s_orbs(val, 2, 3)
      if(val > 8) call fill_p_orbs(val, 6, 3)
      if(val > 6) call fill_s_orbs(val, 2, 4)
      call fill_d_orbs(val, 6, 3) ! Fe      1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2 3d^6
    case(27)
+     if(val > 15) call fill_s_orbs(val, 2, 3)
      if(val > 9) call fill_p_orbs(val, 6, 3)
      if(val > 7) call fill_s_orbs(val, 2, 4)
      call fill_d_orbs(val, 7, 3) ! Co      1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2 3d^7
    case(28)
+     if(val > 16) call fill_s_orbs(val, 2, 3)
      if(val > 10) call fill_p_orbs(val, 6, 3)
      if(val > 8 ) call fill_s_orbs(val, 2, 4)
      call fill_d_orbs(val, 8, 3) ! Ni      1s^2 2s^2 2p^6 3s^2 3p^6 ; 4s^2 3d^8
    case(29)
-     if(val > 16) then ! Cu      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^1
-       call fill_p_orbs(val, 6,  3)
-       call fill_d_orbs(val, 10, 3)
-       call fill_s_orbs(val, 1, 4)
-     else if(val > 10) then
-       call fill_d_orbs(val, 10, 3)
-       call fill_s_orbs(val, 1,  4)
-     else
-       call fill_s_orbs(val, 1, 4)
-     end if
+     if(val > 17) call fill_s_orbs(val, 2, 3)
+     if(val > 16) call fill_p_orbs(val, 6,  3)
+     if(val > 10)  call fill_d_orbs(val, 10, 3)
+     call fill_s_orbs(val, 1, 4) ! Cu      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^1
    case(30)
-     if(val > 16) then ! Zn      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^2
-       call fill_p_orbs(val, 6,  3)
-       call fill_d_orbs(val, 10, 3)
-       call fill_s_orbs(val, 2,  4)
-     else if(val > 10) then
-       call fill_d_orbs(val, 10, 3)
-       call fill_s_orbs(val, 2,  4)
-     else
-       call fill_s_orbs(val, 2,  4)
-     end if
+     if(val > 18) call fill_s_orbs(val, 2, 3)
+     if(val > 16) call fill_p_orbs(val, 6,  3)
+     if(val > 10) call fill_d_orbs(val, 10, 3)
+     call fill_s_orbs(val, 2,  4) ! Zn      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^2
    case(31)
+     if(val > 19) call fill_s_orbs(val, 2, 3)
      if(val > 10) call fill_d_orbs(val, 10, 3)
      if(val > 2) call fill_s_orbs(val, 2, 4)
      call fill_p_orbs(val, 1, 4) ! Ga      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^2 4p^1
    case(32)
+     if(val > 20) call fill_s_orbs(val, 2, 3)
      if(val > 10) call fill_d_orbs(val, 10, 3)
      if(val > 2) call fill_s_orbs(val, 2, 4)
      call fill_p_orbs(val, 2, 4) ! Ge      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^2 4p^2
    case(33)
+     if(val > 21) call fill_s_orbs(val, 2, 3)
      if(val > 10) call fill_d_orbs(val, 10, 3)
      if(val > 3) call fill_s_orbs(val, 2, 4)
      call fill_p_orbs(val, 3, 4) ! As      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^2 4p^3
    case(34)
+     if(val > 22) call fill_s_orbs(val, 2, 3)
      if(val > 10) call fill_d_orbs(val, 10, 3)
      if(val > 4) call fill_s_orbs(val, 2, 4)
      call fill_p_orbs(val, 4, 4) ! Se      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^2 4p^4
    case(35)
+     if(val > 23) call fill_s_orbs(val, 2, 3)
      if(val > 10) call fill_d_orbs(val, 10, 3)
      if(val > 5) call fill_s_orbs(val, 2, 4)
      call fill_p_orbs(val, 5, 4) ! Br      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^2 4p^5
    case(36)
+     if(val > 24) call fill_s_orbs(val, 2, 3)
      if(val > 10) call fill_d_orbs(val, 10, 3)
      if(val > 6) call fill_s_orbs(val, 2, 4)
      call fill_p_orbs(val, 6, 4) ! Kr      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 ; 4s^2 4p^6
    case(37) 
+     if(val > 7) call fill_s_orbs(val, 2, 4)
      if(val > 1) call fill_p_orbs(val, 6, 4)
      call fill_s_orbs(val, 1, 5) ! Rb      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 5s^1
    case(38)
-     if(val > 1) call fill_p_orbs(val, 6, 4)
+     if(val > 8) call fill_s_orbs(val, 2, 4)
+     if(val > 2) call fill_p_orbs(val, 6, 4)
      call fill_s_orbs(val, 1, 5) ! Sr      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 5s^2
    case(39)
+     if(val > 9) call fill_s_orbs(val, 2, 4)
      if(val > 6) call fill_p_orbs(val, 6, 4)
      if(val > 2) call fill_d_orbs(val, 1, 4)
      call fill_s_orbs(val, 2, 5) ! Y       1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 4d^1 5s^2
    case(40)
+     if(val > 10) call fill_s_orbs(val, 2, 4)
      if(val > 6) call fill_p_orbs(val, 6, 4)
      if(val > 2) call fill_d_orbs(val, 2, 4)
      call fill_s_orbs(val, 2, 5) ! Zr      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 4d^2 5s^2
    case(41)
+     if(val > 11) call fill_s_orbs(val, 2, 4)
      if(val > 6) call fill_p_orbs(val, 6, 4)
      if(val > 1) call fill_d_orbs(val, 4, 4)
      call fill_s_orbs(val, 1, 5) ! Nb      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 4d^4 5s^1
    case(42)
+     if(val > 12) call fill_s_orbs(val, 2, 4)
      if(val > 6) call fill_p_orbs(val, 6, 4)
      if(val > 1) call fill_d_orbs(val, 5, 4)
      call fill_s_orbs(val, 1, 5) ! Mo      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 4d^5 5s^1
    case(43)
+     if(val > 13) call fill_s_orbs(val, 2, 4)
      if(val > 7) call fill_p_orbs(val, 6, 4)
      if(val > 2) call fill_d_orbs(val, 5, 4)
      call fill_s_orbs(val, 2, 5) ! Tc      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 4d^5 5s^2
    case(44)
+     if(val > 14) call fill_s_orbs(val, 2, 4)
      if(val > 8) call fill_p_orbs(val, 6, 4)
      if(val > 1) call fill_d_orbs(val, 7, 4)
      call fill_s_orbs(val, 1, 5) ! Ru      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 4d^7 5s^1
    case(45) 
+     if(val > 15) call fill_s_orbs(val, 2, 4)
      if(val > 9) call fill_p_orbs(val, 6, 4)
      if(val > 1) call fill_d_orbs(val, 8, 4)
      call fill_s_orbs(val, 1, 5) ! Rh      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 ; 4d^8 5s^1
    case(46)
+     if(val > 16) call fill_s_orbs(val, 2, 4)
      if(val > 10) call fill_p_orbs(val, 6, 4)
      call fill_d_orbs(val, 10, 4)
    case(47)
+     if(val > 17) call fill_s_orbs(val, 2, 4)
      if(val > 16) call fill_p_orbs(val, 6,  4)
      if(val > 10) call fill_d_orbs(val, 10, 4)
      call fill_s_orbs(val, 1, 5) ! Ag      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 ; 5s^1
    case(48)
+     if(val > 18) call fill_s_orbs(val, 2, 4)
      if(val > 16) call fill_p_orbs(val, 6,  4)
      if(val > 10) call fill_d_orbs(val, 10, 4)
      call fill_s_orbs(val, 2, 5) ! Cd      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 ; 5s^2
    case(49)
-     if(val > 10) call fill_d_orbs(val, 10, 4)
+     if(val > 21) call fill_s_orbs(val, 2, 4)
+     if(val > 13) call fill_p_orbs(val, 6, 4)
+     if(val > 3) call fill_d_orbs(val, 10, 4)
      if(val > 1) call fill_s_orbs(val, 2, 5)
      call fill_p_orbs(val, 1, 5) ! In      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 ; 5s^2 5p^1
    case(50)
+     if(val > 22) call fill_s_orbs(val, 2, 4)
+     if(val > 14) call fill_p_orbs(val, 6, 4)
      if(val > 10) call fill_d_orbs(val, 10, 4)
      if(val > 2) call fill_s_orbs(val, 2, 5)
      call fill_p_orbs(val, 2, 5) ! Sn      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 ; 5s^2 5p^2
    case(51)
+     if(val > 23) call fill_s_orbs(val, 2, 4)
+     if(val > 15) call fill_p_orbs(val, 6, 4)
      if(val > 10) call fill_d_orbs(val, 10, 4)
      if(val > 3) call fill_s_orbs(val, 2, 5)
      call fill_p_orbs(val, 3, 5) ! Sb      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 ; 5s^2 5p^3
    case(52)
+     if(val > 24) call fill_s_orbs(val, 2, 4)
+     if(val > 16) call fill_p_orbs(val, 6, 4)
      if(val > 10) call fill_d_orbs(val, 10, 4)
      if(val > 4) call fill_s_orbs(val, 2, 5)
      call fill_p_orbs(val, 4, 5) ! Te      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 ; 5s^2 5p^4
    case(53)
+     if(val > 25) call fill_s_orbs(val, 2, 4)
+     if(val > 17) call fill_p_orbs(val, 6, 4)
      if(val > 10) call fill_d_orbs(val, 10, 4)
      if(val > 5) call fill_s_orbs(val, 2, 5)
      call fill_p_orbs(val, 5, 5) ! I       1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 ; 5s^2 5p^5
    case(54)
+     if(val > 26) call fill_s_orbs(val, 2, 4)
+     if(val > 18) call fill_p_orbs(val, 6, 4)
      if(val > 10) call fill_d_orbs(val, 10, 4)
      if(val > 6) call fill_s_orbs(val, 2, 5)
      call fill_p_orbs(val, 6, 5) ! Xe      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 ; 5s^2 5p^6
    case(55)
+     if(val > 7) call fill_s_orbs(val, 2, 5)
      if(val > 6) call fill_p_orbs(val, 6, 5)
      call fill_s_orbs(val, 1, 6) ! Cs      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 6s^1
    case(56)
+     if(val > 8) call fill_s_orbs(val, 2, 5)
      if(val > 6) call fill_p_orbs(val, 6, 5)
      call fill_s_orbs(val, 2, 6) ! Ba      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 6s^2
    case(57)
+     if(val > 9) call fill_s_orbs(val, 2, 5)
      if(val > 6) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_d_orbs(val, 1, 5)
      call fill_s_orbs(val, 2, 6) ! La      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 5d^1 6s^2
    case(58)
+     if(val > 10) call fill_s_orbs(val, 2, 5)
      if(val > 6) call fill_p_orbs(val, 6, 5)
      if(val > 3) call fill_f_orbs(val, 1, 4)
      if(val > 2) call fill_d_orbs(val, 1, 5)
      call fill_s_orbs(val, 2, 6) ! Ce      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^1 5d^1 6s^2
    case(59)
+     if(val > 11) call fill_s_orbs(val, 2, 5)
      if(val > 6) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 3, 4)
      call fill_s_orbs(val, 2, 6) ! Pr      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^3 6s^2
    case(60)
+     if(val > 12) call fill_s_orbs(val, 2, 5)
      if(val > 6) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 4, 4)
      call fill_s_orbs(val, 2, 6) ! Nd      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^4 6s^2
    case(61)
+     if(val > 13) call fill_s_orbs(val, 2, 5)
      if(val > 7) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 5, 4)
      call fill_s_orbs(val, 2, 6) ! Pm      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^5 6s^2
    case(62)
+     if(val > 14) call fill_s_orbs(val, 2, 5)
      if(val > 8) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 6, 4)
      call fill_s_orbs(val, 2, 6) ! Sm      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^6 6s^2
    case(63)
+     if(val > 15) call fill_s_orbs(val, 2, 5)
      if(val > 9) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 7, 4)
      call fill_s_orbs(val, 2, 6) ! Eu      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^7 6s^2
    case(64)
+     if(val > 16) call fill_s_orbs(val, 2, 5)
      if(val > 10) call fill_p_orbs(val, 6, 5)
      if(val > 3) call fill_f_orbs(val, 7, 4)
      if(val > 2) call fill_d_orbs(val, 1, 5)
      call fill_s_orbs(val, 2, 6) ! Gd      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^7 5d^1 6s^2
    case(65)
+     if(val > 17) call fill_s_orbs(val, 2, 5)
      if(val > 11) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 9, 4)
      call fill_s_orbs(val, 2, 6) ! Tb      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^9 6s^2
    case(66)
+     if(val > 18) call fill_s_orbs(val, 2, 5)
      if(val > 12) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 10, 4)
      call fill_s_orbs(val, 2, 6) ! Dy      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^10 6s^2
    case(67)
+     if(val > 19) call fill_s_orbs(val, 2, 5)
      if(val > 13) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 11, 4)
      call fill_s_orbs(val, 2, 6) ! Ho      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^11 6s^2
    case(68)
+     if(val > 20) call fill_s_orbs(val, 2, 5)
      if(val > 14) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 12, 4)
      call fill_s_orbs(val, 2, 6) ! Er      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^12 6s^2
    case(69)
+     if(val > 21) call fill_s_orbs(val, 2, 5)
      if(val > 15) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 13, 4)
      call fill_s_orbs(val, 2, 6) ! Tm      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^13 6s^2
    case(70)
+     if(val > 22) call fill_s_orbs(val, 2, 5)
      if(val > 16) call fill_p_orbs(val, 6, 5)
      if(val > 2) call fill_f_orbs(val, 14, 4)
      call fill_s_orbs(val, 2, 6) ! Yb      1s^2 2s^2 2p^6 3s^2 3p^6 3d^10 4s^2 4p^6 4d^10 5s^2 5p^6 ; 4f^14 6s^2
