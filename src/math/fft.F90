@@ -652,9 +652,11 @@ contains
 
 #ifdef HAVE_CUDA
       call cuda_fft_plan3d(fft_array(jj)%cuda_plan_fw, &
-        fft_array(jj)%rs_n_global(3), fft_array(jj)%rs_n_global(2), fft_array(jj)%rs_n_global(1), CUFFT_D2Z)
+        fft_array(jj)%rs_n_global(3), fft_array(jj)%rs_n_global(2), fft_array(jj)%rs_n_global(1), CUFFT_D2Z, &
+        accel%cuda_stream)
       call cuda_fft_plan3d(fft_array(jj)%cuda_plan_bw, &
-        fft_array(jj)%rs_n_global(3), fft_array(jj)%rs_n_global(2), fft_array(jj)%rs_n_global(1), CUFFT_Z2D)
+        fft_array(jj)%rs_n_global(3), fft_array(jj)%rs_n_global(2), fft_array(jj)%rs_n_global(1), CUFFT_Z2D, &
+        accel%cuda_stream)
 #endif
       
 #ifdef HAVE_CLFFT
