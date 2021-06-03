@@ -32,6 +32,7 @@
 #else
 typedef int cufftHandle;
 typedef int CUdeviceptr;
+typedef int cudaStream_t;
 #endif
 
 #define CUFFT_SAFE_CALL(x)                                                                \
@@ -43,10 +44,11 @@ typedef int CUdeviceptr;
     }                                                                                     \
   } while(0)
 
-extern "C" void FC_FUNC_(cuda_fft_plan3d, CUDA_FFT_PLAN3D)(cufftHandle **plan, fint * nx, fint * ny, fint * nz, fint * type){
+extern "C" void FC_FUNC_(cuda_fft_plan3d, CUDA_FFT_PLAN3D)(cufftHandle **plan, fint * nx, fint * ny, fint * nz, fint * type, cudaStream_t ** stream){
   *plan = new cufftHandle;
 #ifdef HAVE_CUDA
   CUFFT_SAFE_CALL(cufftPlan3d(*plan, *nx, *ny, *nz, (cufftType) *type));
+  CUFFT_SAFE_CALL(cufftSetStream(**plan, **stream));
 #endif
 }
 
