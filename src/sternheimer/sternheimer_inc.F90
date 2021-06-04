@@ -20,7 +20,7 @@
 !> This routine calculates the first-order variations of the wavefunctions 
 !! for an applied perturbation.
 subroutine X(sternheimer_solve)(this, namespace, space, gr, kpoints, st, hm, xc, mc, ions, lr, nsigma, omega, perturbation, restart, &
-  rho_tag, wfs_tag, have_restart_rho, have_exact_freq)
+  rho_tag, wfs_tag, idir, have_restart_rho, have_exact_freq)
   type(sternheimer_t),         intent(inout) :: this
   type(namespace_t),           intent(in)    :: namespace
   type(space_t),               intent(in)    :: space
@@ -38,6 +38,7 @@ subroutine X(sternheimer_solve)(this, namespace, space, gr, kpoints, st, hm, xc,
   type(restart_t),             intent(inout) :: restart
   character(len=*),            intent(in)    :: rho_tag
   character(len=*),            intent(in)    :: wfs_tag
+  integer,           optional, intent(in)    :: idir
   logical,           optional, intent(in)    :: have_restart_rho
   logical,           optional, intent(in)    :: have_exact_freq
 
@@ -141,7 +142,7 @@ subroutine X(sternheimer_solve)(this, namespace, space, gr, kpoints, st, hm, xc,
       call lalg_copy(gr%mesh%np, st%d%nspin, lr(1)%X(dl_rho)(:, :), dl_rhoin(:, :, 1))
 
       this%X(omega) = omega
-      call X(sternheimer_calc_hvar)(this, gr%mesh, st, hm, xc, lr, nsigma, hvar)
+      call X(sternheimer_calc_hvar)(this, gr%mesh, st, hm, xc, lr, nsigma, hvar, idir=idir)
     end if
 
     SAFE_ALLOCATE(psi(1:gr%mesh%np, 1:st%d%dim))
@@ -495,7 +496,7 @@ end subroutine X(sternheimer_add_occ)
 
 
 !--------------------------------------------------------------
-subroutine X(sternheimer_calc_hvar)(this, mesh, st, hm, xc, lr, nsigma, hvar)
+subroutine X(sternheimer_calc_hvar)(this, mesh, st, hm, xc, lr, nsigma, hvar, idir)
   type(sternheimer_t),      intent(inout) :: this
   type(mesh_t),             intent(in)    :: mesh
   type(states_elec_t),      intent(in)    :: st
@@ -504,6 +505,7 @@ subroutine X(sternheimer_calc_hvar)(this, mesh, st, hm, xc, lr, nsigma, hvar)
   type(lr_t),               intent(inout) :: lr(:) 
   integer,                  intent(in)    :: nsigma 
   R_TYPE,                   intent(out)   :: hvar(:,:,:) !< (1:mesh%np, 1:st%d%nspin, 1:nsigma)
+  integer,        optional, intent(in)    :: idir
 
   PUSH_SUB(X(sternheimer_calc_hvar))
 
@@ -514,7 +516,7 @@ subroutine X(sternheimer_calc_hvar)(this, mesh, st, hm, xc, lr, nsigma, hvar)
   end if
   if (this%enable_el_pt_coupling) then
 #ifdef R_TCOMPLEX    
-    call calc_hvar_photons(this, mesh, st, lr(1)%zdl_rho, nsigma, hvar)
+    call calc_hvar_photons(this, mesh, st, lr(1)%zdl_rho, nsigma, hvar, idir=idir)
 #else
     ! Photons only available with complex states
     ASSERT(.false.)
