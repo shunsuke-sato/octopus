@@ -57,7 +57,7 @@ module cuda_oct_m
       type(c_ptr), intent(inout) :: context
       type(c_ptr), intent(inout) :: device
       type(c_ptr), intent(inout) :: stream
-      integer,     intent(out)   :: device_number
+      integer,     intent(inout) :: device_number
       integer,     intent(out)   :: rank
     end subroutine cuda_init
     
