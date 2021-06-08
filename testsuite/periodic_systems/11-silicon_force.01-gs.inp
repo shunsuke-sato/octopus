@@ -38,4 +38,4 @@ SymmetrizeDensity = yes
 ExtraStates = 1
 
 SCFCalculateStress = no
-StatesPack = yes
+

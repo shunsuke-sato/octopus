@@ -58,7 +58,7 @@ AOTruncation = ao_box
   occ_matrices
 %
 
-StatesPack = yes
+
 
 =======
 OutputLDA_U = occ_matrices

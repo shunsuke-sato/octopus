@@ -16,4 +16,4 @@ ExperimentalFeatures = yes
 PoissonSolver = fft
 PoissonTestPeriodicThreshold = 1e-4
 
-StatesPack = yes
+

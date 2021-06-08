@@ -32,4 +32,4 @@ XCFunctional = mgga_x_rpp09 + lda_c_pz
 %
 
 SCFCalculatePartialCharges = yes
-StatesPack = yes
+

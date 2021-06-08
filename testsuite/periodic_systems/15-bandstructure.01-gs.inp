@@ -42,6 +42,6 @@ EigensolverTolerance = 1e-9
  dos
 %
 OutputFormat = xyz
-StatesPack = yes
+
 
 DOSComputePDOS = yes

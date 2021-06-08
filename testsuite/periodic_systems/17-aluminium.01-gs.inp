@@ -36,4 +36,4 @@ ConvEigenError = yes
 ExperimentalFeatures = yes
 
 FromScratch = yes
-StatesPack = yes
+

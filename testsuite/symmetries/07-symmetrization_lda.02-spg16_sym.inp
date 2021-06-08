@@ -33,4 +33,4 @@ KPointsUseSymmetries = yes
 OutputFormat = axis_x
 
 SCFCalculatePartialCharges = yes
-StatesPack = yes
+

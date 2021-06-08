@@ -22,4 +22,4 @@ SmearingFunction = fermi_dirac
 
 
 ConvEigenError = yes
-StatesPack = yes
+
