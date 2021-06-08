@@ -4,6 +4,7 @@ CalculationMode = gs
 PeriodicDimensions = 3
 BoxShape = parallelepiped
 ExperimentalFeatures = yes
+DisableAccel = yes
 
 a = 7.578
 

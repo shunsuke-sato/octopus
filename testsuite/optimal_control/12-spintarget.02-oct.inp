@@ -4,6 +4,7 @@
 
 CalculationMode = opt_control
 fromScratch = yes
+DisableAccel = yes
 
 TheoryLevel = independent_particles
 ExperimentalFeatures = yes

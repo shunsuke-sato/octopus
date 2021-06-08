@@ -4,6 +4,8 @@
  RestartWrite = no
  ExperimentalFeatures = yes
 
+ DisableAccel = yes
+
 %Systems
   'Maxwell' | maxwell
   'Medium'  | linear_medium

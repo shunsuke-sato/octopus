@@ -1,4 +1,5 @@
 CalculationMode = td
+DisableAccel = yes
 
 %Coordinates
  'Al' | 0.0 | 0.0 | 0.0

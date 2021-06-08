@@ -3,6 +3,8 @@ FromScratch=yes
 CalculationMode = td
 ExperimentalFeatures = yes
 
+DisableAccel = yes
+
 PeriodicDimensions = 3
 
 a = 10.2

@@ -7,6 +7,8 @@
 CalculationMode = gs
 #ExtraStates = 3
 
+DisableAccel = yes
+
 fromScratch = yes
 
 TheoryLevel = independent_particles

@@ -1,6 +1,7 @@
 CalculationMode = td
 ExperimentalFeatures = yes
 FromScratch = yes
+DisableAccel = yes
 
 ParKPoints = 2
 ParDomains = 2
