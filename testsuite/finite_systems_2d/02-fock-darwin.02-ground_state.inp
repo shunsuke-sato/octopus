@@ -2,6 +2,7 @@ CalculationMode = gs
 FromScratch = yes
 Dimensions = 2
 ExperimentalFeatures = yes
+DisableAccel = yes
 
 meff = 1.0
 omega = 1.0

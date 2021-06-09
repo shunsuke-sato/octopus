@@ -3,6 +3,7 @@
 CalculationMode = gs
 FromScratch = yes
 UnitsOutput = ev_angstrom
+DisableAccel = yes
 
 # Colmont et al
 rCCl  = 1.760*angstrom

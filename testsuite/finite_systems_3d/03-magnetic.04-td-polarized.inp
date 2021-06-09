@@ -1,4 +1,5 @@
 CalculationMode = td
+DisableAccel = yes
 
 %Coordinates
  'Al' | 0.0 | 0.0 | 0.0
@@ -32,4 +33,3 @@ TDEnergyUpdateIter = 5
 FilterPotentials = filter_none
 
 ParKpoints = no
-StatesPack = yes

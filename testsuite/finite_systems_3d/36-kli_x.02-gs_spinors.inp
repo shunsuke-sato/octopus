@@ -1,5 +1,6 @@
 CalculationMode = gs
 FromScratch = yes
+DisableAccel = yes
 
 %Coordinates
 "Cl" | 0 | 0 | 0

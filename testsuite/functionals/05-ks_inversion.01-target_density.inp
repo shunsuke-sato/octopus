@@ -31,4 +31,3 @@ MixingScheme = linear
 
 ConvRelDens = 1e-8
 Eigensolver = cg_new
-StatesPack = yes

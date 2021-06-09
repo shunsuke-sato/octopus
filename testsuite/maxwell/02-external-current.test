@@ -12,12 +12,12 @@ Processors : 4
 Input      : 02-external-current.01-gaussian_current_pulse.inp
 Precision  : 1.0e-5
 
-Precision: 1.0e-17
+Precision: 1.0e-16
 match ;  Tot. Maxwell energy [step 10]  ; LINEFIELD(Maxwell/td.general/maxwell_energy, 16, 3) ; 0.004977064390073
 match ;  Tot. Maxwell energy [step 30]  ; LINEFIELD(Maxwell/td.general/maxwell_energy, 36, 3) ; 0.006489727232959
 match ;  Tot. Maxwell energy [step 50]  ; LINEFIELD(Maxwell/td.general/maxwell_energy, 56, 3) ; 0.006489001641275
 
-Precision: 1.0e-17
+Precision: 1.0e-16
 match ;  Ez  (x=-10,y=  0,z=  0) [step 10]  ; LINEFIELD(Maxwell/output_iter/td.0000010/e_field-z\.y=0\,z=0, 12, 2) ; -0.000276953012669959
 match ;  Ez  (x= 10,y=  0,z=  0) [step 10]  ; LINEFIELD(Maxwell/output_iter/td.0000010/e_field-z\.y=0\,z=0, 32, 2) ; -0.00027695301266995854
 

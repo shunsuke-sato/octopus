@@ -111,6 +111,7 @@
 CalculationMode = gs
 FromScratch = yes
 Dimensions = 2
+DisableAccel = yes
 
 ExperimentalFeatures = yes
 

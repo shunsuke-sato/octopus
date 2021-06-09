@@ -14,4 +14,4 @@ Spacing = 0.3*angstrom   # 0.15*angstrom in tutorial
 OutputFormat = cube + xcrysden + dx + axis_x + plane_z
 
 XYZCoordinates = "benzene.xyz"
-StatesPack = yes
+

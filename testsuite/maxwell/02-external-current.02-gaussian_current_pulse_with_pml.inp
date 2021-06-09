@@ -3,6 +3,7 @@
  CalculationMode   = td
  RestartWrite = no
  ExperimentalFeatures = yes
+ DisableAccel = yes
 
 %Systems
   'Maxwell' | maxwell

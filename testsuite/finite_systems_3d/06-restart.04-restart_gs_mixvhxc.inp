@@ -23,4 +23,3 @@ MixField = potential
 FilterPotentials = filter_none
 
 WorkDir = "./workdir"
-StatesPack = yes

@@ -32,5 +32,3 @@ TDExpOrder = 100
 SCFCalculatePartialCharges = yes
 
 ExperimentalFeatures = yes
-
-StatesPack = yes

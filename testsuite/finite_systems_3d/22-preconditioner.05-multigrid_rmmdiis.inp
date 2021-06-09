@@ -16,6 +16,6 @@ CH = 1.2*angstrom
 %
 
 Preconditioner = pre_multigrid
-StatesPack = yes
+
 ExtraStates = 4
 Eigensolver = rmmdiis

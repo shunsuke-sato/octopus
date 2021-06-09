@@ -39,4 +39,4 @@ KPointsUseSymmetries = no
 %
 
 SCFCalculatePartialCharges = yes
-StatesPack = yes
+

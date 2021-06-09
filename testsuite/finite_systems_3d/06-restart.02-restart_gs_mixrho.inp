@@ -24,4 +24,3 @@ FilterPotentials = filter_none
 MixField = density
 
 WorkDir = "./workdir"
-StatesPack = yes

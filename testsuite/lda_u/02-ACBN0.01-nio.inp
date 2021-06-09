@@ -2,6 +2,7 @@ CalculationMode = gs
 PeriodicDimensions = 3
 BoxShape = parallelepiped
 ExperimentalFeatures = yes
+DisableAccel = yes
 
 EigenSolver = rmmdiis
 ConvRelDens = 5.0e-7

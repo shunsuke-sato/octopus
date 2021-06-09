@@ -1,4 +1,5 @@
 CalculationMode = td
+DisableAccel = yes
 
 UnitsOutput = ev_angstrom
 

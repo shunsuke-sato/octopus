@@ -50,7 +50,3 @@ FlushMessages = yes
 CalculateSelfInducedMagneticField = yes
 
 LCAOStart = no
-
-
-
-StatesPack = yes

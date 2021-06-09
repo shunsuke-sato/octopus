@@ -200,7 +200,6 @@ contains
     type(block_t)        :: blk
 
     integer :: idim, nlines, ncols, il
-    logical :: defaultl
     FLOAT, allocatable   :: pos(:)
     integer :: ix_max, iy_max, iz_max
     type(profile_t), save :: prof
@@ -231,11 +230,7 @@ contains
     st%parallel_in_states = .false.
     st%packed = .false.
 
-    defaultl = .true.
-    if(accel_is_enabled()) then
-      defaultl = .false.
-    end if
-    call parse_variable(namespace, 'StatesPack', defaultl, st%pack_states)
+    call parse_variable(namespace, 'StatesPack', .true., st%pack_states)
 
     call messages_print_var_value(stdout, 'StatesPack', st%pack_states)
 

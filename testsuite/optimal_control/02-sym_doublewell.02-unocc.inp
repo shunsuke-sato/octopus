@@ -36,6 +36,3 @@ TheoryLevel = independent_particles
  potential | axis_x
 %
 
-
-
-StatesPack = yes

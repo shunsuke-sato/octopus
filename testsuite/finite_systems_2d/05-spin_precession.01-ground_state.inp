@@ -1,6 +1,7 @@
 CalculationMode = gs
 FromScratch = yes
 Dimensions = 2
+DisableAccel = yes
 
 omega = 0.25
 
