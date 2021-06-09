@@ -226,7 +226,9 @@ subroutine X(hamiltonian_elec_apply_batch) (hm, namespace, mesh, psib, hpsib, te
 
   if (bitand(TERM_MGGA, terms_) /= 0 .and. family_is_mgga_with_exc(hm%xc) &
         .and. hm%theory_level == GENERALIZED_KOHN_SHAM_DFT) then
-    call X(h_mgga_terms)(hm, mesh, epsib, hpsib)
+    ! Here we can save the update of ghost points if the Laplacian was applied.
+    ! This is not the case for instance when we compute the energy of the MGGA term
+    call X(h_mgga_terms)(hm, mesh, epsib, hpsib, ghost_update =.not.(bitand(TERM_KINETIC, terms_) /= 0))
   end if
 
   if(bitand(TERM_OTHERS, terms_) /= 0 .and. hm%scissor%apply) then
@@ -390,11 +392,12 @@ subroutine X(hamiltonian_elec_magnus_apply_batch) (hm, namespace, mesh, psib, hp
 end subroutine X(hamiltonian_elec_magnus_apply_batch)
 
 ! ---------------------------------------------------------
-subroutine X(h_mgga_terms) (hm, mesh, psib, hpsib)
+subroutine X(h_mgga_terms) (hm, mesh, psib, hpsib, ghost_update)
   type(hamiltonian_elec_t), intent(in)    :: hm
   type(mesh_t),             intent(in)    :: mesh
   type(wfs_elec_t),         intent(inout) :: psib
   type(wfs_elec_t),         intent(inout) :: hpsib
+  logical,                  intent(in)    :: ghost_update
 
   integer :: ispin, ii, idir
   R_TYPE, allocatable :: grad(:,:), diverg(:)
@@ -415,7 +418,9 @@ subroutine X(h_mgga_terms) (hm, mesh, psib, hpsib)
   do idir = 1, mesh%sb%dim
     call hpsib%copy_to(gradb(idir))
   end do
-  call X(derivatives_batch_grad)(hm%der, psib, gradb, ghost_update = .false., set_bc = .false.)
+  ! Here we must not set the boundary conditions, if we have k-points. 
+  ! This is properly done in hamiltonian_elec_apply_batch who is calling this routine
+  call X(derivatives_batch_grad)(hm%der, psib, gradb, ghost_update, set_bc = .false.)
   
   do ii = 1, psib%nst_linear
 
@@ -425,9 +430,17 @@ subroutine X(h_mgga_terms) (hm, mesh, psib, hpsib)
 
     do idir = 1, mesh%sb%dim
       grad(1:mesh%np, idir) = grad(1:mesh%np, idir)*hm%vtau(1:mesh%np, ispin)
+
+      ! We need to set the boundary explicitly here if we have k-points
+      ! Otherwise we periodize the full Bloch wavefunction, which is not correct
+      if(psib%has_phase) then
+        call boundaries_set(hm%der%boundaries, grad(:, idir), phase_correction = hm%hm_base%phase_corr(:, psib%ik))
+      else
+        call boundaries_set(hm%der%boundaries, grad(:, idir))
+      end if
     end do
 
-    call X(derivatives_div)(hm%der, grad, diverg)
+    call X(derivatives_div)(hm%der, grad, diverg, set_bc = .false.)
 
     call batch_set_state(divb, ii, mesh%np, diverg)
 

@@ -75,7 +75,9 @@ subroutine X(xc_oep_calc)(oep, namespace, xcs, apply_sic_pz, der, hm, st, space,
   if(family_is_mgga_with_exc(xcs)) then
     do ik = st%d%kpt%start, st%d%kpt%end
       do ib = st%group%block_start, st%group%block_end
-        call X(h_mgga_terms)(hm, der%mesh, st%group%psib(ib, ik), xst%group%psib(ib, ik))
+        ! Here we apply the term by calling hamiltonian_elec_apply_batch, which takes care of setting the        ! phases properly, as well as upating boundary points/ghost points when needed
+        call X(hamiltonian_elec_apply_batch)(hm, namespace, der%mesh, st%group%psib(ib, ik), &
+                 xst%group%psib(ib, ik), terms = TERM_MGGA)
       end do
     end do 
   end if
