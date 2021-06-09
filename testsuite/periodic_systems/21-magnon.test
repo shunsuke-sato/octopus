@@ -42,7 +42,7 @@ match ;  Eigenvalue  3   ; GREPFIELD(static/info, '#k =   2', 3, 3) ; -1.944945
 Precision: 1.93e-15
 match ;  Eigenvalue  4   ; GREPFIELD(static/info, '#k =   2', 3, 5) ; -1.930112
 
-Precision: 4.30e-26
+Precision: 5e-26
 match ;   Total xc torque x    ; GREPFIELD(static/info, 'Tx = ', 3) ; -2.260000000000001e-27
 match ;   Total xc torque y    ; GREPFIELD(static/info, 'Ty = ', 3) ; -2.260000000000001e-27
 match ;   Total xc torque z    ; GREPFIELD(static/info, 'Tz = ', 3) ; -2.260000000000001e-27
