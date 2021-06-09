@@ -1064,7 +1064,7 @@ contains
     integer :: ia, is, idir, gmd_opt, ip
     integer, save :: iseed = 321
     type(block_t) :: blk
-    FLOAT :: rr, rnd, phi, theta, mag(1:3), lmag, n1, n2
+    FLOAT :: rr, rnd, phi, theta, mag(1:3), lmag, n1, n2,arg
     FLOAT, allocatable :: atom_rho(:,:)
     logical :: parallelized_in_atoms
     type(symmetrizer_t) :: symmetrizer
@@ -1268,10 +1268,12 @@ contains
               phi = M_PI*M_HALF
             end if
           else
+            ! In some rare cases this can be larger than one 
+            arg = mag(1)/sin(theta)/lmag
+            if(abs(arg) > M_ONE) arg = sign(M_ONE, arg)
+            phi = acos(arg)
             if (mag(2) < M_ZERO) then
-              phi = M_TWO*M_PI - acos(mag(1)/sin(theta)/lmag)
-            elseif (mag(2) >= M_ZERO) then
-              phi = acos(mag(1)/sin(theta)/lmag)
+              phi = M_TWO*M_PI - phi
             end if
           end if
           theta = M_HALF*theta
