@@ -54,13 +54,6 @@ KPointsUseSymmetries = yes
 KPointsUseTimeReversal = no
 
 AOTruncation = ao_box
-<<<<<<< HEAD
 %Output
   occ_matrices
 %
-
-
-
-=======
-OutputLDA_U = occ_matrices
->>>>>>> 3ed3a94ce... Further cleaning of the testsuite.
