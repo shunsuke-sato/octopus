@@ -37,13 +37,13 @@ if(available cuda); then
   match ;  Total energy        ; GREPFIELD(static/info, 'Total       =', 3) ; -17.26583146
   Precision: 1.00e-15
   match ;  Ion-ion energy      ; GREPFIELD(static/info, 'Ion-ion     =', 3) ; 0.0
-  Precision: 2.20e-08
+  Precision: 6e-08
   match ;  Eigenvalues sum     ; GREPFIELD(static/info, 'Eigenvalues =', 3) ; -17.8869581
   Precision: 1.10e-08
   match ;  Hartree energy      ; GREPFIELD(static/info, 'Hartree     =', 3) ; 0.00746492
-  Precision: 1.65e-08
+  Precision: 5e-08
   match ;  Kinetic energy      ; GREPFIELD(static/info, 'Kinetic     =', 3) ; 0.270110745
-  Precision: 1.10e-08
+  Precision: 3e-08
   match ;  External energy     ; GREPFIELD(static/info, 'External    =', 3) ; -16.914816260000002
   Precision: 2.50e-17
   match ;  k-point 2 (x)   ; GREPFIELD(static/info, '#k =   2', 7) ; 0.025
