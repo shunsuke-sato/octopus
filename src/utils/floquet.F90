@@ -56,7 +56,6 @@ program oct_floquet
 
   type(electrons_t), pointer :: sys
   type(states_elec_t) :: st
-  type(grid_t)   :: gr
   CMPLX, allocatable :: hmss(:,:), psi(:,:,:), hpsi(:,:,:), temp_state1(:,:)
   CMPLX, allocatable :: HFloquet(:,:,:), HFloq_eff(:,:), temp(:,:)
   FLOAT, allocatable :: eigenval(:), bands(:,:)
@@ -93,13 +92,12 @@ program oct_floquet
   call sys%init_parallelization(mpi_world)
   ! make shortcut copies
   st = sys%st
-  gr = sys%gr
 
   ! generate the full hamiltonian following the sequence in td_init
-  call hamiltonian_elec_epot_generate(sys%hm, global_namespace, sys%space, gr, sys%ions, st, time=M_ZERO)
-  call hamiltonian_elec_update(sys%hm, gr%mesh, global_namespace, sys%space, time = M_ZERO)
+  call hamiltonian_elec_epot_generate(sys%hm, global_namespace, sys%space, sys%gr, sys%ions, st, time=M_ZERO)
+  call hamiltonian_elec_update(sys%hm, sys%gr%mesh, global_namespace, sys%space, time = M_ZERO)
 
-  call states_elec_allocate_wfns(st, gr%mesh)
+  call states_elec_allocate_wfns(st, sys%gr%mesh)
   ! not sure this is needed ...
   if (gauge_field_is_applied(sys%hm%ep%gfield)) then
      !if the gauge field is applied, we need to tell v_ks to calculate the current
@@ -107,21 +105,21 @@ program oct_floquet
 
      ! initialize the vector field and update the hamiltonian     
      call gauge_field_init_vec_pot(sys%hm%ep%gfield, sys%ions%latt%rcell_volume, st%qtot)
-     call hamiltonian_elec_update(sys%hm, gr%mesh, global_namespace, sys%space, time = M_ZERO)
+     call hamiltonian_elec_update(sys%hm, sys%gr%mesh, global_namespace, sys%space, time = M_ZERO)
   end if
 
-  call restart_init(restart, global_namespace, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=gr%mesh, exact=.true.)
+  call restart_init(restart, global_namespace, RESTART_GS, RESTART_TYPE_LOAD, sys%mc, ierr, mesh=sys%gr%mesh, exact=.true.)
   if(ierr == 0) then
-    call states_elec_load(restart, global_namespace, sys%space, st, gr%mesh, sys%kpoints, ierr, label = ": gs")
+    call states_elec_load(restart, global_namespace, sys%space, st, sys%gr%mesh, sys%kpoints, ierr, label = ": gs")
   end if
   if (ierr /= 0) then
      message(1) = 'Unable to read ground-state wavefunctions.'
      call messages_fatal(1)
   end if
 
-  call density_calc(st, gr, st%rho)
+  call density_calc(st, sys%gr, st%rho)
   call v_ks_calc(sys%ks, global_namespace, sys%space, sys%hm, st, sys%ions, calc_eigenval=.true., time = M_ZERO)
-  call hamiltonian_elec_update(sys%hm, gr%mesh, global_namespace, sys%space, time = M_ZERO)
+  call hamiltonian_elec_update(sys%hm, sys%gr%mesh, global_namespace, sys%space, time = M_ZERO)
 
   call floquet_init()
 
@@ -151,7 +149,7 @@ contains
       PUSH_SUB(floquet_init)
 
       !for now no domain distribution allowed
-      ASSERT(gr%mesh%np == gr%mesh%np_global)
+      ASSERT(sys%gr%mesh%np == sys%gr%mesh%np_global)
 
       ! variables documented in td/td_write.F90
       call parse_variable(global_namespace, 'TDFloquetFrequency', M_ZERO, omega, units_inp%energy)
@@ -193,7 +191,7 @@ contains
 
     PUSH_SUB(floquet_solve_non_interacting)
 
-    mesh = gr%mesh
+    mesh = sys%gr%mesh
     nst = st%nst
     
     SAFE_ALLOCATE(hmss(1:nst,1:nst))
@@ -219,9 +217,9 @@ contains
     ! perform time-integral over one cycle
     do it=1,nT
       ! get non-interacting Hamiltonian at time (offset by one cycle to allow for ramp)
-      call hamiltonian_elec_update(sys%hm, gr%mesh, global_namespace, sys%space, time=Tcycle+it*dt)
+      call hamiltonian_elec_update(sys%hm, sys%gr%mesh, global_namespace, sys%space, time=Tcycle+it*dt)
       ! get hpsi
-      call zhamiltonian_elec_apply_all(sys%hm, global_namespace, gr%mesh, st, hm_st)
+      call zhamiltonian_elec_apply_all(sys%hm, global_namespace, sys%gr%mesh, st, hm_st)
 
       ! project Hamiltonian into grounstates for zero weight k-points
       ik_count = 0
@@ -368,7 +366,7 @@ contains
      end if
   
     ! reset time in Hamiltonian
-    call hamiltonian_elec_update(sys%hm, gr%mesh, global_namespace, sys%space, time=M_ZERO)
+    call hamiltonian_elec_update(sys%hm, sys%gr%mesh, global_namespace, sys%space, time=M_ZERO)
 
     SAFE_DEALLOCATE_A(hmss)
     SAFE_DEALLOCATE_A(psi)
