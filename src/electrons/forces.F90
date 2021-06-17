@@ -291,6 +291,7 @@ contains
       ions%atom(iatom)%f_fields(1:ions%space%dim) = M_ZERO
       ions%atom(iatom)%f_nlcc(1:ions%space%dim) = M_ZERO
       ions%atom(iatom)%f_scf(1:ions%space%dim) = M_ZERO
+      ions%atom(iatom)%f_photons(1:ions%space%dim) = M_ZERO
     end do
 
     ! the ion-ion and vdw terms are already calculated
@@ -301,8 +302,14 @@ contains
 
     do iatom = 1, ions%natoms
       ions%tot_force(:, iatom) = hm%ep%fii(1:ions%space%dim, iatom) + hm%ep%vdw_forces(1:ions%space%dim, iatom)
+      if (ks%has_photons) then
+        ions%tot_force(:, iatom) = ions%tot_force(:, iatom) &
+          - P_PROTON_CHARGE*species_zval(ions%atom(iatom)%species)*hm%ep%photon_forces(1:ions%space%dim)
+      end if
       ions%atom(iatom)%f_ii(1:ions%space%dim) = hm%ep%fii(1:ions%space%dim, iatom)
       ions%atom(iatom)%f_vdw(1:ions%space%dim) = hm%ep%vdw_forces(1:ions%space%dim, iatom)
+      ions%atom(iatom)%f_photons(1:ions%space%dim) = - P_PROTON_CHARGE*species_zval(ions%atom(iatom)%species)* &
+        hm%ep%photon_forces(1:ions%space%dim)
     end do
 
     if(present(t)) then
@@ -502,9 +509,9 @@ contains
     iunit2 = io_open(trim(dir)//'/forces', namespace, action='write', position='asis')
     write(iunit2,'(a)') &
       ' # Total force (x,y,z) Ion-Ion (x,y,z) VdW (x,y,z) Local (x,y,z) NL (x,y,z)' // &
-      ' Fields (x,y,z) Hubbard(x,y,z) SCF(x,y,z) NLCC(x,y,z)'
+      ' Fields (x,y,z) Hubbard(x,y,z) SCF(x,y,z) NLCC(x,y,z) Phot (x,y,z)'
     do iatom = 1, ions%natoms
-       write(iunit2,'(i4,a10,27e15.6)') iatom, trim(species_label(ions%atom(iatom)%species)), &
+       write(iunit2,'(i4,a10,30e15.6)') iatom, trim(species_label(ions%atom(iatom)%species)), &
            (units_from_atomic(units_out%force, ions%tot_force(idir, iatom)), idir=1, ions%space%dim), &
            (units_from_atomic(units_out%force, ions%atom(iatom)%f_ii(idir)), idir=1, ions%space%dim), &
            (units_from_atomic(units_out%force, ions%atom(iatom)%f_vdw(idir)), idir=1, ions%space%dim), &
@@ -513,7 +520,8 @@ contains
            (units_from_atomic(units_out%force, ions%atom(iatom)%f_fields(idir)), idir=1, ions%space%dim), &
            (units_from_atomic(units_out%force, ions%atom(iatom)%f_u(idir)), idir=1, ions%space%dim), &
            (units_from_atomic(units_out%force, ions%atom(iatom)%f_scf(idir)), idir=1, ions%space%dim), &
-           (units_from_atomic(units_out%force, ions%atom(iatom)%f_nlcc(idir)), idir=1, ions%space%dim)
+           (units_from_atomic(units_out%force, ions%atom(iatom)%f_nlcc(idir)), idir=1, ions%space%dim), &
+           (units_from_atomic(units_out%force, ions%atom(iatom)%f_photons(idir)), idir=1, ions%space%dim)
     end do
     call io_close(iunit2) 
 

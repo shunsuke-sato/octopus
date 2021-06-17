@@ -235,7 +235,7 @@ contains
       ! only write in final run
       if(write_iter_) then
         call td_write_iter(write_handler, sys%namespace, sys%space, sys%outp, sys%gr, psi, sys%hm,  sys%ions, sys%hm%ep%kick, &
-          td%dt, istep)
+          sys%ks, td%dt, istep)
         ii = ii + 1
         if (any(ii == sys%outp%output_interval + 1) .or. istep == td%max_iter) then ! output
           if (istep == td%max_iter) sys%outp%output_interval = ii - 1

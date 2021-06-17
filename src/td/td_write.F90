@@ -121,8 +121,9 @@ module td_write_oct_m
     OUT_SEPARATE_FORCES  = 24, &
     OUT_TOTAL_HEAT_CURRENT = 25, &
     OUT_TOT_M            = 26, &
-    OUT_MAX              = 26
-  
+    OUT_Q                = 27, &
+    OUT_MAX              = 27
+
   integer, parameter ::      &
     OUT_DFTU_EFFECTIVE_U = 1, &
     OUT_DFTU_MAX         = 1
@@ -337,6 +338,8 @@ contains
     !% Writes the total magnetization, where the total magnetization is calculated at the momentum
     !% defined by <tt>TDMomentumTransfer</tt>. 
     !% This is used to extract the magnon frequency in case of a magnon kick.
+    !%Option photons_q 27
+    !% Writes photons_q in a separate file.
     !%End
 
 
@@ -369,6 +372,7 @@ contains
     if(writ%out(OUT_KP_PROJ)%write) call messages_experimental('TDOutput = td_kpoint_occup')
     if(writ%out(OUT_FLOQUET)%write) call messages_experimental('TDOutput = td_floquet')
     if(writ%out(OUT_N_EX)%write) call messages_experimental('TDOutput = n_excited_el')
+    if(writ%out(OUT_Q)%write) call messages_experimental('TDOutput = photons_q')
 
     !See comment in zstates_elec_mpdotp
     if (space%is_periodic() .and. writ%out(OUT_POPULATIONS)%write) then
@@ -427,6 +431,11 @@ contains
     if ((writ%out(OUT_ACC)%write) .and. ions_move) then
       message(1) = 'If harmonic spectrum is to be calculated, atoms should not be allowed to move.'
       call messages_fatal(1, namespace=namespace)
+    end if
+
+    if( (writ%out(OUT_Q)%write) .and. .not.(ks%has_photons)) then
+      message(1) = 'If q(t) is to be calculated, you need to allow for photon modes.'
+      call messages_fatal(1)
     end if
 
     rmin = ions%min_distance()
@@ -774,12 +783,17 @@ contains
         call write_iter_init(writ%out(OUT_N_EX)%handle, first, &
           units_from_atomic(units_out%time, dt),  &
           trim(io_workpath("td.general/n_ex", namespace)))
-    
+
      if(writ%out(OUT_TOT_M)%write) &
         call write_iter_init(writ%out(OUT_TOT_M)%handle, first, &
           units_from_atomic(units_out%time, dt), &
           trim(io_workpath("td.general/total_magnetization", namespace)))
-      
+
+     if(writ%out(OUT_Q)%write) &
+        call write_iter_init(writ%out(OUT_Q)%handle, first, &
+        units_from_atomic(units_out%time, dt), &
+        trim(io_workpath("td.general/photons_q")))
+
     end if
     
     if(writ%out(OUT_TOTAL_CURRENT)%write .or. writ%out(OUT_TOTAL_HEAT_CURRENT)%write) then
@@ -886,7 +900,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine td_write_iter(writ, namespace, space, outp, gr, st, hm, ions, kick, dt, iter)
+  subroutine td_write_iter(writ, namespace, space, outp, gr, st, hm, ions, kick, ks, dt, iter)
     type(td_write_t),         intent(inout) :: writ !< Write object
     type(namespace_t),        intent(in)    :: namespace
     type(space_t),            intent(in)    :: space
@@ -896,6 +910,7 @@ contains
     type(hamiltonian_elec_t), intent(inout) :: hm   !< Hamiltonian object
     type(ions_t),             intent(inout) :: ions  !< Geometry object
     type(kick_t),             intent(in)    :: kick !< The kick
+    type(v_ks_t),             intent(in)    :: ks   !< Kohn-Sham object
     FLOAT,                    intent(in)    :: dt   !< Delta T, time interval
     integer,                  intent(in)    :: iter !< Iteration number
 
@@ -1014,6 +1029,10 @@ contains
     !LDA+U outputs
     if (writ%out_dftu(OUT_DFTU_EFFECTIVE_U)%write) then
       call td_write_effective_u(writ%out_dftu(OUT_DFTU_EFFECTIVE_U)%handle, hm%lda_u, iter)
+    end if
+
+    if(writ%out(OUT_Q)%write .and. ks%has_photons) then
+      call td_write_q(writ%out(OUT_Q)%handle, ks, gr, iter)
     end if
 
     call profiling_out(prof)
@@ -3213,6 +3232,49 @@ contains
 
     POP_SUB(td_write_partial_charges)
   end subroutine td_write_partial_charges
+
+
+  ! ---------------------------------------------------------
+  subroutine td_write_q(out_q, ks, gr, iter)
+    type(c_ptr),             intent(inout) :: out_q
+    type(v_ks_t),            intent(in)    :: ks
+    type(grid_t),            intent(in)    :: gr
+    integer,                 intent(in)    :: iter
+
+    integer :: ii
+    character(len=50) :: aux
+
+    PUSH_SUB(td_write_q)
+
+    if(mpi_grp_is_root(mpi_world)) then
+      if(iter == 0) then
+        call td_write_print_header_init(out_q)
+        call write_iter_header_start(out_q)
+        do ii = 1, ks%pt%nmodes
+          write(aux, '(a1,i3,a3)') 'q', ii, '(t)'
+          call write_iter_header(out_q, aux)
+        end do
+        do ii = 1, ks%pt%nmodes
+          write(aux, '(a1,i3,a3)') 'p', ii, '(t)'
+          call write_iter_header(out_q, aux)
+        end do
+        do ii = 1, gr%mesh%sb%dim
+          write(aux, '(a3,i3,a3)') 'f_pt', ii, '(t)'
+          call write_iter_header(out_q, aux)
+        end do
+        call write_iter_nl(out_q)
+        call td_write_print_header_end(out_q)
+      end if
+
+      call write_iter_start(out_q)
+      call write_iter_double(out_q, ks%pt_mx%pt_q, ks%pt%nmodes)
+      call write_iter_double(out_q, ks%pt_mx%pt_p, ks%pt%nmodes)
+      call write_iter_double(out_q, ks%pt_mx%fmf, gr%mesh%sb%dim)
+      call write_iter_nl(out_q)
+    end if
+
+     POP_SUB(td_write_q)
+  end subroutine td_write_q
 
 
   ! ---------------------------------------------------------

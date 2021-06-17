@@ -358,7 +358,7 @@ contains
     call parse_variable(sys%namespace, 'EnablePhotons', .false., cas%has_photons)
     cas%pt_nmodes = 0
     if (cas%has_photons) then
-      if(cas%has_photons) call messages_experimental('EnablePhotons = yes')
+      call messages_experimental('EnablePhotons = yes')
       call photon_mode_init(cas%pt, sys%namespace, sys%gr%mesh, sys%space%dim, sys%st%qtot)
       write(message(1), '(a,i7,a)') 'INFO: Solving Casida equation with ', &
         cas%pt%nmodes, ' photon modes.'

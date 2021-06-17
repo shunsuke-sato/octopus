@@ -50,6 +50,8 @@ module v_ks_oct_m
   use namespace_oct_m
   use parser_oct_m
   use poisson_oct_m
+  use photon_mode_mf_oct_m
+  use photon_mode_oct_m
   use profiling_oct_m
   use pseudo_oct_m
   use pcm_oct_m
@@ -137,6 +139,9 @@ module v_ks_oct_m
     type(vdw_ts_t),           public :: vdw_ts
     type(dftd3_calc)                 :: vdw_d3
     logical                          :: include_td_field = .false.
+    logical,                  public :: has_photons
+    type(photon_mode_t),      public :: pt
+    type(mf_t),               public :: pt_mx
   end type v_ks_t
 
 contains
@@ -565,7 +570,17 @@ contains
     else
       ks%vdw_self_consistent = .false.
     end if
-    
+
+    ! This variable is documented in xc_oep_init.
+    call parse_variable(namespace, 'EnablePhotons', .false., ks%has_photons)
+    if (ks%has_photons) then 
+      call messages_experimental('EnablePhotons = yes')
+      call photon_mode_init(ks%pt, namespace, gr%mesh, space%dim, st%qtot)
+      write(message(1), '(a,i5,a)') 'Happy to have ', ks%pt%nmodes, ' photon modes with us.'
+      call messages_info(1)
+      call mf_init(ks%pt_mx, ks%gr, st, ions, ks%pt)
+    end if
+
     POP_SUB(v_ks_init)
 
   contains
@@ -643,6 +658,13 @@ contains
     case(HARTREE_FOCK, GENERALIZED_KOHN_SHAM_DFT)      
       call xc_end(ks%xc)
     end select
+
+    if (ks%has_photons) then
+      call photon_mode_end(ks%pt)
+      call mf_end(ks%pt_mx)
+    end if
+
+
 
     POP_SUB(v_ks_end)
   end subroutine v_ks_end
@@ -886,7 +908,15 @@ contains
       SAFE_ALLOCATE(ks%calc%b_ind(1:ks%gr%mesh%np_part, 1:space%dim))
       call magnetic_induced(ks%gr%der, st, hm%psolver, hm%kpoints, ks%calc%a_ind, ks%calc%b_ind)
     end if
-   
+
+    if ((ks%has_photons).and.(ks%calc%time_present)) then
+      call mf_calc(ks%pt_mx, ks%gr, st, ions, ks%pt, time)
+    end if
+
+    ! if (ks%has_vibrations) then
+    !   call vibrations_eph_coup(ks%vib, ks%gr, hm, ions, st)
+    ! end if
+
     call profiling_out(prof)
     POP_SUB(v_ks_calc_start)
 
@@ -1334,6 +1364,16 @@ contains
       if (ks%xc%functional(FUNC_X,1)%id /= XC_OEP_X_SLATER .and. ks%xc%functional(FUNC_X,1)%id /= XC_OEP_X_FBE) then
         call exchange_operator_reinit(hm%exxop, ks%xc%cam_omega, ks%xc%cam_alpha, ks%xc%cam_beta)
       end if
+    end if
+
+    if (ks%has_photons) then
+      if(associated(ks%pt_mx%vmf)) then
+        forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, 1) = hm%vhxc(ip, 1) + ks%pt_mx%vmf(ip)
+          if(hm%d%ispin > UNPOLARIZED) then
+            forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, 2) = hm%vhxc(ip, 2) + ks%pt_mx%vmf(ip)
+          end if
+      end if
+      hm%ep%photon_forces(1:ks%gr%sb%dim) = ks%pt_mx%fmf(1:ks%gr%sb%dim)
     end if
 
     if(ks%vdw_correction /= OPTION__VDWCORRECTION__NONE) then
