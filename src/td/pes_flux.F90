@@ -19,6 +19,7 @@
 #include "global.h"
 
 module pes_flux_oct_m
+  use boundaries_oct_m
   use boundary_op_oct_m
   use box_parallelepiped_oct_m
   use box_sphere_oct_m
@@ -1627,6 +1628,9 @@ contains
         do ist = stst, stend
           do isdim = 1, sdim
             call states_elec_get_state(st, mesh, isdim, ist, ik, psi)
+
+            ! We apply the PBC first before applying the phase
+            call boundaries_set(gr%der%boundaries, psi)
             
             if(this%surf_shape == PES_PLANE) then
               ! Apply the phase containing kpoint only
@@ -1639,7 +1643,7 @@ contains
               !$omp end parallel do
             end if
             
-            call zderivatives_grad(gr%der, psi, gpsi, .true.)
+            call zderivatives_grad(gr%der, psi, gpsi, set_bc = .false.)
 
             if(this%surf_interp) then
               call mesh_interpolation_evaluate(this%interp, this%nsrfcpnts, psi(1:mesh%np_part), &
