@@ -189,7 +189,7 @@ subroutine X(lcao_wf)(this, st, gr, ions, hm, namespace, start)
       ! Note that here we are making an approximation for the Hamiltonian matrix, 
       ! as the nonlocal part of the pseudopotential, or any nonlocal operator
       ! might still couple the two wavefunctions (from atom i and atom j).
-      if(dist2 > (this%radius(iatom) + this%radius(jatom) + this%lapdist)**2) cycle
+      if(.not. ions%space%is_periodic() .and. (dist2 > (this%radius(iatom) + this%radius(jatom) + this%lapdist)**2)) cycle
       if(this%is_empty(n2)) cycle !This orbital does not contribute to the domain
 
       do ispin = 1, spin_channels
@@ -650,7 +650,7 @@ subroutine X(lcao_alt_wf) (this, st, gr, ions, hm, namespace, start)
           dist2 = sum((ions%pos(:, iatom) - ions%pos(:, jatom))**2)
 
           ! FIXME: this is only correct for KS DFT, but not Hartree-Fock or generalized KS
-          if(dist2 > (this%radius(iatom) + this%radius(jatom) + this%lapdist)**2) cycle
+          if(.not. ions%space%is_periodic() .and. (dist2 > (this%radius(iatom) + this%radius(jatom) + this%lapdist)**2)) cycle
 
           if(this%complex_ylms) then
             call zlcao_alt_get_orbital(this, this%sphere(jatom), ions, ispin, jatom, this%norb_atom(jatom))
