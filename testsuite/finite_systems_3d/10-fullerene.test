@@ -34,7 +34,9 @@ match ;  External energy     ; GREPFIELD(static/info, 'External    =', 3) ; -813
 Precision: 5.50e-07
 match ;  Eigenvalue  10      ; GREPFIELD(static/info, ' 10   --', 3) ; -0.6567645
 match ;  Eigenvalue  20      ; GREPFIELD(static/info, ' 20   --', 3) ; -0.5726045
+Precision: 1.10e-06
 match ;  Eigenvalue  30      ; GREPFIELD(static/info, ' 30   --', 3) ; -0.505687
+Precision: 5.50e-07
 match ;  Eigenvalue  40      ; GREPFIELD(static/info, ' 40   --', 3) ; -0.39350450000000003
 match ;  Eigenvalue  50      ; GREPFIELD(static/info, ' 50   --', 3) ; -0.296596
 match ;  Eigenvalue  60      ; GREPFIELD(static/info, ' 60   --', 3) ; -0.22545349999999997
@@ -45,7 +47,7 @@ match ;  Eigenvalue 100      ; GREPFIELD(static/info, '100   --', 3) ; -0.064319
 match ;  Eigenvalue 110      ; GREPFIELD(static/info, '110   --', 3) ; 0.007267
 match ;  Eigenvalue 120      ; GREPFIELD(static/info, '120   --', 3) ; 0.0579765
 match ;  Eigenvalue 130      ; GREPFIELD(static/info, '130   --', 3) ; 0.198754
-Precision: 5.50e-06
+Precision: 6.10e-06
 match ;  Eigenvalue 140      ; GREPFIELD(static/info, '140   --', 3) ; 0.27052299999999996
 
 Precision : 0.001
