@@ -53,7 +53,7 @@ Precision: 5.50e-09
 match ;   Correlation energy   ; GREPFIELD(static/info, 'Correlation =', 3) ; -1.787787875
 Precision: 3.e-06
 match ;   Kinetic energy       ; GREPFIELD(static/info, 'Kinetic     =', 3) ; 30.34368675
-Precision: 4.38e-06
+Precision: 6.38e-06
 match ;   External energy      ; GREPFIELD(static/info, 'External    =', 3) ; -0.459276615
 Precision: 1.71e-05
 match ;   Berry energy         ; GREPFIELD(static/info, 'Berry       =', 3) ; 318.418181285
