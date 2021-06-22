@@ -438,7 +438,7 @@ while ($_ = <TESTSUITE>) {
     
         }
     
-        elsif ( $_ =~ /^elseif\s\((.*)\)\s*;\s*then\s*$/i ) {
+        elsif ( $_ =~ /^elseif\s*\((.*)\)\s*;\s*then\s*$/i ) {
     
             $if_done[$if_level] = $if_started[$if_level];
             $if_started[$if_level] = 0;
