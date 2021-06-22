@@ -41,8 +41,11 @@ __kernel void uvw_to_xyz(const int np,
            ){
   int ist = get_global_id(0);
   int ip = get_global_id(1) + get_global_size(1)*get_global_id(2);
+
+#if DIMENSION > 1
   double tmp[DIMENSION];
-  
+#endif
+
   if(ip < np) {
 #if DIMENSION == 1
     gradx[(ip<<ldgradx) + ist] = matrix[0] * gradu[(ip<<ldgradu) + ist];
