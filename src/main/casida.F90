@@ -477,6 +477,7 @@ contains
       call messages_fatal(1)
     end if
 #endif
+    call messages_obsolete_variable(sys%namespace, 'CasidaUseScalapackLayout', 'CasidaDistributedMatrix')
 
     !%Variable CasidaWriteDistributedMatrix
     !%Type logical
