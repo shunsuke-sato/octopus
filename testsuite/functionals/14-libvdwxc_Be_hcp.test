@@ -5,7 +5,7 @@ Enabled    : Yes
 
 Input      : 14-libvdwxc_Be_hcp.01-vdwdfcx.inp
 
-if(available libvdwxc, cuda); then
+if(available libvdwxc, available cuda); then
   match ; Error match GPU ; GREPCOUNT(err, 'Calculation will not be continued.') ; 1
 elseif(available libvdwxc); then
   Precision: 7.0e-06
