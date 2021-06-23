@@ -446,7 +446,7 @@ while ($_ = <TESTSUITE>) {
     
         }
     
-        elsif ( $_ =~ /^elseif\s\((.*)\)\s*;\s*then\s*$/i ) {
+        elsif ( $_ =~ /^elseif\s*\((.*)\)\s*;\s*then\s*$/i ) {
     
             print "---- Entering ELSEIF ---- \n";
             print $_, "\n";
