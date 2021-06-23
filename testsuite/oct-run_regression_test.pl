@@ -253,6 +253,7 @@ sub check_conditions {
     my @required_options = ();
     my $result=1;
 
+    print "if level: ", $if_level, " done: ", $if_done[$if_level], " \n";
 
     if($if_level>0) {
 
@@ -657,7 +658,9 @@ while ($_ = <TESTSUITE>) {
                         $failures++;
                     }
                 }
-                $if_started[$if_level]=1;
+                for(my $i=$if_level; $i>=0; $i--) {
+                    $if_started[$i]=1;
+                }
             } 
         }
 
