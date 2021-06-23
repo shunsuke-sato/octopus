@@ -253,8 +253,6 @@ sub check_conditions {
     my @required_options = ();
     my $result=1;
 
-    print "if level: ", $if_level, " done: ", $if_done[$if_level], " \n";
-
     if($if_level>0) {
 
         # collect required options in $_:
@@ -262,9 +260,6 @@ sub check_conditions {
             parse_condition($_, \@required_options);
         }
 
-        print "available: ", $options_available, " \n";
-        print "required: ", @required_options, " \n";
-    
         # check whether all required options are present:
         foreach(@required_options) {
             $result = $result * ($options_available =~ /$_/i);
@@ -436,45 +431,33 @@ while ($_ = <TESTSUITE>) {
         elsif ( $_ =~ /^if\s*\((.*)\)\s*;\s*then\s*$/i ) {
     
             # Entering an IF region
-            print "++++ Entering IF ++++ \n";
-            print $_, "\n";
 
             push(@conditions,$1);
             $if_level += 1;
             $if_started[$if_level] = 0;
             $if_done[$if_level] = 0;
-            print "conditions: ", @conditions, "\n";
     
         }
     
         elsif ( $_ =~ /^elseif\s*\((.*)\)\s*;\s*then\s*$/i ) {
     
-            print "---- Entering ELSEIF ---- \n";
-            print $_, "\n";
             $if_done[$if_level] = $if_started[$if_level];
             $if_started[$if_level] = 0;
             pop(@conditions);
             push(@conditions,$1);
-            print "conditions: ", @conditions, "\n";
     
         }
     
         elsif ( $_ =~ /^else\s*$/i ) {
 
-            print "---- Entering ELSE ---- \n";
-            print $_, "\n";
             $if_done[$if_level] = $if_started[$if_level];
             $if_started[$if_level] = 0;
             pop(@conditions);
             push(@conditions, "dummy");
-            print "conditions: ", @conditions, "\n";
         }
     
         elsif ( $_ =~ /^endif\s*$/i ) {
     
-            print "==== Exiting IF ==== \n";
-            print $_, "\n";
-
             $if_done[$if_level] = $if_started[$if_level];
             $if_started[$if_level] = 0;
             if ($if_level==0) { die255("Ill-formed test file (unpaired endif.)\n"); }
@@ -482,7 +465,6 @@ while ($_ = <TESTSUITE>) {
             pop(@conditions);
             $if_done[$if_level] = undef;
             $if_level -= 1;
-            print "conditions: ", @conditions, "\n";
     
         }
 
@@ -638,7 +620,6 @@ while ($_ = <TESTSUITE>) {
 
             if( check_conditions(\@conditions, $options_available)) {
 
-                print "\nMatch: ", $_, @conditions, "\n\n";
                 my %match_report;
                 $r_match_report = \%match_report;
 
