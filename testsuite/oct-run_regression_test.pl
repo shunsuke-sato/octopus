@@ -379,7 +379,7 @@ while ($_ = <TESTSUITE>) {
         $basecommand = basename($command);
         $report{$testname}{"command"} = $basecommand;
 
-        $options_available = `$command -c`;
+        $options_available = 'dummy ' . `$command -c`;
         chomp($options_available);
         if($is_parallel && $options_available !~ "mpi") {
             print "Running in serial since executable was not compiled with MPI.\n";
@@ -452,6 +452,7 @@ while ($_ = <TESTSUITE>) {
             $if_done[$if_level] = $if_started[$if_level];
             $if_started[$if_level] = 0;
             pop(@conditions);
+            push(@conditions, 'dummy');
         }
     
         elsif ( $_ =~ /^endif\s*$/i ) {
