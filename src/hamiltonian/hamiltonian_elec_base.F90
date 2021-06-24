@@ -890,7 +890,7 @@ contains
     type(wfs_elec_t),              target, intent(inout) :: psib
     type(wfs_elec_t),    optional, target, intent(in)    :: src
 
-    integer :: ip, ii
+    integer :: ip, ii, sp
     type(wfs_elec_t), pointer :: src_
     type(profile_t), save :: phase_prof
     CMPLX :: phase
@@ -912,13 +912,26 @@ contains
     ASSERT(src_%ik == psib%ik)
     ASSERT(src_%type() == TYPE_CMPLX)
 
+    ! We want to skip the ghost points for setting the phase
+    sp = min(np, mesh%np)
+    if(np > mesh%np .and. mesh%parallel_in_domains) sp = mesh%np + mesh%vp%np_ghost
+
     select case(psib%status())
     case(BATCH_PACKED)
 
       if(conjugate) then
 
         !$omp parallel do simd private(ii, phase)
-        do ip = 1, np
+        do ip = 1, min(mesh%np, np)
+          phase = conjg(this%phase(ip, psib%ik))
+          do ii = 1, psib%nst_linear
+            psib%zff_pack(ii, ip) = phase*src_%zff_pack(ii, ip)
+          end do
+        end do
+
+        ! Boundary points, if requested
+        !$omp parallel do simd private(ii, phase)
+        do ip = sp+1, np
           phase = conjg(this%phase(ip, psib%ik))
           do ii = 1, psib%nst_linear
             psib%zff_pack(ii, ip) = phase*src_%zff_pack(ii, ip)
@@ -928,7 +941,16 @@ contains
       else
 
         !$omp parallel do simd private(ii, phase)
-        do ip = 1, np
+        do ip = 1, min(mesh%np, np)
+          phase = this%phase(ip, psib%ik)
+          do ii = 1, psib%nst_linear
+            psib%zff_pack(ii, ip) = phase*src_%zff_pack(ii, ip)
+          end do
+        end do
+
+        ! Boundary points, if requested
+        !$omp parallel do simd private(ii, phase)
+        do ip = sp+1, np
           phase = this%phase(ip, psib%ik)
           do ii = 1, psib%nst_linear
             psib%zff_pack(ii, ip) = phase*src_%zff_pack(ii, ip)
@@ -944,7 +966,14 @@ contains
         !$omp parallel private(ii, ip)
         do ii = 1, psib%nst_linear
           !$omp do simd
-          do ip = 1, np
+          do ip = 1, min(mesh%np, np)
+            psib%zff_linear(ip, ii) = conjg(this%phase(ip, psib%ik))*src_%zff_linear(ip, ii)
+          end do
+          !$omp end do simd nowait
+
+          ! Boundary points, if requested
+          !$omp do simd
+          do ip = sp+1, np
             psib%zff_linear(ip, ii) = conjg(this%phase(ip, psib%ik))*src_%zff_linear(ip, ii)
           end do
           !$omp end do simd nowait
@@ -955,10 +984,18 @@ contains
         !$omp parallel private(ii, ip)
         do ii = 1, psib%nst_linear
           !$omp do simd
-          do ip = 1, np
+          do ip = 1, min(mesh%np, np)
             psib%zff_linear(ip, ii) = this%phase(ip, psib%ik)*src_%zff_linear(ip, ii)
           end do
           !$omp end do simd nowait
+
+          ! Boundary points, if requested
+          !$omp do simd
+          do ip = sp+1, np
+            psib%zff_linear(ip, ii) = this%phase(ip, psib%ik)*src_%zff_linear(ip, ii)
+          end do
+          !$omp end do simd nowait
+
         end do
         !$omp end parallel
 
