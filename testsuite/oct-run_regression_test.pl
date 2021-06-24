@@ -259,7 +259,7 @@ sub check_conditions {
         foreach(@{$_[0]}) {
             parse_condition($_, \@required_options);
         }
-    
+
         # check whether all required options are present:
         foreach(@required_options) {
             $result = $result * ($options_available =~ /$_/i);
@@ -379,7 +379,7 @@ while ($_ = <TESTSUITE>) {
         $basecommand = basename($command);
         $report{$testname}{"command"} = $basecommand;
 
-        $options_available = `$command -c`;
+        $options_available = 'dummy ' . `$command -c`;
         chomp($options_available);
         if($is_parallel && $options_available !~ "mpi") {
             print "Running in serial since executable was not compiled with MPI.\n";
@@ -431,6 +431,7 @@ while ($_ = <TESTSUITE>) {
         elsif ( $_ =~ /^if\s*\((.*)\)\s*;\s*then\s*$/i ) {
     
             # Entering an IF region
+
             push(@conditions,$1);
             $if_level += 1;
             $if_started[$if_level] = 0;
@@ -438,7 +439,7 @@ while ($_ = <TESTSUITE>) {
     
         }
     
-        elsif ( $_ =~ /^elseif\s\((.*)\)\s*;\s*then\s*$/i ) {
+        elsif ( $_ =~ /^elseif\s*\((.*)\)\s*;\s*then\s*$/i ) {
     
             $if_done[$if_level] = $if_started[$if_level];
             $if_started[$if_level] = 0;
@@ -452,6 +453,7 @@ while ($_ = <TESTSUITE>) {
             $if_done[$if_level] = $if_started[$if_level];
             $if_started[$if_level] = 0;
             pop(@conditions);
+            push(@conditions, "dummy");
         }
     
         elsif ( $_ =~ /^endif\s*$/i ) {
@@ -637,7 +639,9 @@ while ($_ = <TESTSUITE>) {
                         $failures++;
                     }
                 }
-                $if_started[$if_level]=1;
+                for(my $i=$if_level; $i>=0; $i--) {
+                    $if_started[$i]=1;
+                }
             } 
         }
 
