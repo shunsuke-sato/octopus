@@ -651,13 +651,12 @@ contains
     integer,                   intent(in) :: ii
     FLOAT :: coord(1:this%latt%space%dim)
 
-    PUSH_SUB(lattice_iterator_get)
+    ! No push/pop, this is called too often 
 
     ASSERT(ii <= this%n_cells)
 
     coord = matmul(this%latt%rlattice, this%icell(:, ii))
 
-    POP_SUB(lattice_iterator_get)
   end function lattice_iterator_get
 
   ! ---------------------------------------------------------
