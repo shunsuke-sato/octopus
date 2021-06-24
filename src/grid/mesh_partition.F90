@@ -633,42 +633,45 @@ contains
     quality = M_ONE/(M_ONE + quality)
 
 
-    ! Write information about the partition
-    message(1) = &
-      'Info: Mesh partition:'
-    message(2) = ''
-    call messages_info(2)
+    ! Only the root has the information (nlocal, nghost, ...)
+    if(mpi_grp_is_root(mesh%mpi_grp)) then
+      ! Write information about the partition
+      message(1) = &
+        'Info: Mesh partition:'
+      message(2) = ''
+      call messages_info(2)
 
-    write(message(1),'(a,e16.6)') &
-      '      Partition quality:', quality
-    message(2) = ''
-    call messages_info(2)
+      write(message(1),'(a,e16.6)') &
+        '      Partition quality:', quality
+      message(2) = ''
+      call messages_info(2)
 
-    write(message(1),'(a)') &
-      '                 Neighbours         Ghost points'
-    write(message(2),'(a,i5,a,i10)') &
-      '      Average  :      ', nint(sum(TOFLOAT(nneigh))/npart), '           ', nint(sum(TOFLOAT(nghost))/npart)
-    write(message(3),'(a,i5,a,i10)') &
-      '      Minimum  :      ', minval(nneigh),    '           ', minval(nghost)
-    write(message(4),'(a,i5,a,i10)') &
-      '      Maximum  :      ', maxval(nneigh),    '           ', maxval(nghost)
-    message(5) = ''
-    call messages_info(5)
+      write(message(1),'(a)') &
+        '                 Neighbours         Ghost points'
+      write(message(2),'(a,i5,a,i10)') &
+        '      Average  :      ', nint(sum(TOFLOAT(nneigh))/npart), '           ', nint(sum(TOFLOAT(nghost))/npart)
+      write(message(3),'(a,i5,a,i10)') &
+        '      Minimum  :      ', minval(nneigh),    '           ', minval(nghost)
+      write(message(4),'(a,i5,a,i10)') &
+        '      Maximum  :      ', maxval(nneigh),    '           ', maxval(nghost)
+      message(5) = ''
+      call messages_info(5)
 
-    do ipart = 1, npart
-      write(message(1),'(a,i5)')  &
-        '      Nodes in domain-group  ', ipart
-      write(message(2),'(a,i10,a,i10)') &
-        '        Neighbours     :', nneigh(ipart), &
-        '        Local points    :', nlocal(ipart)
-      write(message(3),'(a,i10,a,i10)') &
-        '        Ghost points   :', nghost(ipart), &
-        '        Boundary points :', nbound(ipart)
-      call messages_info(3)
-    end do
+      do ipart = 1, npart
+        write(message(1),'(a,i5)')  &
+          '      Nodes in domain-group  ', ipart
+        write(message(2),'(a,i10,a,i10)') &
+          '        Neighbours     :', nneigh(ipart), &
+          '        Local points    :', nlocal(ipart)
+        write(message(3),'(a,i10,a,i10)') &
+          '        Ghost points   :', nghost(ipart), &
+          '        Boundary points :', nbound(ipart)
+        call messages_info(3)
+      end do
 
-    message(1) = ''
-    call messages_info(1)
+      message(1) = ''
+      call messages_info(1)
+    end if
 
     SAFE_DEALLOCATE_A(nghost)
     SAFE_DEALLOCATE_A(nbound)
