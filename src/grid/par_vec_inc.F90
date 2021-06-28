@@ -56,6 +56,8 @@ subroutine X(vec_scatter)(vp, root, v_local, v)
 
   if (root == vp%rank) then
     SAFE_ALLOCATE(local_vec(1:vp%np_global))
+  else
+    SAFE_ALLOCATE(local_vec(0))
   end if
   call gather_local_vec(vp, root, local_vec)
 
@@ -70,8 +72,8 @@ subroutine X(vec_scatter)(vp, root, v_local, v)
     do ii = 1, vp%np_global
       v_tmp(ii) = v(local_vec(ii))
     end do
-    SAFE_DEALLOCATE_A(local_vec)
   end if
+  SAFE_DEALLOCATE_A(local_vec)
 
   ! Careful: MPI rank numbers range from 0 to mpiv%numprocs-1
   ! But partition numbers from 1 to vp%npart with usually
@@ -136,6 +138,8 @@ subroutine X(vec_gather)(vp, root, v_local, v)
 
   if (root == vp%rank) then
     SAFE_ALLOCATE(local_vec(1:vp%np_global))
+  else
+    SAFE_ALLOCATE(local_vec(0))
   end if
   call gather_local_vec(vp, root, local_vec)
 
@@ -144,9 +148,9 @@ subroutine X(vec_gather)(vp, root, v_local, v)
     do ii = 1, vp%np_global
       v(local_vec(ii)) = v_tmp(ii)
     end do
-    SAFE_DEALLOCATE_A(local_vec)
   end if
 
+  SAFE_DEALLOCATE_A(local_vec)
   SAFE_DEALLOCATE_A(v_tmp)
   SAFE_DEALLOCATE_A(displs)
 
