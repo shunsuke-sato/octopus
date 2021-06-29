@@ -599,7 +599,7 @@ contains
     SAFE_ALLOCATE(xlocal_tmp(1:vp%npart))
     xlocal_tmp = vp%xlocal_vec - 1
     ! Gather all the local vectors in a unique big one
-    call mpi_debug_in(vp%comm, C_MPI_ALLGATHERV)
+    call mpi_debug_in(vp%comm, C_MPI_GATHERV)
 #ifdef HAVE_MPI
     call MPI_Gatherv(vp%local(vp%xlocal), vp%np_local, MPI_INTEGER, &
                      local_vec, vp%np_local_vec, xlocal_tmp,  MPI_INTEGER, &
@@ -630,7 +630,7 @@ contains
                         local_vec, vp%np_local_vec, xlocal_tmp,  MPI_INTEGER, &
                         vp%comm, mpi_err)
 #endif
-    call mpi_debug_out(vp%comm, C_MPI_GATHERV)
+    call mpi_debug_out(vp%comm, C_MPI_ALLGATHERV)
     SAFE_DEALLOCATE_A(xlocal_tmp)
 
     POP_SUB(allgather_local_vec)
