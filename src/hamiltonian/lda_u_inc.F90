@@ -1163,7 +1163,7 @@ subroutine X(compute_coulomb_integrals) (this, namespace, space, mesh, der, psol
             if(klst > ijst) cycle
 
             !$omp parallel do
-            do ip = 1,np_sphere
+            do ip = 1, np_sphere
               tmp(ip) = vv(ip)*TOFLOAT(os%X(orb)(ip,1,kst))*TOFLOAT(os%X(orb)(ip,1,lst))
             end do
             !$omp end parallel do
@@ -1329,6 +1329,7 @@ end subroutine X(compute_periodic_coulomb_integrals)
    R_TYPE, allocatable :: dot(:,:,:), epsi(:,:), reduced(:,:,:)
    type(orbitalset_t), pointer  :: os 
    type(profile_t), save :: prof
+   logical :: use_submesh
 
    call profiling_in(prof, TOSTRING(X(DFTU_COMMUTE_R)))
 
@@ -1342,7 +1343,14 @@ end subroutine X(compute_periodic_coulomb_integrals)
      call messages_not_implemented("Intersite interaction, spinors, and commutator [r,V_u]", namespace=namespace)
    end if
 
-   if(.not.this%basis%submesh) then
+   use_submesh = this%basis%submesh
+   ! Because of possible phase corrections at the border, the array X(orb) is always stored 
+   ! on the submesh for complex wavefunctions
+#ifdef R_TCOMPLEX
+   if(.not. has_phase) use_submesh = .true.
+#endif
+
+   if(.not.use_submesh) then
      SAFE_ALLOCATE(epsi(1:mesh%np,1:d%dim))
    else
      SAFE_ALLOCATE(epsi(1:this%max_np,1:d%dim))
@@ -1457,7 +1465,7 @@ end subroutine X(compute_periodic_coulomb_integrals)
             end if
 #endif
             else
-              if(.not. this%basis%submesh) then
+              if(.not. use_submesh) then
                  !$omp parallel do
                  do is = 1, mesh%np
                     epsi(is,idim) = os%sphere%x(is,idir)*os%X(orb)(is,idim_orb,im)
@@ -1526,7 +1534,7 @@ end subroutine X(compute_periodic_coulomb_integrals)
          ASSERT(.false.)
 #endif
        else
-         if(.not. this%basis%submesh) then
+         if(.not. use_submesh) then
            do idim = 1, d%dim
              idim_orb = min(idim,os%ndim)
              dot(idim,im,ios) = X(mf_dotp)(mesh, os%X(orb)(1:mesh%np,idim_orb,im),&

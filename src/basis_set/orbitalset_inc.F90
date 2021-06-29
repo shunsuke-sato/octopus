@@ -26,12 +26,20 @@ subroutine X(orbitalset_get_coefficients)(os, ndim, psi, ik, has_phase, dot)
   integer :: im, ip, idim, idim_orb
   type(profile_t), save :: prof, prof_reduce
   R_TYPE, allocatable :: spsi(:,:)
+  logical :: use_submesh
 
   call profiling_in(prof, TOSTRING(X(ORBSET_GET_COEFFICIENTS)))
 
   PUSH_SUB(X(orbitalset_get_coefficients))
 
-  if(os%submesh) then
+  use_submesh = os%submesh
+  ! Because of possible phase corrections at the border, the array X(orb) is always stored 
+  ! on the submesh for complex wavefunctions
+#ifdef R_TCOMPLEX
+  if(.not. has_phase) use_submesh = .true.
+#endif
+
+  if(use_submesh) then
     SAFE_ALLOCATE(spsi(1:os%sphere%np, 1:ndim))
     do idim = 1, ndim
       do ip = 1, os%sphere%np
@@ -60,7 +68,7 @@ subroutine X(orbitalset_get_coefficients)(os, ndim, psi, ik, has_phase, dot)
     do im = 1, os%norbs
       do idim = 1, ndim
         idim_orb = min(idim,os%ndim)
-        if(.not. os%submesh) then
+        if(.not. use_submesh) then
           dot(idim,im) = X(mf_dotp)(os%sphere%mesh, os%X(orb)(1:os%sphere%mesh%np, idim_orb, im),&
                               psi(1:os%sphere%mesh%np, idim), reduce=.false.)
         else
@@ -119,10 +127,18 @@ subroutine X(orbitalset_add_to_psi)(os, ndim, psi, ik, has_phase, weight)
 
   integer :: im, idim, idim_orb
   type(profile_t), save :: prof
+  logical :: use_submesh
 
   call profiling_in(prof, TOSTRING(X(ORBSET_ADD_TO_PSI)))
 
   PUSH_SUB(X(orbitalset_add_to_psi))
+
+  use_submesh = os%submesh
+  ! Because of possible phase corrections at the border, the array X(orb) is always stored 
+  ! on the submesh for complex wavefunctions
+#ifdef R_TCOMPLEX
+  if(.not. has_phase) use_submesh = .true.
+#endif
 
   if(has_phase) then
 #ifdef R_TCOMPLEX
@@ -144,7 +160,7 @@ subroutine X(orbitalset_add_to_psi)(os, ndim, psi, ik, has_phase, weight)
       do idim = 1, ndim
         idim_orb = min(idim,os%ndim)
 
-        if(.not. os%submesh) then
+        if(.not. use_submesh) then
           call lalg_axpy(os%sphere%mesh%np, weight(idim, im), os%X(orb)(1:os%sphere%mesh%np, idim_orb, im), &
                                   psi(1:os%sphere%mesh%np, idim))
         else
@@ -172,10 +188,18 @@ subroutine X(orbitalset_add_to_batch)(os, ndim, psib, weight)
   R_TYPE, allocatable :: psi(:,:), sorb(:)
   R_TYPE :: tmp
   integer :: block_size, size, sp, ep
+  logical :: use_submesh
 
   call profiling_in(prof, TOSTRING(X(ORBSET_ADD_TO_BATCH)))
 
   PUSH_SUB(X(orbitalset_add_to_batch))
+
+  use_submesh = os%submesh
+  ! Because of possible phase corrections at the border, the array X(orb) is always stored 
+  ! on the submesh for complex wavefunctions
+#ifdef R_TCOMPLEX
+  if(.not. psib%has_phase) use_submesh = .true.
+#endif
 
   ! This routine uses blocking to optimize cache usage.   
   block_size = hardware%X(block_size)
@@ -207,7 +231,7 @@ subroutine X(orbitalset_add_to_batch)(os, ndim, psib, weight)
           do idim = 1, ndim
             idim_orb = min(idim,os%ndim)
             bind = psib%ist_idim_to_linear((/ist, idim/))
-            if(.not. os%submesh) then
+            if(.not. use_submesh) then
               call lalg_axpy(os%sphere%mesh%np, weight(iorb, bind), os%X(orb)(1:os%sphere%mesh%np,idim_orb,iorb), &
                                   psi(1:os%sphere%mesh%np,idim))
             else
@@ -259,7 +283,7 @@ subroutine X(orbitalset_add_to_batch)(os, ndim, psib, weight)
         end if
 #endif
       else
-        if(.not. os%submesh) then
+        if(.not. use_submesh) then
           do sp = 1, os%sphere%mesh%np, block_size
             size = min(block_size, os%sphere%mesh%np - sp + 1)
             do ist = 1, psib%nst_linear
@@ -345,7 +369,7 @@ subroutine X(orbitalset_add_to_batch)(os, ndim, psib, weight)
         end if
 #endif
       else
-        if(.not. os%submesh) then 
+        if(.not. use_submesh) then 
           do iorb = 1, os%norbs
             do sp = 1, os%sphere%mesh%np, block_size
               ep = sp - 1 + min(block_size, os%sphere%mesh%np - sp + 1)
