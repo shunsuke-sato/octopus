@@ -588,9 +588,9 @@ contains
   ! gather all local arrays into a global one on rank root
   ! this gives the global mapping of the index in the partition to the global index
   subroutine gather_local_vec(vp, root, local_vec)
-    type(pv_t), intent(in)    :: vp
-    integer,    intent(in)    :: root
-    integer,    intent(inout) :: local_vec(:)
+    type(pv_t),           intent(in)    :: vp
+    integer,              intent(in)    :: root
+    integer, allocatable, intent(inout) :: local_vec(:)
 
     integer, allocatable :: xlocal_tmp(:)
 
@@ -614,8 +614,8 @@ contains
   ! gather all local arrays into a global one on all ranks
   ! this gives the global mapping of the index in the partition to the global index
   subroutine allgather_local_vec(vp, local_vec)
-    type(pv_t), intent(in)    :: vp
-    integer,    intent(inout) :: local_vec(:)
+    type(pv_t),           intent(in)    :: vp
+    integer, allocatable, intent(inout) :: local_vec(:)
 
     integer, allocatable :: xlocal_tmp(:)
 
