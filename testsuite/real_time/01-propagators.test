@@ -22,7 +22,7 @@ match ;  Energy [step 20]  ; LINEFIELD(td.general/energy, -1, 3) ; -10.607194169
 Precision: 6.40e-11
 match ;  Multipoles [step  1]  ; LINEFIELD(td.general/multipoles, -21, 4) ; -1.1510792319315002e-15
 match ;  Multipoles [step 20]  ; LINEFIELD(td.general/multipoles, -1, 4) ; -0.12655193434445
-Precision: 5.30e-09
+Precision: 5.50e-09
 match ;   Forces [step  1]   ; LINEFIELD(td.general/coordinates, -21, 15) ; 0.085982840216105
 match ;   Forces [step 20]   ; LINEFIELD(td.general/coordinates, -1, 15) ; 0.08015025987516
 
@@ -34,7 +34,7 @@ match ;  Energy [step 20]  ; LINEFIELD(td.general/energy, -1, 3) ; -10.607192667
 Precision: 6.40e-11
 match ;  Multipoles [step  0]  ; LINEFIELD(td.general/multipoles, -21, 4) ; -1.1510792319315002e-15
 match ;  Multipoles [step 20]  ; LINEFIELD(td.general/multipoles, -1, 4) ; -0.1265544547434
-Precision: 5.30e-09
+Precision: 5.60e-09
 match ;  Forces [step  0]   ; LINEFIELD(td.general/coordinates, -21, 15) ; 0.085982840216105
 match ;  Forces [step 20]   ; LINEFIELD(td.general/coordinates, -1, 15) ; 0.080151578741535
 
@@ -46,7 +46,7 @@ match ;  Energy [step 20]  ; LINEFIELD(td.general/energy, -1, 3) ; -10.607192620
 Precision: 6.29e-11
 match ;  Multipoles [step  0]  ; LINEFIELD(td.general/multipoles, -21, 4) ; -1.1510792319315002e-15
 match ;  Multipoles [step 20]  ; LINEFIELD(td.general/multipoles, -1, 4) ; -0.12658727372974998
-Precision: 5.30e-09
+Precision: 5.60e-09
 match ;  Forces [step  0]   ; LINEFIELD(td.general/coordinates, -21, 15) ; 0.085982840216105
 match ;  Forces [step 20]   ; LINEFIELD(td.general/coordinates, -1, 15) ; 0.08015620503858001
 
@@ -58,7 +58,7 @@ match ;  Energy [step 20]  ; LINEFIELD(td.general/energy, -1, 3) ; -10.593872938
 Precision: 6.43e-11
 match ;  Multipoles [step  0]  ; LINEFIELD(td.general/multipoles, -21, 4) ; -1.1510792319315002e-15
 match ;  Multipoles [step 20]  ; LINEFIELD(td.general/multipoles, -1, 4) ; -0.12693626886125
-Precision: 5.30e-09
+Precision: 5.60e-09
 match ;  Forces [step  0]   ; LINEFIELD(td.general/coordinates, -21, 15) ; 0.085982840216105
 match ;  Forces [step 20]   ; LINEFIELD(td.general/coordinates, -1, 15) ; 0.07761355479469
 
@@ -70,7 +70,7 @@ match ;  Energy [step 20]  ; LINEFIELD(td.general/energy, -1, 3) ; -10.607194169
 Precision: 6.40e-11
 match ;  Multipoles [step  0]  ; LINEFIELD(td.general/multipoles, -21, 4) ; -1.1510792319315002e-15
 match ;  Multipoles [step 20]  ; LINEFIELD(td.general/multipoles, -1, 4) ; -0.12655193434445
-Precision: 5.30e-09
+Precision: 5.60e-09
 match ;  Forces [step  0]   ; LINEFIELD(td.general/coordinates, -21, 15) ; 0.085982840216105
 match ;  Forces [step 20]   ; LINEFIELD(td.general/coordinates, -1, 15) ; 0.08015025987516
 
@@ -91,7 +91,7 @@ match ;  Energy [step 20]  ; LINEFIELD(td.general/energy, -1, 3) ; -10.607193224
 Precision: 6.41e-11
 match ;  Multipoles [step  0]  ; LINEFIELD(td.general/multipoles, -21, 4) ; -1.1510792319315002e-15
 match ;  Multipoles [step 20]  ; LINEFIELD(td.general/multipoles, -1, 4) ; -0.12653139760595
-Precision: 5.30e-09
+Precision: 5.60e-09
 match ;  Forces [step  0]   ; LINEFIELD(td.general/coordinates, -21, 15) ; 0.085982840216105
 match ;  Forces [step 20]   ; LINEFIELD(td.general/coordinates, -1, 15) ; 0.080131292930685
 
