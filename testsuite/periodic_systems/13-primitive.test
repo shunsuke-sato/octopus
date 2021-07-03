@@ -56,7 +56,7 @@ match ;  Eigenvalue  4  ; GREPFIELD(static/info, '#k =  75', 3, 4) ; 0.21068
 
 Precision: 8.88e-05
 match ;  dipole 2-5  ; LINEFIELD(static/ks_me_dipole.k1_x, 4, 4) ; 3.0636686631275
-Precision: 4.13e-08
+Precision: 4.53e-08
 match ;  dipole 4-7  ; LINEFIELD(static/ks_me_dipole.k1_x, 9, 3) ; 3.1747322050695
 
 
