@@ -110,9 +110,9 @@ Precision: 1.36e-10
 match ;  w90.amn 4-5 kpt64 ; LINEFIELD_ABS(15-bandstructure.04-wannier90.amn, -4, 4, 5) ; 1.5068430000000002e-10
 Precision: 8.16e-05
 match ;  w90.amn 4-6 kpt64 ; LINEFIELD_ABS(15-bandstructure.04-wannier90.amn, -3, 4, 5) ; 7.47491535e-05
-Precision: 4.29e-05
+Precision: 5.50e-05
 match ;  w90.amn 4-7 kpt64 ; LINEFIELD_ABS(15-bandstructure.04-wannier90.amn, -2, 4, 5) ; 0.482489
-Precision: 4.29e-05
+Precision: 5.60e-05
 match ;  w90.amn 4-8 kpt64 ; LINEFIELD_ABS(15-bandstructure.04-wannier90.amn, -1, 4, 5) ; 0.482418
 Precision: 3.37e-11
 match ;  w90.mmn 4-1 kpt64 ; LINEFIELD_ABS(15-bandstructure.04-wannier90.mmn, -4, 1, 2) ; 3.4603705e-11
