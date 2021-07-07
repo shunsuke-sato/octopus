@@ -62,9 +62,9 @@ else
   Precision: 1.10e-16
   match ;   Eigenvalue 17   ; GREPFIELD(static/info, '#k =   1', 3, 17) ; 0.109796
 
-  Precision: 2.42e-07
+  Precision: 4.e-07
   match ;   Occupation Ni2 up-down 3d4   ; LINEFIELD(static/occ_matrices, -2, 7) ; -0.06310922999999999
-  Precision: 1.65e-08
+  Precision: 3.e-08
   match ;   Occupation Ni2 up-down 3d5   ; LINEFIELD(static/occ_matrices, -1, 9) ; -0.39565767500000004
 endif
 
@@ -119,7 +119,7 @@ else
   Precision: 1.11e-16
   match ;   Eigenvalue 17   ; GREPFIELD(static/info, '#k =   1', 3, 17) ; 0.110823
 
-  Precision: 8.14e-07
+  Precision: 1.e-06
   match ;   Occupation Ni2 up-down 3d4   ; LINEFIELD(static/occ_matrices, -2, 7) ; -0.06351711
   Precision: 2.55e-06
   match ;   Occupation Ni2 up-down 3d5   ; LINEFIELD(static/occ_matrices, -1, 9) ; -0.398421645
